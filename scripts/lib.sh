@@ -85,3 +85,70 @@ CNF
 
 # PEM certificate body as a single base64 line (the format SAML metadata uses).
 cert_b64() { openssl x509 -in "$1" -outform DER | base64 -w0; }
+
+# --- Keycloak Admin REST API ---------------------------------------------------
+# Calls go to https://$LAB_HOST:$KC_PORT pinned to 127.0.0.1 (so LAN DNS is not
+# needed) and verify TLS against the lab CA. The admin password is passed on
+# stdin, never on a command line.
+_KC_TOKEN="" _KC_TOKEN_AT=0
+
+kc_curl() {
+  curl -sS --fail-with-body --cacert "$CERTS_DIR/ca.crt" \
+    --resolve "$LAB_HOST:$KC_PORT:127.0.0.1" "$@"
+}
+
+kc_token() {
+  if [[ -z "$_KC_TOKEN" ]] || (( $(date +%s) - _KC_TOKEN_AT > 40 )); then
+    _KC_TOKEN="$(printf '%s' "$KC_ADMIN_PASSWORD" | kc_curl \
+      "https://$LAB_HOST:$KC_PORT/realms/master/protocol/openid-connect/token" \
+      -d grant_type=password -d client_id=admin-cli \
+      --data-urlencode "username=$KC_ADMIN_USER" --data-urlencode "password@-" \
+      | jq -r .access_token)" || die "could not get a Keycloak admin token (is the lab up?)"
+    _KC_TOKEN_AT="$(date +%s)"
+  fi
+}
+
+# kc_api <METHOD> <path under /admin/realms> [json-body]
+kc_api() {
+  local method="$1" path="$2" body="${3:-}"
+  kc_token
+  local args=(-X "$method" -H "Authorization: Bearer $_KC_TOKEN")
+  [[ -n "$body" ]] && args+=(-H "Content-Type: application/json" --data-binary @-)
+  printf '%s' "$body" | kc_curl "${args[@]}" "https://$LAB_HOST:$KC_PORT/admin/realms$path"
+}
+
+REALM=idlab
+
+# --- SAML SP trust -----------------------------------------------------------------
+IDP_PIN_FILE="$STATE_DIR/saml-sp/idp-signing.pem"
+
+# Signing certificates in the realm's SAML metadata, one base64 DER per line.
+idp_metadata_certs() {
+  kc_curl "https://$LAB_HOST:$KC_PORT/realms/$REALM/protocol/saml/descriptor" \
+    | grep -o '<ds:X509Certificate>[^<]*' | sed 's/<ds:X509Certificate>//'
+}
+
+b64_to_pem() { printf -- '-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n' "$(fold -w64 <<<"$1")"; }
+
+# Base64 DER bodies of the certificates pinned on the SP, one per line.
+pinned_certs() {
+  [[ -f "$IDP_PIN_FILE" ]] || return 0
+  awk '/-----BEGIN CERTIFICATE-----/{c="";next} /-----END CERTIFICATE-----/{print c;next} {c=c $0}' "$IDP_PIN_FILE"
+}
+
+# Pin the currently valid signing certificates from the IdP metadata on the SP,
+# the way an admin pastes the IdP certificate into a SaaS app at onboarding.
+pin_idp_cert() {
+  local tmp c n=0
+  tmp="$(mktemp "$STATE_DIR/saml-sp/.pin.XXXXXX")"
+  while read -r c; do
+    [[ -n "$c" ]] || continue
+    if b64_to_pem "$c" | openssl x509 -noout -checkend 0 >/dev/null; then
+      b64_to_pem "$c" >>"$tmp"; n=$((n + 1))
+    fi
+  done < <(idp_metadata_certs)
+  (( n > 0 )) || { rm -f "$tmp"; die "IdP metadata has no valid signing certificate to pin"; }
+  chmod 644 "$tmp"
+  mv "$tmp" "$IDP_PIN_FILE"
+  echo "$n"
+}

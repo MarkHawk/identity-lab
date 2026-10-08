@@ -6,6 +6,7 @@ error page and logged as a single key=value line so runbooks can grep them.
 """
 
 import base64
+import re
 import datetime as dt
 import logging
 import os
@@ -14,7 +15,6 @@ import shlex
 import threading
 from collections import OrderedDict
 
-import requests
 from cryptography import x509
 from flask import Flask, redirect, render_template, request, session, url_for
 from lxml import etree
@@ -28,11 +28,10 @@ LAB_HOST = os.environ["LAB_HOST"]
 SP_BASE = f"https://{LAB_HOST}:{os.environ['SAML_SP_PORT']}"
 IDP_ENTITY_ID = f"https://{LAB_HOST}:{os.environ['KC_PORT']}/realms/idlab"
 IDP_SSO_URL = f"{IDP_ENTITY_ID}/protocol/saml"
-# Fetched over the compose network. Only the signing certificates are taken
-# from it: its endpoint URLs use the backchannel host, which browsers can't reach.
-IDP_METADATA_URL = os.environ.get(
-    "IDP_METADATA_URL", "https://keycloak:8180/realms/idlab/protocol/saml/descriptor"
-)
+# The IdP signing certificate(s) this SP trusts, pinned at onboarding the way
+# most SaaS SPs store a pasted IdP certificate (scripts/pin-idp-cert.sh).
+# Re-read on every login so a re-pin takes effect without a restart.
+IDP_CERT_FILE = os.environ.get("IDP_CERT_FILE", "/var/lib/idlab/state/idp-signing.pem")
 SP_CERT = open(os.environ.get("SP_CERT_FILE", "/etc/idlab/sp-signing.crt")).read()
 SP_KEY = open(os.environ.get("SP_KEY_FILE", "/etc/idlab/sp-signing.key")).read()
 
@@ -91,16 +90,22 @@ def describe_cert(b64):
     }
 
 
-def idp_signing_certs():
-    """Signing certificates the IdP currently publishes in its metadata."""
+def pinned_idp_certs():
+    """IdP signing certificates pinned on this SP."""
     try:
-        resp = requests.get(IDP_METADATA_URL, timeout=5)
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        raise LoginError("idp_metadata_unavailable", "Could not fetch IdP metadata", str(exc), 502)
-    idp = OneLogin_Saml2_IdPMetadataParser.parse(resp.text).get("idp", {})
-    certs = idp.get("x509certMulti", {}).get("signing") or [idp.get("x509cert")]
-    return [describe_cert(c) for c in certs if c]
+        pem = open(IDP_CERT_FILE).read()
+    except FileNotFoundError:
+        pem = ""
+    bodies = re.findall(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", pem, re.S)
+    certs = [describe_cert("".join(body.split())) for body in bodies]
+    if not certs:
+        raise LoginError(
+            "idp_cert_not_configured",
+            "No IdP signing certificate is configured on this SP",
+            f"{IDP_CERT_FILE} is missing or empty; run scripts/pin-idp-cert.sh",
+            500,
+        )
+    return certs
 
 
 def saml_settings(trusted_certs):
@@ -137,7 +142,7 @@ def trusted_signing_certs():
     Like SPs that enforce them, this app refuses expired certificates, and
     says so plainly when none are left.
     """
-    certs = idp_signing_certs()
+    certs = pinned_idp_certs()
     valid = [c for c in certs if not c["expired"] and not c["not_yet_valid"]]
     if not valid:
         newest = max(certs, key=lambda c: c["not_after"]) if certs else None
@@ -145,12 +150,12 @@ def trusted_signing_certs():
             f"subject={newest['subject']} serial={newest['serial']} "
             f"notAfter={newest['not_after']:%Y-%m-%d %H:%M:%S} UTC "
             f"sp_clock={now_utc():%Y-%m-%d %H:%M:%S} UTC"
-            if newest else "IdP metadata contains no signing certificate"
+            if newest else "no IdP signing certificate pinned"
         )
         when = f" on {newest['not_after']:%Y-%m-%d %H:%M:%S} UTC" if newest else ""
         raise LoginError(
             "idp_cert_expired",
-            f"IdP signing certificate expired{when}; no valid signing certificate in IdP metadata",
+            f"IdP signing certificate expired{when}; the SP has no valid IdP certificate pinned",
             detail,
         )
     return certs, valid
@@ -209,7 +214,7 @@ def index():
 def login():
     # Expired certificates don't stop the AuthnRequest; the SP only
     # notices when the signed response comes back.
-    auth = OneLogin_Saml2_Auth(saml_request_data(), saml_settings(idp_signing_certs()))
+    auth = OneLogin_Saml2_Auth(saml_request_data(), saml_settings(pinned_idp_certs()))
     target = auth.login(return_to=url_for("debug", _external=False))
     session["authn_request_id"] = auth.get_last_request_id()
     log.info(kv(event="saml_authn_request", request_id=auth.get_last_request_id()))
