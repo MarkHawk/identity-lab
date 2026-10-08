@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}ID token{% endblock %}
+{% block body %}
+<section>
+  <h1 id="login-ok">OIDC login succeeded</h1>
+  <table>
+    <tr><th>Subject (sub)</th><td><code>{{ login.claims.sub }}</code></td></tr>
+    <tr><th>Email</th><td><code id="email">{{ login.claims.email }}</code></td></tr>
+    <tr><th>Issuer (iss)</th><td><code>{{ login.claims.iss }}</code></td></tr>
+    <tr><th>Audience (aud)</th><td><code>{{ login.claims.aud }}</code></td></tr>
+    <tr><th>Realm roles</th><td><code>{{ (login.claims.realm_roles or []) | join(', ') }}</code></td></tr>
+  </table>
+</section>
+<section>
+  <h2>Timing</h2>
+  <table>
+    <tr><th>Issued at (iat)</th><td><code>{{ login.times.iat }}</code></td></tr>
+    <tr><th>Authenticated (auth_time)</th><td><code>{{ login.times.auth_time }}</code></td></tr>
+    <tr><th>Expires (exp)</th><td><code>{{ login.times.exp }}</code></td></tr>
+    <tr><th>Received (RP clock)</th><td><code>{{ login.received_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+    <tr><th>RP clock now</th><td><code>{{ rp_clock.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+  </table>
+</section>
+<section>
+  <h2>ID token header</h2>
+  <pre>{{ login.header | tojson(indent=2) }}</pre>
+</section>
+<section>
+  <h2>ID token claims (validated)</h2>
+  <pre>{{ login.claims | tojson(indent=2) }}</pre>
+</section>
+<section>
+  <h2>UserInfo response</h2>
+  <pre>{{ login.userinfo | tojson(indent=2) }}</pre>
+</section>
+<section>
+  <h2>Token response (metadata only)</h2>
+  <p class="muted">Access and refresh tokens are not displayed.</p>
+  <pre>{{ login.token_meta | tojson(indent=2) }}</pre>
+</section>
+<form method="post" action="{{ url_for('logout') }}"><button class="btn secondary">Clear local session</button></form>
+{% endblock %}

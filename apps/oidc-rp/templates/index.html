@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block body %}
+<section>
+  <h1>OpenID Connect sample relying party</h1>
+  <p>Authorization code flow with PKCE (S256) as confidential client <code>oidc-rp</code>.
+     Redirect URI sent to the IdP: <code>{{ redirect_uri }}</code></p>
+  {% if login %}
+    <p>Signed in as <b>{{ login.claims.email or login.claims.sub }}</b>.</p>
+    <p><a class="btn" href="{{ url_for('debug') }}">View ID token</a></p>
+  {% else %}
+    <p><a class="btn" id="login" href="{{ url_for('login') }}">Log in with OIDC</a></p>
+  {% endif %}
+</section>
+{% endblock %}

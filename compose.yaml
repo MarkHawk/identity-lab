@@ -123,5 +123,27 @@ services:
       retries: 20
     restart: unless-stopped
 
+  oidc-rp:
+    build: ./apps/oidc-rp
+    image: identity-lab/oidc-rp:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: *lab-env
+      PORT: "8182"
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_RP_SECRET_KEY: ${OIDC_RP_SECRET_KEY}
+      REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+    ports:
+      - "${OIDC_RP_PORT}:8182"
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
 volumes:
   pgdata:

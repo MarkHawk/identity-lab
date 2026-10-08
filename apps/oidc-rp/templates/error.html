@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Login failed{% endblock %}
+{% block body %}
+<section class="error">
+  <h1>OIDC login failed</h1>
+  <p id="error-message"><b>{{ error.message }}</b></p>
+  <table>
+    <tr><th>Error code</th><td><code id="error-reason">{{ error.reason }}</code></td></tr>
+    {% if error.detail %}<tr><th>Detail</th><td><code>{{ error.detail }}</code></td></tr>{% endif %}
+    <tr><th>RP clock (UTC)</th><td><code>{{ rp_clock.strftime('%Y-%m-%d %H:%M:%S') }}</code></td></tr>
+  </table>
+  <p class="muted">The same line is in the RP log: <code>docker compose logs oidc-rp | grep oidc_login_failed</code></p>
+</section>
+<p><a class="btn secondary" href="{{ url_for('index') }}">Back</a></p>
+{% endblock %}

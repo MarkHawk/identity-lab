@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}OIDC RP{% endblock %} · identity-lab</title>
+<style>
+  :root { --fg:#1d232b; --muted:#5b6672; --line:#d9dee4; --bg:#f6f7f9; --card:#fff;
+          --accent:#2457c5; --bad:#b42318; --badbg:#fef3f2; --good:#067647; --goodbg:#ecfdf3; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--fg); background:var(--bg); }
+  header { background:#1d232b; color:#fff; padding:.8rem 1.25rem; display:flex; gap:1rem; align-items:baseline; flex-wrap:wrap; }
+  header b { font-size:1.05rem; } header span { color:#aab4bf; font-size:.9rem; }
+  main { max-width:64rem; margin:0 auto; padding:1.5rem 1.25rem 3rem; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1rem 1.25rem; margin-bottom:1rem; }
+  h1 { font-size:1.4rem; margin:.2rem 0 1rem; } h2 { font-size:1.05rem; margin:0 0 .6rem; }
+  table { border-collapse:collapse; width:100%; } th, td { text-align:left; padding:.35rem .5rem; border-top:1px solid var(--line); vertical-align:top; }
+  th { width:14rem; color:var(--muted); font-weight:500; }
+  code, pre { font:13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background:#0f1419; color:#e6e1cf; padding:1rem; border-radius:6px; overflow-x:auto; margin:0; }
+  .wrap { overflow-x:auto; }
+  .btn { display:inline-block; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:.55rem 1rem; font:inherit; text-decoration:none; cursor:pointer; }
+  .btn.secondary { background:#fff; color:var(--fg); border:1px solid var(--line); }
+  .error { border-color:#fda29b; background:var(--badbg); } .error h1 { color:var(--bad); }
+  .tag { display:inline-block; padding:0 .45rem; border-radius:4px; font-size:.8rem; font-weight:600; }
+  .tag.ok { background:var(--goodbg); color:var(--good); } .tag.bad { background:var(--badbg); color:var(--bad); }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<header><b>identity-lab · OIDC relying party</b><span>Authlib → Keycloak realm “idlab”</span></header>
+<main>
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>
