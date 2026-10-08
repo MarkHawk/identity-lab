@@ -146,5 +146,20 @@ services:
     healthcheck: *app-healthcheck
     restart: unless-stopped
 
+  # Headless browser used by scripts/test.sh (docker compose run --rm tests ...).
+  tests:
+    profiles: ["test"]
+    build: ./tests
+    image: identity-lab/tests:local
+    network_mode: host
+    user: "${LAB_UID}:${LAB_UID}"
+    environment:
+      <<: *lab-env
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      HOME: /tmp
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./test-results:/results
+
 volumes:
   pgdata:
