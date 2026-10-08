@@ -1,0 +1,134 @@
+{
+  "realm": "idlab",
+  "displayName": "Identity Lab",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "eventsListeners": ["jboss-logging"],
+  "roles": {
+    "realm": [
+      { "name": "lab-user", "description": "Can sign in to the sample apps" },
+      { "name": "lab-admin", "description": "Lab administrator (demo role)" }
+    ]
+  },
+  "users": [
+    {
+      "username": "alice",
+      "email": "alice@idlab.example",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Anderson",
+      "enabled": true,
+      "realmRoles": ["lab-user", "lab-admin", "default-roles-idlab"],
+      "credentials": [{ "type": "password", "value": "${DEMO_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "bob",
+      "email": "bob@idlab.example",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Brown",
+      "enabled": true,
+      "realmRoles": ["lab-user", "default-roles-idlab"],
+      "credentials": [{ "type": "password", "value": "${DEMO_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "carol",
+      "email": "carol@idlab.example",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Chen",
+      "enabled": true,
+      "realmRoles": ["default-roles-idlab"],
+      "credentials": [{ "type": "password", "value": "${DEMO_PASSWORD}", "temporary": false }]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "https://${LAB_HOST}:${SAML_SP_PORT}/saml/metadata",
+      "name": "SAML SP sample app",
+      "protocol": "saml",
+      "enabled": true,
+      "frontchannelLogout": false,
+      "rootUrl": "https://${LAB_HOST}:${SAML_SP_PORT}",
+      "baseUrl": "/",
+      "redirectUris": ["https://${LAB_HOST}:${SAML_SP_PORT}/*"],
+      "attributes": {
+        "saml_assertion_consumer_url_post": "https://${LAB_HOST}:${SAML_SP_PORT}/saml/acs",
+        "saml.server.signature": "true",
+        "saml.assertion.signature": "true",
+        "saml.signature.algorithm": "RSA_SHA256",
+        "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#",
+        "saml.client.signature": "true",
+        "saml.signing.certificate": "${SP_SIGNING_CERT}",
+        "saml.authnstatement": "true",
+        "saml.force.name.id.format": "true",
+        "saml_name_id_format": "email",
+        "saml.encrypt": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "config": { "user.attribute": "email", "attribute.name": "email", "attribute.nameformat": "Basic" }
+        },
+        {
+          "name": "givenName",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "config": { "user.attribute": "firstName", "attribute.name": "givenName", "attribute.nameformat": "Basic" }
+        },
+        {
+          "name": "surname",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "config": { "user.attribute": "lastName", "attribute.name": "surname", "attribute.nameformat": "Basic" }
+        },
+        {
+          "name": "roles",
+          "protocol": "saml",
+          "protocolMapper": "saml-role-list-mapper",
+          "config": { "single": "false", "attribute.name": "role", "attribute.nameformat": "Basic" }
+        }
+      ]
+    },
+    {
+      "clientId": "oidc-rp",
+      "name": "OIDC RP sample app",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://${LAB_HOST}:${OIDC_RP_PORT}",
+      "baseUrl": "/",
+      "redirectUris": ["https://${LAB_HOST}:${OIDC_RP_PORT}/auth/callback"],
+      "webOrigins": ["https://${LAB_HOST}:${OIDC_RP_PORT}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://${LAB_HOST}:${OIDC_RP_PORT}/"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles in ID token",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

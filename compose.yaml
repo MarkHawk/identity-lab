@@ -1,0 +1,84 @@
+# identity-lab -- Keycloak IdP plus SAML and OIDC sample apps.
+# Run scripts/setup.sh first; it generates .env and certs/.
+# Host ports are restricted to 8180-8189.
+
+name: identity-lab
+
+x-lab-env: &lab-env
+  LAB_HOST: ${LAB_HOST:?run scripts/setup.sh}
+  KC_PORT: ${KC_PORT}
+  SAML_SP_PORT: ${SAML_SP_PORT}
+  OIDC_RP_PORT: ${OIDC_RP_PORT}
+
+services:
+  postgres:
+    image: postgres:17.11-alpine3.24@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/setup.sh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "keycloak", "-d", "keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
+    # Production mode (not start-dev). The realm is imported on first boot only;
+    # after that, state lives in Postgres like a real deployment.
+    command: ["start", "--import-realm"]
+    user: "${LAB_UID}:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *lab-env
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Browsers use LAB_HOST; the apps call https://keycloak:8180 on the
+      # compose network and get backchannel URLs for that host.
+      KC_HOSTNAME: https://${LAB_HOST}:${KC_PORT}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Listen on 8180 inside the container too, so 8080 appears nowhere.
+      KC_HTTP_ENABLED: "false"
+      KC_HTTPS_PORT: "8180"
+      KC_HTTPS_CERTIFICATE_FILE: /etc/idlab/tls.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /etc/idlab/tls.key
+      # Health endpoints on the (unpublished) management port, plain HTTP so
+      # the healthcheck works without curl in the image.
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_MANAGEMENT_SCHEME: http
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      # Placeholders substituted into keycloak/idlab-realm.json at import.
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      SP_SIGNING_CERT: ${SP_SIGNING_CERT}
+    volumes:
+      - ./keycloak/idlab-realm.json:/opt/keycloak/data/import/idlab-realm.json:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+    ports:
+      - "${KC_PORT}:8180"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -n1 <&3 | grep -q ' 200 '
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
