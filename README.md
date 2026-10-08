@@ -56,13 +56,40 @@ scripts/pin-idp-cert.sh          # "onboard" the SAML SP: trust the IdP's curren
 scripts/status.sh                # service health and the live state of every scenario
 ```
 
-Then, in a browser on a machine that resolves `LAB_HOST` to the lab host:
+### Open the apps: HTTPS only
 
-1. Import `certs/ca.crt` as a trusted certificate authority, or accept the TLS warnings.
-2. Open the SAML SP at `https://idlab.home:8181/` or the OIDC RP at `https://idlab.home:8182/`.
-3. Sign in as `alice`, `bob` or `carol`. Get the shared demo password with `grep ^DEMO_PASSWORD= .env`.
+Use a browser on a machine that resolves `LAB_HOST` to the lab host. **Every URL is `https://`.** There is no plain-HTTP listener and no redirect, so `http://` URLs don't work.
 
-The Keycloak admin console is at `https://idlab.home:8180/admin/`. The username is `admin`; get the password with `grep ^KC_ADMIN_PASSWORD= .env`.
+| Service | URL |
+|---|---|
+| Keycloak (IdP); admin console at `/admin/` | **https://idlab.home:8180** |
+| SAML service provider | **https://idlab.home:8181** |
+| OIDC relying party | **https://idlab.home:8182** |
+
+If you set a different `LAB_HOST`, use that instead of `idlab.home`.
+
+Sign in to the apps as `alice`, `bob` or `carol`. They share one password; to see it on your own screen, run `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. The Keycloak admin console user is `admin`. To see its password on your own screen, run `grep '^KC_ADMIN_PASSWORD=' .env | cut -d= -f2`.
+
+#### The certificate warning is expected
+
+The first time you open each URL, the browser warns *"Your connection is not private"* (`NET::ERR_CERT_AUTHORITY_INVALID` in Chrome and Edge). That's because `setup.sh` created the lab's **own certificate authority**, and your browser has never heard of it. For a lab, it's fine to click **Advanced → Continue/Proceed**.
+
+Accept the warning on all three URLs **before** you first log in. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. If that happens, accept it and start the login again. Private/incognito windows ask again.
+
+#### Don't install the lab CA as trusted on your computer
+
+You could make the warnings go away by importing `certs/ca.crt` into your operating system's or browser's trusted root store. **Don't**, especially on a machine you use for anything else:
+
+- **The CA is not limited to the lab.** It can sign certificates for *any* hostname: your bank, your email, your company's SSO.
+- **Its private key isn't protected like a real CA's.** `certs/ca.key` sits unencrypted on the lab server, readable by anyone who gets that user account, a backup or a copy of the repo directory.
+- **Together, that means interception.** Anyone with the key could issue certificates your computer would accept silently, and intercept HTTPS traffic without a single warning. Trusting a root on Windows applies system-wide (Edge, Chrome and other apps), not just to this lab.
+
+Clicking through the warning gives exactly the same lab experience without that risk. The automated tests do trust the CA, but only inside a throwaway browser container that's deleted after each run.
+
+If you imported it earlier, remove it:
+
+- **Windows:** `certmgr.msc` → *Trusted Root Certification Authorities* → *Certificates* → delete **identity-lab Local CA**.
+- **macOS:** Keychain Access → delete it from the *System* or *login* keychain.
 
 ### Break something
 

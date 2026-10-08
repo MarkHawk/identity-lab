@@ -131,5 +131,6 @@ if (( ROTATE )); then
   exit 0
 fi
 ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)"
-echo "    Trust $CERTS_DIR/ca.crt in your browser to avoid TLS warnings."
+echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
+echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol share DEMO_PASSWORD in .env."
