@@ -68,7 +68,7 @@ Use a browser on a machine that resolves `LAB_HOST` to the lab host. **Every URL
 
 If you set a different `LAB_HOST`, use that instead of `idlab.home`.
 
-Sign in to the apps as `alice`, `bob` or `carol`. They share one password; to see it on your own screen, run `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. The Keycloak admin console user is `admin`. To see its password on your own screen, run `grep '^KC_ADMIN_PASSWORD=' .env | cut -d= -f2`.
+Sign in to the apps as one of the [demo users](#demo-users). The Keycloak admin console user is `admin`. To see its password on your own screen, run `grep '^KC_ADMIN_PASSWORD=' .env | cut -d= -f2`.
 
 #### The certificate warning is expected
 
@@ -90,6 +90,24 @@ If you imported it earlier, remove it:
 
 - **Windows:** `certmgr.msc` → *Trusted Root Certification Authorities* → *Certificates* → delete **identity-lab Local CA**.
 - **macOS:** Keychain Access → delete it from the *System* or *login* keychain.
+
+### Demo users
+
+| User | Email | Lab roles | Use it for |
+|---|---|---|---|
+| `alice` | alice@idlab.example | `lab-user`, `lab-admin` | The default user: the walkthrough and the automated tests sign in as alice. She has every lab role, so the `role` attribute and `realm_roles` claim are fully populated. |
+| `bob` | bob@idlab.example | `lab-user` | An ordinary user. Compare his debug pages with alice's to see how a role difference shows up in the SAML assertion and the ID token. |
+| `carol` | carol@idlab.example | *none* | Signed in but not authorised. Logging in succeeds because authentication only proves who she is. The sample apps don't enforce roles, so carol gets in; a real app would check `role` / `realm_roles` and refuse her. |
+
+Every user also carries Keycloak's default roles (`default-roles-idlab`, `offline_access`, `uma_authorization`), and these show up in the claims too. In SAML, the `role` attribute also includes the built-in `account` client's roles (`view-profile`, `manage-account`, …). The OIDC `realm_roles` claim has realm roles only.
+
+**Password:** all three share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
+
+```bash
+grep '^DEMO_PASSWORD=' .env | cut -d= -f2
+```
+
+Don't paste it into tickets, chats or screenshots. If it does leak, [rotate the secrets](#rotating-secrets).
 
 ### Break something
 
