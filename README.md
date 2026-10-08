@@ -102,6 +102,26 @@ The 36 checks cover:
 
 Screenshots, page HTML and a full log go to `test-results/`. [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
 
+## Rotating secrets
+
+```bash
+scripts/setup.sh --rotate     # new random value for every secret in .env; certificates untouched
+scripts/test.sh --fresh       # recreate the lab with them, then prove it still works
+```
+
+`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET` and the two apps' session keys. It prints none of them.
+
+The second step matters. Postgres, the Keycloak admin account, the demo users and the OIDC client secret only receive their values when the database is first created. `--fresh` deletes the Keycloak database volume and re-imports the realm. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
+
+When you'd do it:
+
+- **A secret has been seen** somewhere it shouldn't be: a screen share or recording, a screenshot, a chat or support ticket, a terminal transcript, a log, or an AI assistant session.
+- **`.env` has left the machine**: copied to another host, a backup or a laptop.
+- **Someone no longer needs access**: they had the admin or demo password and shouldn't keep it.
+- **Before a demo or handing the lab to someone else**, and periodically as good hygiene.
+
+If a **private key** may have been exposed, especially `certs/ca.key`, rotating `.env` isn't enough. Run `scripts/setup.sh --force` to regenerate the CA, TLS and signing keys as well as the secrets, then `scripts/test.sh --fresh`. Remove the old CA from anywhere you trusted it.
+
 ## Repository layout
 
 ```
