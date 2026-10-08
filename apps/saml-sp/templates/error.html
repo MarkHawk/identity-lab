@@ -9,6 +9,18 @@
     {% if error.detail %}<tr><th>Detail</th><td><code>{{ error.detail }}</code></td></tr>{% endif %}
     <tr><th>SP clock (UTC)</th><td><code>{{ sp_clock.strftime('%Y-%m-%d %H:%M:%S') }}</code></td></tr>
   </table>
+  {% if error.timing %}
+  <h2 style="margin-top:1rem">Assertion timing vs SP clock</h2>
+  <table>
+    <tr><th>IssueInstant</th><td><code>{{ error.timing.issue_instant }}</code></td></tr>
+    <tr><th>Conditions NotBefore</th><td><code>{{ error.timing.not_before }}</code></td></tr>
+    <tr><th>Conditions NotOnOrAfter</th><td><code>{{ error.timing.not_on_or_after }}</code></td></tr>
+    <tr><th>SP clock now</th><td><code>{{ sp_clock.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+    <tr><th>SP clock − IssueInstant</th><td><code id="clock-skew">{{ error.timing.sp_clock_minus_issue_instant }}</code>
+      <span class="muted">a few seconds is normal; python3-saml tolerates ±300 s beyond the Conditions window</span></td></tr>
+  </table>
+  <p class="muted">Read from the rejected response before validation, so unverified.</p>
+  {% endif %}
   <p class="muted">The same line is in the SP log: <code>docker compose logs saml-sp | grep saml_login_failed</code></p>
 </section>
 <p><a class="btn secondary" href="{{ url_for('index') }}">Back</a></p>

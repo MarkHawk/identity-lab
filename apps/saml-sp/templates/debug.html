@@ -24,6 +24,8 @@
     <tr><th>AuthnInstant</th><td><code>{{ login.details.authn_instant }}</code></td></tr>
     <tr><th>Received (SP clock)</th><td><code>{{ login.received_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
     <tr><th>SP clock now</th><td><code>{{ sp_clock.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+    <tr><th>SP clock − IssueInstant</th><td><code id="clock-skew">{{ login.details.sp_clock_minus_issue_instant }}</code>
+      <span class="muted">at receipt; python3-saml tolerates ±300 s beyond the Conditions window</span></td></tr>
   </table>
 </section>
 <section>

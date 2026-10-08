@@ -17,12 +17,12 @@ from collections import OrderedDict
 
 from cryptography import x509
 from flask import Flask, redirect, render_template, request, session, url_for
-from lxml import etree
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.constants import OneLogin_Saml2_Constants as C
 from onelogin.saml2.errors import OneLogin_Saml2_Error, OneLogin_Saml2_ValidationError
 from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
+from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
 
 LAB_HOST = os.environ["LAB_HOST"]
 SP_BASE = f"https://{LAB_HOST}:{os.environ['SAML_SP_PORT']}"
@@ -74,6 +74,7 @@ class LoginError(Exception):
     def __init__(self, reason, message, detail=None, status=401):
         super().__init__(message)
         self.reason, self.message, self.detail, self.status = reason, message, detail, status
+        self.timing = None  # assertion timing from the rejected response, if readable
 
 
 def describe_cert(b64):
@@ -171,9 +172,29 @@ def saml_request_data():
     }
 
 
+def parse_saml_time(value):
+    try:
+        return dt.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def clock_skew(sp_time, issue_instant):
+    """SP clock minus the IdP's IssueInstant, in whole seconds (e.g. "+600 s").
+
+    The response is issued a moment before the SP receives it, so anything
+    beyond a few seconds is clock skew between the two systems.
+    """
+    issued = parse_saml_time(issue_instant)
+    if issued is None:
+        return None
+    return f"{(sp_time - issued).total_seconds():+.0f} s"
+
+
 def assertion_details(xml):
     ns = {"saml": C.NS_SAML, "samlp": C.NS_SAMLP, "ds": C.NS_DS}
-    root = etree.fromstring(xml.encode() if isinstance(xml, str) else xml)
+    # python3-saml's hardened parser: no DTDs, no entity expansion.
+    root = OneLogin_Saml2_XML.to_etree(xml)
 
     def first(path, attr=None):
         found = root.xpath(path, namespaces=ns)
@@ -193,9 +214,28 @@ def assertion_details(xml):
     }
 
 
+def posted_response_timing():
+    """Timing from the SAMLResponse being processed, for the error page.
+
+    Read before (or despite) validation failing, so it is unverified. That's
+    fine for display: it is what the clock-skew diagnosis needs.
+    """
+    try:
+        xml = base64.b64decode(request.form["SAMLResponse"])
+        details = assertion_details(xml)
+    except Exception:  # noqa: BLE001 - best effort; the error page works without it
+        return None
+    details["sp_clock_minus_issue_instant"] = clock_skew(now_utc(), details["issue_instant"])
+    return details
+
+
 @app.errorhandler(LoginError)
 def login_error(exc):
-    log.warning(kv(event="saml_login_failed", reason=exc.reason, error=exc.message, detail=exc.detail or ""))
+    skew = (exc.timing or {}).get("sp_clock_minus_issue_instant")
+    log.warning(kv(
+        event="saml_login_failed", reason=exc.reason, error=exc.message, detail=exc.detail or "",
+        **({"sp_clock_minus_issue_instant": skew} if skew else {}),
+    ))
     return render_template("error.html", error=exc, sp_clock=now_utc()), exc.status
 
 
@@ -223,6 +263,14 @@ def login():
 
 @app.post("/saml/acs")
 def acs():
+    try:
+        return consume_response()
+    except LoginError as exc:
+        exc.timing = posted_response_timing()
+        raise
+
+
+def consume_response():
     all_certs, valid_certs = trusted_signing_certs()
     auth = OneLogin_Saml2_Auth(saml_request_data(), saml_settings(valid_certs))
     try:
@@ -238,15 +286,18 @@ def acs():
             f"errors={','.join(errors)} sp_clock={now_utc():%Y-%m-%d %H:%M:%S} UTC",
         )
     xml = auth.get_last_response_xml(pretty_print_if_possible=True)
+    received_at = now_utc()
+    details = assertion_details(auth.get_last_response_xml())
+    details["sp_clock_minus_issue_instant"] = clock_skew(received_at, details["issue_instant"])
     key = store_login({
         "name_id": auth.get_nameid(),
         "name_id_format": auth.get_nameid_format(),
         "session_index": auth.get_session_index(),
         "attributes": auth.get_attributes(),
-        "details": assertion_details(auth.get_last_response_xml()),
+        "details": details,
         "certs": all_certs,
         "xml": xml.decode() if isinstance(xml, bytes) else xml,
-        "received_at": now_utc(),
+        "received_at": received_at,
     })
     session["login_key"] = key
     log.info(kv(event="saml_login_ok", name_id=auth.get_nameid(), assertion_id=auth.get_last_assertion_id()))

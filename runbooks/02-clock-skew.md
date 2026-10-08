@@ -15,8 +15,17 @@ The user signs in at Keycloak successfully. Back at the SP:
 SAML login failed
 Could not validate timestamp: expired. Check system clock.
 Reason code   invalid_response
-Detail        errors=invalid_response sp_clock=2026-10-08 16:08:08 UTC
+Detail        errors=invalid_response sp_clock=2026-10-08 17:05:12 UTC
+
+Assertion timing vs SP clock
+IssueInstant              2026-10-08T16:55:12.745Z
+Conditions NotBefore      2026-10-08T16:55:10.745Z
+Conditions NotOnOrAfter   2026-10-08T16:56:10.745Z
+SP clock now              2026-10-08T17:05:12Z
+SP clock − IssueInstant   +600 s
 ```
+
+The lab SP prints the assertion's validity window next to its own clock. A real SP usually shows only the first two lines, so you have to work out the comparison yourself (see *Where to look*).
 
 If the SP's clock runs **slow** instead of fast, python3-saml reports the opposite:
 `Could not validate timestamp: not yet valid. Check system clock.`
@@ -32,8 +41,9 @@ Run from the repository root on the lab host.
 ```bash
 # SP log. Note the line's timestamp: the app formats it using its own (wrong) clock.
 docker compose logs --timestamps saml-sp | grep saml_login_failed
-#  saml-sp-1  | 2026-10-08T15:58:08.281408451Z 2026-10-08 16:08:08,280 WARNING saml-sp event=saml_login_failed
-#    reason=invalid_response error='Could not validate timestamp: expired. Check system clock.' ...
+#  saml-sp-1  | 2026-10-08T16:55:12.805Z 2026-10-08 17:05:12,804 WARNING saml-sp event=saml_login_failed
+#    reason=invalid_response error='Could not validate timestamp: expired. Check system clock.'
+#    detail='errors=invalid_response sp_clock=2026-10-08 17:05:12 UTC' sp_clock_minus_issue_instant='+600 s'
 #               ^ Docker's receive time (real)  ^ the SP's own clock: 10 minutes ahead
 
 # Compare clocks directly
@@ -45,7 +55,7 @@ docker compose logs keycloak --since 10m | grep LOGIN_ERROR | grep 'saml/metadat
 scripts/status.sh   # clock-skew  broken  saml-sp clock is +600s vs host (faketime offset +600)
 ```
 
-On a successful login, the SP's `/debug` page shows `IssueInstant`, `NotBefore` and `NotOnOrAfter` next to "SP clock now". That's the quickest visual check.
+The SP shows `IssueInstant`, `NotBefore` and `NotOnOrAfter` next to "SP clock now", along with `SP clock − IssueInstant`. It does this on the error page when a login fails and on `/debug` when one succeeds. That's the quickest visual check: a healthy lab shows a few seconds at most.
 
 ## Diagnosis
 
