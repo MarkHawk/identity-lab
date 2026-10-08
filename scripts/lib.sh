@@ -119,6 +119,33 @@ kc_api() {
 
 REALM=idlab
 
+# --- Scenarios -------------------------------------------------------------------
+# Each scenarios/<name>.sh defines:
+#   SCENARIO_SUMMARY   one line for status output
+#   SCENARIO_RUNBOOK   path of the runbook
+#   SCENARIO_APP       saml|oidc  -- which app's login shows the failure
+#   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
+#   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
+#   scenario_detect    print "broken|healthy|unknown<TAB>detail", from live lab state
+#   scenario_break / scenario_fix
+SCENARIOS_DIR="$LAB_ROOT/scenarios"
+
+scenario_names() {
+  local f
+  for f in "$SCENARIOS_DIR"/*.sh; do basename "$f" .sh; done
+}
+
+load_scenario() {
+  local name="$1"
+  [[ "$name" =~ ^[a-z0-9-]+$ && -f "$SCENARIOS_DIR/$name.sh" ]] \
+    || die "unknown scenario '$name' (available: $(scenario_names | tr '\n' ' '))"
+  unset -f scenario_detect scenario_break scenario_fix
+  # shellcheck disable=SC1090
+  source "$SCENARIOS_DIR/$name.sh"
+}
+
+scenario_state() { scenario_detect | cut -f1; }
+
 # --- SAML SP trust -----------------------------------------------------------------
 IDP_PIN_FILE="$STATE_DIR/saml-sp/idp-signing.pem"
 
