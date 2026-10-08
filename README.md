@@ -117,6 +117,55 @@ scripts/status.sh                # clock-skew  broken  saml-sp clock is +600s vs
 scripts/fix.sh clock-skew        # or: scripts/fix.sh --all
 ```
 
+## Try it in 10 minutes
+
+Start with the lab up, the IdP certificate pinned, and `scripts/status.sh` showing every scenario **healthy**. Use one **normal** browser window for steps 1–3, because single sign-on needs the same browser session. Step 4 uses a private window.
+
+**1. OIDC as alice (≈3 min)**
+
+1. Open **https://idlab.home:8182** and click **Log in with OIDC**.
+2. You're sent to Keycloak at `:8180`, realm *Identity Lab*. Sign in as `alice` with the [demo password](#demo-users).
+3. You land on **OIDC login succeeded**. Look at:
+
+| Claim | What it tells you |
+|---|---|
+| `iss` | `https://idlab.home:8180/realms/idlab`, the issuer. The RP rejects tokens from anyone else, so a hostname or realm mismatch here is a classic failure. |
+| `aud` / `azp` | `oidc-rp`: the token was issued to *this* client. |
+| `sub` | A UUID that never changes for alice. Apps should key users on this, not on email. |
+| `email`, `preferred_username`, `realm_roles` | Profile data and authorisation input (alice: `lab-user`, `lab-admin`). |
+| `iat` → `exp` | Issued at, and expires 5 minutes later. Compare with "RP clock now". |
+| `nonce` | Ties this token to this login attempt, which protects against replay. |
+| Header `kid` | Which realm key signed the token. Compare with Keycloak's *Realm settings → Keys*. |
+
+**2. SAML, and single sign-on (≈3 min)**
+
+1. In the **same window**, open **https://idlab.home:8181** and click **Log in with SAML**.
+2. This time **there's no password prompt**. The browser bounces through Keycloak and lands straight on **SAML login succeeded**. Keycloak recognised the session from step 1 and issued a SAML assertion to a different app, over a different protocol. That's single sign-on.
+3. Look at:
+
+| Field | What it tells you |
+|---|---|
+| NameID | `alice@idlab.example`, in emailAddress format. This is the SAML subject. |
+| Issuer / Audience | The same realm as before, and this SP's entity ID. |
+| Signatures | Response **signed**, assertion **signed**. |
+| Timing | `NotBefore` → `NotOnOrAfter` is about a 1-minute window. **SP clock − IssueInstant** should be a few seconds at most. |
+| Attributes | `email`, `givenName`, `surname`, `role`. |
+| IdP signing certificates | The certificate this SP pinned, and whether it's valid. |
+
+**3. Compare (≈1 min)**
+
+It's the same person through two protocols, but the identifiers differ. OIDC `sub` is a UUID; SAML NameID is an email address. Mapping one onto the other is a classic integration mistake. Lifetimes differ too: the ID token lasts 5 minutes, while the SAML assertion must be used within about 1 minute.
+
+**4. Run a scenario end to end (≈3 min)**
+
+1. On the lab host, run `scripts/break.sh clock-skew` and read what it prints.
+2. Open a **new private window**, so the sessions from steps 1–2 can't hide anything. Go to **https://idlab.home:8181**, accept the certificate warning again, click **Log in with SAML** and sign in as `alice`.
+3. The SP shows **"Could not validate timestamp: expired. Check system clock."** Under *Assertion timing vs SP clock*, `NotOnOrAfter` is about 9 minutes **before** "SP clock now", and **SP clock − IssueInstant** reads **+600 s**.
+4. Open [runbook 02](runbooks/02-clock-skew.md) and follow *Where to look*. For example, `date -u; docker compose exec saml-sp date -u` shows the two clocks 10 minutes apart.
+5. Run `scripts/fix.sh clock-skew`. Close the private window, open a new one and log in again. It succeeds, and **SP clock − IssueInstant** is back near 0.
+
+Then try the other two scenarios the same way, using `scripts/break.sh` with no argument to list them.
+
 ## Scenarios
 
 | # | Scenario | App | What breaks | What the user sees | Runbook |
