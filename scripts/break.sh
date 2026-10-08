@@ -9,7 +9,7 @@ load_scenario "$1"
 
 IFS=$'\t' read -r state detail < <(scenario_detect)
 case "$state" in
-  broken)  ok "$1 is already broken -- nothing to do ($detail)"; exit 0 ;;
+  broken)  ok "$1 is already broken -- nothing to do ($detail)"; print_try_it "$1"; exit 0 ;;
   unknown) die "cannot determine state of $1: $detail" ;;
 esac
 
@@ -18,4 +18,4 @@ scenario_break
 IFS=$'\t' read -r state detail < <(scenario_detect)
 [[ "$state" == broken ]] || die "$1 did not break (state: $state, $detail)"
 ok "$1 is broken: $detail"
-echo "    Reproduce: log in to the ${SCENARIO_APP^^} app. Runbook: $SCENARIO_RUNBOOK"
+print_try_it "$1"

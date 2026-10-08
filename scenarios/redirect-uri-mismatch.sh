@@ -5,6 +5,7 @@ SCENARIO_SUMMARY="oidc-rp client's registered redirect URI no longer matches the
 SCENARIO_RUNBOOK="runbooks/03-redirect-uri-mismatch.md"
 SCENARIO_APP=oidc
 SCENARIO_EXPECT="Invalid parameter: redirect_uri"
+SCENARIO_SEEN_AT="on a Keycloak error page, before any login form"
 SCENARIO_LOG='keycloak error="invalid_redirect_uri"'
 
 _rum_expected="https://$LAB_HOST:$OIDC_RP_PORT/auth/callback"

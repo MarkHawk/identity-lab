@@ -17,6 +17,7 @@ SCENARIO_SUMMARY="IdP SAML signing certificate pinned on the SP has expired"
 SCENARIO_RUNBOOK="runbooks/01-expired-signing-cert.md"
 SCENARIO_APP=saml
 SCENARIO_EXPECT="IdP signing certificate expired"
+SCENARIO_SEEN_AT="on the SAML SP error page after you sign in"
 SCENARIO_LOG='saml-sp saml_login_failed reason=idp_cert_expired'
 
 _esc_name="idlab-expiring-signing-key"

@@ -7,6 +7,7 @@ SCENARIO_SUMMARY="SAML SP clock 10 minutes ahead of the IdP"
 SCENARIO_RUNBOOK="runbooks/02-clock-skew.md"
 SCENARIO_APP=saml
 SCENARIO_EXPECT="Could not validate timestamp: expired. Check system clock."
+SCENARIO_SEEN_AT="on the SAML SP error page after you sign in"
 SCENARIO_LOG='saml-sp saml_login_failed.*Could not validate timestamp'
 
 _cs_file="$STATE_DIR/saml-sp/faketime.rc"
