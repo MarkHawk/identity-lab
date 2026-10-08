@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Assertion{% endblock %}
+{% block body %}
+<section>
+  <h1 id="login-ok">SAML login succeeded</h1>
+  <table>
+    <tr><th>NameID</th><td><code id="name-id">{{ login.name_id }}</code></td></tr>
+    <tr><th>NameID format</th><td><code>{{ login.name_id_format }}</code></td></tr>
+    <tr><th>SessionIndex</th><td><code>{{ login.session_index }}</code></td></tr>
+    <tr><th>Issuer</th><td><code>{{ login.details.issuer }}</code></td></tr>
+    <tr><th>Audience</th><td><code>{{ login.details.audience }}</code></td></tr>
+    <tr><th>Signatures</th><td>
+      response <span class="tag {{ 'ok' if login.details.response_signed else 'bad' }}">{{ 'signed' if login.details.response_signed else 'unsigned' }}</span>
+      assertion <span class="tag {{ 'ok' if login.details.assertion_signed else 'bad' }}">{{ 'signed' if login.details.assertion_signed else 'unsigned' }}</span>
+    </td></tr>
+  </table>
+</section>
+<section>
+  <h2>Timing</h2>
+  <table>
+    <tr><th>IssueInstant</th><td><code>{{ login.details.issue_instant }}</code></td></tr>
+    <tr><th>Conditions NotBefore</th><td><code>{{ login.details.not_before }}</code></td></tr>
+    <tr><th>Conditions NotOnOrAfter</th><td><code>{{ login.details.not_on_or_after }}</code></td></tr>
+    <tr><th>AuthnInstant</th><td><code>{{ login.details.authn_instant }}</code></td></tr>
+    <tr><th>Received (SP clock)</th><td><code>{{ login.received_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+    <tr><th>SP clock now</th><td><code>{{ sp_clock.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+  </table>
+</section>
+<section>
+  <h2>Attributes</h2>
+  <table>
+    {% for name, values in login.attributes.items() %}
+    <tr><th>{{ name }}</th><td><code class="attr" data-name="{{ name }}">{{ values | join(', ') }}</code></td></tr>
+    {% endfor %}
+  </table>
+</section>
+<section>
+  <h2>IdP signing certificates (from metadata)</h2>
+  <div class="wrap"><table>
+    <tr><th>Subject</th><th>Serial</th><th>Not after</th><th>Status</th></tr>
+    {% for c in login.certs %}
+    <tr><td><code>{{ c.subject }}</code></td><td><code>{{ c.serial }}</code></td>
+        <td><code>{{ c.not_after.strftime('%Y-%m-%d %H:%M UTC') }}</code></td>
+        <td><span class="tag {{ 'bad' if c.expired else 'ok' }}">{{ 'expired' if c.expired else 'valid' }}</span></td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+<section>
+  <h2>Raw SAML response</h2>
+  <pre>{{ login.xml }}</pre>
+</section>
+<form method="post" action="{{ url_for('logout') }}"><button class="btn secondary">Clear local session</button></form>
+{% endblock %}

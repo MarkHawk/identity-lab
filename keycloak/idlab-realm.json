@@ -54,6 +54,8 @@
       "rootUrl": "https://${LAB_HOST}:${SAML_SP_PORT}",
       "baseUrl": "/",
       "redirectUris": ["https://${LAB_HOST}:${SAML_SP_PORT}/*"],
+      "defaultClientScopes": [],
+      "optionalClientScopes": [],
       "attributes": {
         "saml_assertion_consumer_url_post": "https://${LAB_HOST}:${SAML_SP_PORT}/saml/acs",
         "saml.server.signature": "true",
@@ -90,7 +92,7 @@
           "name": "roles",
           "protocol": "saml",
           "protocolMapper": "saml-role-list-mapper",
-          "config": { "single": "false", "attribute.name": "role", "attribute.nameformat": "Basic" }
+          "config": { "single": "true", "attribute.name": "role", "attribute.nameformat": "Basic" }
         }
       ]
     },

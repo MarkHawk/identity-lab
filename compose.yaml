@@ -80,5 +80,48 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  saml-sp:
+    build: ./apps/saml-sp
+    image: identity-lab/saml-sp:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: *lab-env
+      PORT: "8181"
+      SAML_SP_SECRET_KEY: ${SAML_SP_SECRET_KEY}
+      REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
+      # libfaketime: the offset in faketime.rc ("+0" normally) is re-read on
+      # every clock call, so scenarios/clock-skew.sh can shift this
+      # container's wall clock without a restart. The host clock is untouched.
+      LD_PRELOAD: /usr/local/lib/faketime/libfaketime.so.1
+      FAKETIME_TIMESTAMP_FILE: /var/lib/idlab/faketime/faketime.rc
+      FAKETIME_NO_CACHE: "1"
+      # Do not set FAKETIME_DONT_FAKE_MONOTONIC: with libfaketime 0.9.10 it
+      # makes Python 3.13's time.sleep() fail with EINVAL.
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+      - ./certs/sp-signing.crt:/etc/idlab/sp-signing.crt:ro
+      - ./certs/sp-signing.key:/etc/idlab/sp-signing.key:ro
+      - ./.state/saml-sp:/var/lib/idlab/faketime:ro
+    ports:
+      - "${SAML_SP_PORT}:8181"
+    healthcheck: &app-healthcheck
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, ssl, urllib.request;
+          urllib.request.urlopen('https://localhost:' + os.environ['PORT'] + '/healthz',
+          context=ssl.create_default_context(cafile='/etc/idlab/ca.crt'), timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
 volumes:
   pgdata:

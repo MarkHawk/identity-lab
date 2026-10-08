@@ -1,0 +1,6 @@
+# Build-time tools for compiling lxml/xmlsec from source (build stage only).
+setuptools==80.9.0
+wheel==0.45.1
+setuptools-scm==8.3.1
+packaging==26.3
+pkgconfig==1.5.5

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block body %}
+<section>
+  <h1>SAML 2.0 sample service provider</h1>
+  <p>Sends a signed AuthnRequest (HTTP-Redirect) to <code>{{ idp }}</code> and validates the signed
+     response at <code>/saml/acs</code> (HTTP-POST).</p>
+  {% if login %}
+    <p>Signed in as <b>{{ login.name_id }}</b>.</p>
+    <p><a class="btn" href="{{ url_for('debug') }}">View assertion</a></p>
+  {% else %}
+    <p><a class="btn" id="login" href="{{ url_for('login') }}">Log in with SAML</a></p>
+  {% endif %}
+  <p class="muted">SP metadata: <a href="{{ url_for('metadata') }}">/saml/metadata</a></p>
+</section>
+{% endblock %}
