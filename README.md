@@ -58,7 +58,7 @@ scripts/status.sh                # service health and the live state of every sc
 
 ### Open the apps: HTTPS only
 
-Use a browser on a machine that resolves `LAB_HOST` to the lab host. **Every URL is `https://`.** There is no plain-HTTP listener and no redirect, so `http://` URLs don't work.
+Use a browser on a machine that resolves `LAB_HOST` to the lab host. **Every URL is `https://`.** There is no plain-HTTP listener and no redirect, so `http://` URLs fail with `ERR_EMPTY_RESPONSE` (see [Troubleshooting](#troubleshooting)).
 
 | Service | URL |
 |---|---|
@@ -148,6 +148,21 @@ When you'd do it:
 - **Before a demo or handing the lab to someone else**, and periodically as good hygiene.
 
 If a **private key** may have been exposed, especially `certs/ca.key`, rotating `.env` isn't enough. Run `scripts/setup.sh --force` to regenerate the CA, TLS and signing keys as well as the secrets, then `scripts/test.sh --fresh`. Remove the old CA from anywhere you trusted it.
+
+## Troubleshooting
+
+### `ERR_EMPTY_RESPONSE`: "This page isn't working · idlab.home didn't send any data"
+
+**Cause:** you opened an `http://` URL, such as `http://idlab.home:8181`. The lab's ports speak only TLS. When a plain-HTTP request arrives on a TLS port, the server can't parse it and closes the connection without replying. There's no HTTP listener to redirect you to HTTPS. Browsers often autocomplete the `http://` version once you've typed it.
+
+**Fix:** type the full `https://` URL, for example `https://idlab.home:8181/`. If the address bar keeps suggesting the `http://` one, highlight that suggestion and press **Shift+Delete** (Chrome or Edge) to remove it.
+
+**Check from the lab host:**
+
+```bash
+curl -sS http://localhost:8181/                                  # curl: (52) Empty reply from server
+curl -sS --cacert certs/ca.crt https://localhost:8181/healthz    # {"status":"ok"}
+```
 
 ## Repository layout
 
