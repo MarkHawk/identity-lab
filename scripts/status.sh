@@ -2,6 +2,7 @@
 # Show service health and the live state of every scenario.
 #   scripts/status.sh             human-readable table
 #   scripts/status.sh <scenario>  print just broken|healthy|unknown (for scripts)
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 require docker curl jq openssl
 load_env

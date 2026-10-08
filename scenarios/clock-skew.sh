@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034  # SCENARIO_* are read by the scripts that source this file
 # The SAML SP's clock runs 10 minutes fast -- outside python3-saml's
 # 300-second drift allowance -- so every assertion already looks expired.
 # Only the saml-sp container's clock is shifted (libfaketime); the host

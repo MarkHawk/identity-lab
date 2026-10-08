@@ -1,0 +1,2 @@
+# Resolve `source` paths relative to the script being checked (scripts/*.sh source lib.sh).
+source-path=SCRIPTDIR

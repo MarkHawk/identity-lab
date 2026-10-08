@@ -10,6 +10,7 @@
 #   scripts/setup.sh --force              # regenerate CA, keys and secrets (then: scripts/test.sh --fresh)
 #
 # Nothing secret is ever printed. Read values from .env when you need them.
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 require openssl docker date base64
 

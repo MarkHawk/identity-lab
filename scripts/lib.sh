@@ -33,6 +33,10 @@ load_env() {
   # shellcheck disable=SC1090
   source "$ENV_FILE"
   set +a
+  local v
+  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT KC_ADMIN_USER KC_ADMIN_PASSWORD; do
+    [[ -n "${!v:-}" ]] || die "$v is missing from .env -- re-run scripts/setup.sh"
+  done
 }
 
 compose() { docker compose --project-directory "$LAB_ROOT" "$@"; }
@@ -92,6 +96,8 @@ cert_b64() { openssl x509 -in "$1" -outform DER | base64 -w0; }
 # stdin, never on a command line.
 _KC_TOKEN="" _KC_TOKEN_AT=0
 
+# LAB_HOST, KC_PORT etc. come from .env via load_env.
+# shellcheck disable=SC2153
 kc_curl() {
   curl -sS --fail-with-body --cacert "$CERTS_DIR/ca.crt" \
     --resolve "$LAB_HOST:$KC_PORT:127.0.0.1" "$@"

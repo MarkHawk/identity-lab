@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Put the lab into a failure scenario.   scripts/break.sh <scenario>
 # Idempotent: breaking an already-broken scenario changes nothing.
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 require docker curl jq openssl
 [[ $# -eq 1 ]] || { echo "usage: $0 <scenario>"; echo "scenarios:"; scenario_names | sed 's/^/  /'; exit 2; }

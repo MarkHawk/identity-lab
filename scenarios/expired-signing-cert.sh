@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034  # SCENARIO_* are read by the scripts that source this file
 # The IdP's SAML signing certificate -- the one pinned on the SP at
 # onboarding -- reaches its notAfter date. The SP refuses an expired IdP
 # certificate, so every SAML login fails.

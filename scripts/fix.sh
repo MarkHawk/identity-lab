@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Revert a failure scenario.   scripts/fix.sh <scenario>|--all
 # Idempotent: fixing a healthy scenario changes nothing.
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 require docker curl jq openssl
 [[ $# -eq 1 ]] || { echo "usage: $0 <scenario>|--all"; echo "scenarios:"; scenario_names | sed 's/^/  /'; exit 2; }

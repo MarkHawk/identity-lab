@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034  # SCENARIO_* are read by the scripts that source this file
 # Someone edits the oidc-rp client in Keycloak and the registered redirect
 # URI no longer matches the one the app sends (/callback vs /auth/callback).
 SCENARIO_SUMMARY="oidc-rp client's registered redirect URI no longer matches the app"

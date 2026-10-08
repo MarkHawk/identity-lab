@@ -12,6 +12,7 @@
 # successful login again. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/.
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 require docker curl jq openssl
 
@@ -49,18 +50,24 @@ check() {
   return 0
 }
 
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" expect_state ...
 expect_state() { [[ "$("$LAB_ROOT/scripts/status.sh" "$1")" == "$2" ]] || { echo "state is not $2"; "$LAB_ROOT/scripts/status.sh" | tail -n 6; return 1; }; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser ...
 browser()      { compose run --rm tests "$@"; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
   compose logs --no-log-prefix --since "$1" "$2" | grep -E -m1 -- "$3" \
     || { echo "no log line matching /$3/ in $2 since $1"; return 1; }
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" healthy ...
 healthy()      {
   local st
   st="$(docker inspect -f '{{.State.Health.Status}}' "$(compose ps -q "$1")")"
   [[ "$st" == healthy ]] || { echo "$1 health is $st"; return 1; }
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" http_ok ...
 http_ok()      { kc_curl -o /dev/null --resolve "$LAB_HOST:$2:127.0.0.1" "https://$LAB_HOST:$2$1"; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" issuer_ok ...
 issuer_ok()    {
   local iss
   iss="$(kc_curl "https://$LAB_HOST:$KC_PORT/realms/$REALM/.well-known/openid-configuration" | jq -r .issuer)"
