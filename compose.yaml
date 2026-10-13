@@ -1,6 +1,6 @@
-# identity-lab -- Keycloak IdP plus SAML and OIDC sample apps.
+# identity-lab -- Keycloak IdP with an OpenLDAP directory, plus SAML and OIDC sample apps.
 # Run scripts/setup.sh first; it generates .env and certs/.
-# Host ports are restricted to 8180-8189.
+# Host ports are restricted to 8180-8189. LDAP publishes no host port.
 
 name: identity-lab
 
@@ -26,6 +26,29 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # OpenLDAP directory that Keycloak federates users from. LDAPS on the
+  # compose network only; seeded from ldap/*.ldif on first boot.
+  ldap:
+    build: ./ldap
+    image: identity-lab/ldap:local
+    user: "${LAB_UID}:0"
+    environment:
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:?run scripts/setup.sh}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:?run scripts/setup.sh}
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+    volumes:
+      - ldapdata:/var/lib/idlab-ldap
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/ldap.crt:/etc/idlab/ldap.crt:ro
+      - ./certs/ldap.key:/etc/idlab/ldap.key:ro
+    healthcheck:
+      # Anonymous whoami over LDAPS: proves slapd is up and TLS verifies.
+      test: ["CMD", "ldapwhoami", "-x", "-H", "ldaps://ldap:1636"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
     # Production mode (not start-dev). The realm is imported on first boot only;
@@ -34,6 +57,8 @@ services:
     user: "${LAB_UID}:0"
     depends_on:
       postgres:
+        condition: service_healthy
+      ldap:
         condition: service_healthy
     environment:
       <<: *lab-env
@@ -51,6 +76,8 @@ services:
       KC_HTTPS_PORT: "8180"
       KC_HTTPS_CERTIFICATE_FILE: /etc/idlab/tls.crt
       KC_HTTPS_CERTIFICATE_KEY_FILE: /etc/idlab/tls.key
+      # Trust the lab CA for outgoing TLS (LDAPS to the directory).
+      KC_TRUSTSTORE_PATHS: /etc/idlab/ca.crt
       # Health endpoints on the (unpublished) management port, plain HTTP so
       # the healthcheck works without curl in the image.
       KC_HEALTH_ENABLED: "true"
@@ -61,8 +88,10 @@ services:
       DEMO_PASSWORD: ${DEMO_PASSWORD}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       SP_SIGNING_CERT: ${SP_SIGNING_CERT}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD}
     volumes:
       - ./keycloak/idlab-realm.json:/opt/keycloak/data/import/idlab-realm.json:ro
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
       - ./certs/tls.key:/etc/idlab/tls.key:ro
     ports:
@@ -163,3 +192,4 @@ services:
 
 volumes:
   pgdata:
+  ldapdata:

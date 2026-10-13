@@ -50,7 +50,7 @@ if [[ ! -f "$CERTS_DIR/ca.key" || ! -f "$CERTS_DIR/ca.crt" ]]; then
       -addext "basicConstraints=critical,CA:TRUE" \
       -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null )
   chmod 644 "$CERTS_DIR/ca.crt"
-  rm -f "$CERTS_DIR/tls.crt" "$CERTS_DIR/sp-signing.crt"   # force reissue under the new CA
+  rm -f "$CERTS_DIR/tls.crt" "$CERTS_DIR/sp-signing.crt" "$CERTS_DIR/ldap.crt"   # force reissue under the new CA
 fi
 
 # --- TLS certificate shared by all three services ---------------------------
@@ -75,6 +75,14 @@ if [[ ! -f "$CERTS_DIR/sp-signing.crt" ]] \
    || ! openssl x509 -in "$CERTS_DIR/sp-signing.crt" -noout -checkend $((30*86400)) >/dev/null; then
   log "issuing SAML SP signing certificate"
   issue_cert "$CERTS_DIR/sp-signing" "saml-sp signing" "-1 hour" "+2 years" signing
+fi
+
+# --- LDAP server certificate (LDAPS on the compose network only) -------------
+# Separate from tls.crt: the directory is never reached as LAB_HOST.
+if [[ ! -f "$CERTS_DIR/ldap.crt" ]] \
+   || ! openssl x509 -in "$CERTS_DIR/ldap.crt" -noout -checkend $((30*86400)) >/dev/null; then
+  log "issuing LDAP server certificate"
+  issue_cert "$CERTS_DIR/ldap" ldap "-1 hour" "+397 days" server "DNS:ldap"
 fi
 
 # Containers run as the invoking user (LAB_UID), so keys can stay 0600.
@@ -117,6 +125,8 @@ DEMO_PASSWORD=$(keep DEMO_PASSWORD "$(rand 20)")
 OIDC_CLIENT_SECRET=$(keep OIDC_CLIENT_SECRET "$(rand 40)")
 SAML_SP_SECRET_KEY=$(keep SAML_SP_SECRET_KEY "$(rand 48)")
 OIDC_RP_SECRET_KEY=$(keep OIDC_RP_SECRET_KEY "$(rand 48)")
+LDAP_ADMIN_PASSWORD=$(keep LDAP_ADMIN_PASSWORD "$(rand 32)")
+LDAP_BIND_PASSWORD=$(keep LDAP_BIND_PASSWORD "$(rand 32)")
 
 # Public certificate (not secret): Keycloak uses it to verify signed AuthnRequests.
 SP_SIGNING_CERT=$(cert_b64 "$CERTS_DIR/sp-signing.crt")
@@ -124,13 +134,14 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
-  warn "demo user passwords and OIDC client secret are only applied when the database is created."
-  warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak database volume)"
+  warn "demo user passwords, OIDC client secret and LDAP passwords are only applied when the"
+  warn "databases are created."
+  warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak and LDAP volumes)"
   exit 0
 fi
 ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)"
 echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
-echo "    Demo users alice, bob, carol share DEMO_PASSWORD in .env."
+echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."

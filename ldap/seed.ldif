@@ -1,0 +1,68 @@
+# Lab directory: base DN, a read-only service account for Keycloak, demo
+# users and groups. Loaded with slapadd on first boot. Users share
+# DEMO_PASSWORD from .env (as alice, bob and carol do in Keycloak).
+
+dn: dc=idlab,dc=example
+objectClass: dcObject
+objectClass: organization
+dc: idlab
+o: identity-lab
+
+dn: ou=people,dc=idlab,dc=example
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=idlab,dc=example
+objectClass: organizationalUnit
+ou: groups
+
+dn: ou=services,dc=idlab,dc=example
+objectClass: organizationalUnit
+ou: services
+
+# Keycloak binds as this account to search users and groups (LDAP_BIND_PASSWORD).
+dn: cn=keycloak-svc,ou=services,dc=idlab,dc=example
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: keycloak-svc
+description: Keycloak user federation (read only)
+userPassword: ${LDAP_BIND_PASSWORD_HASH}
+
+dn: uid=dave,ou=people,dc=idlab,dc=example
+objectClass: inetOrgPerson
+uid: dave
+cn: Dave Dawson
+givenName: Dave
+sn: Dawson
+mail: dave@idlab.example
+userPassword: ${DEMO_PASSWORD_HASH}
+
+dn: uid=erin,ou=people,dc=idlab,dc=example
+objectClass: inetOrgPerson
+uid: erin
+cn: Erin Evans
+givenName: Erin
+sn: Evans
+mail: erin@idlab.example
+userPassword: ${DEMO_PASSWORD_HASH}
+
+dn: uid=frank,ou=people,dc=idlab,dc=example
+objectClass: inetOrgPerson
+uid: frank
+cn: Frank Foster
+givenName: Frank
+sn: Foster
+mail: frank@idlab.example
+userPassword: ${DEMO_PASSWORD_HASH}
+
+# Group names match the realm roles; Keycloak maps membership to roles.
+dn: cn=lab-user,ou=groups,dc=idlab,dc=example
+objectClass: groupOfNames
+cn: lab-user
+member: uid=dave,ou=people,dc=idlab,dc=example
+member: uid=erin,ou=people,dc=idlab,dc=example
+
+dn: cn=lab-admin,ou=groups,dc=idlab,dc=example
+objectClass: groupOfNames
+cn: lab-admin
+member: uid=erin,ou=people,dc=idlab,dc=example

@@ -1,0 +1,49 @@
+# slapd cn=config for the lab directory, loaded with slapadd on first boot.
+# ${..._HASH} placeholders are replaced by entrypoint.sh with {SSHA} hashes.
+
+dn: cn=config
+objectClass: olcGlobal
+cn: config
+olcTLSCACertificateFile: /etc/idlab/ca.crt
+olcTLSCertificateFile: /etc/idlab/ldap.crt
+olcTLSCertificateKeyFile: /etc/idlab/ldap.key
+
+dn: cn=module{0},cn=config
+objectClass: olcModuleList
+cn: module{0}
+olcModulePath: /usr/lib/ldap
+olcModuleLoad: back_mdb
+
+dn: cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: schema
+
+include: file:///etc/ldap/schema/core.ldif
+include: file:///etc/ldap/schema/cosine.ldif
+include: file:///etc/ldap/schema/inetorgperson.ldif
+
+dn: olcDatabase={-1}frontend,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcFrontendConfig
+olcDatabase: {-1}frontend
+
+dn: olcDatabase={0}config,cn=config
+objectClass: olcDatabaseConfig
+olcDatabase: {0}config
+olcAccess: {0}to * by * none
+
+dn: olcDatabase={1}mdb,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcMdbConfig
+olcDatabase: {1}mdb
+olcSuffix: dc=idlab,dc=example
+olcRootDN: cn=admin,dc=idlab,dc=example
+olcRootPW: ${LDAP_ADMIN_PASSWORD_HASH}
+olcDbDirectory: /var/lib/idlab-ldap/data
+olcDbMaxSize: 67108864
+olcDbIndex: objectClass eq
+olcDbIndex: uid,cn,mail,member eq
+# Passwords: usable for binding, never readable. Everything else: readable
+# by the Keycloak service account and by each user for their own entry.
+olcAccess: {0}to attrs=userPassword by self =xw by anonymous auth by * none
+olcAccess: {1}to * by dn.exact="cn=keycloak-svc,ou=services,dc=idlab,dc=example" read by self read by * none
