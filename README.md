@@ -1,6 +1,6 @@
 # identity-lab
 
-A self-contained SSO lab you can break on purpose. A Keycloak identity provider and two sample apps (one SAML, one OIDC) run in Docker Compose. One-command scenarios reproduce real single sign-on failures, and each scenario has a support-style runbook for diagnosing and fixing it.
+A self-contained SSO lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, and two sample apps (one SAML, one OIDC) run in Docker Compose. One-command scenarios reproduce real single sign-on failures, and each scenario has a support-style runbook for diagnosing and fixing it.
 
 ## The problem this solves
 
@@ -8,7 +8,7 @@ When enterprise SSO breaks, the support engineer usually sees only the customer'
 
 This lab makes those failures **reproducible and safe to practise on**:
 
-- **Break it:** `scripts/break.sh <scenario>` puts the lab into a realistic failure, such as an expired IdP certificate, a skewed clock or a mismatched redirect URI.
+- **Break it:** `scripts/break.sh <scenario>` puts the lab into a realistic failure, such as an expired IdP certificate, a skewed clock, a mismatched redirect URI or a failing LDAP bind.
 - **See it as the customer does:** the apps show the exact error a user would see. Their debug pages show the decoded SAML assertion or ID token.
 - **Diagnose it as support would:** every scenario has a runbook covering the symptom, where to look, diagnosis, fix, prevention, and the questions to ask the customer.
 - **Prove it:** `scripts/test.sh` runs a real headless-browser login against each app, breaks every scenario, asserts the user-facing error and the log evidence, fixes it, and asserts recovery. CI runs the same script.
@@ -23,6 +23,7 @@ flowchart LR
         direction LR
         kc["Keycloak 26.7<br/>realm idlab<br/>:8180 HTTPS"]
         pg[("Postgres 17<br/>Keycloak DB")]
+        ldap[("OpenLDAP 2.6<br/>dc=idlab,dc=example<br/>ldaps://ldap:1636<br/>internal only")]
         sp["SAML SP<br/>Flask + python3-saml<br/>:8181 HTTPS<br/>libfaketime"]
         rp["OIDC RP<br/>Flask + Authlib<br/>:8182 HTTPS"]
         pin[/".state/saml-sp/<br/>pinned IdP cert<br/>faketime offset"/]
@@ -33,6 +34,7 @@ flowchart LR
     user -- "code + state (redirect)" --> rp
     rp -- "back channel: discovery, token,<br/>userinfo, JWKS · https://keycloak:8180" --> kc
     kc --- pg
+    kc -- "LDAPS: bind as keycloak-svc,<br/>search users and groups,<br/>bind as the user" --> ldap
     pin -. "read on every login" .-> sp
     scripts["scripts/break.sh · fix.sh · status.sh"] -- "Admin REST API" --> kc
     scripts -- "pin cert, set clock offset" --> pin
@@ -40,6 +42,7 @@ flowchart LR
 
 - **Front channel:** browsers reach everything at `https://$LAB_HOST:818x`. Keycloak issues tokens with that issuer.
 - **Back channel:** the OIDC RP talks to Keycloak directly over the compose network (`KC_HOSTNAME_BACKCHANNEL_DYNAMIC`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
+- **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
 - **SP trust:** the SAML SP doesn't fetch IdP metadata. Like most SaaS service providers, it trusts the IdP certificate pinned at onboarding (`scripts/pin-idp-cert.sh`).
 
 ## Quick start
@@ -51,10 +54,12 @@ git clone <this repo> identity-lab && cd identity-lab
 
 scripts/setup.sh                 # CA, certificates and random secrets -> .env and certs/ (prints no secrets)
                                  # set LAB_HOST=localhost first if you have no DNS name for this machine
-docker compose up -d --wait      # Keycloak + Postgres + both apps (first build takes a few minutes)
+docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + both apps (first build takes a few minutes)
 scripts/pin-idp-cert.sh          # "onboard" the SAML SP: trust the IdP's current signing certificate
 scripts/status.sh                # service health and the live state of every scenario
 ```
+
+**Upgrading a lab from before the LDAP directory was added?** Run `scripts/setup.sh` (it adds the LDAP secrets and certificate to your existing `.env` and `certs/`), then `scripts/test.sh --fresh`. The LDAP federation is created at realm import, which only happens when the Keycloak database is new. `--fresh` deletes the Keycloak and LDAP volumes.
 
 ### Open the apps: HTTPS only
 
@@ -98,10 +103,15 @@ If you imported it earlier, remove it:
 | `alice` | alice@idlab.example | `lab-user`, `lab-admin` | The default user: the walkthrough and the automated tests sign in as alice. She has every lab role, so the `role` attribute and `realm_roles` claim are fully populated. |
 | `bob` | bob@idlab.example | `lab-user` | An ordinary user. Compare his debug pages with alice's to see how a role difference shows up in the SAML assertion and the ID token. |
 | `carol` | carol@idlab.example | *none* | Signed in but not authorised. Logging in succeeds because authentication only proves who she is. The sample apps don't enforce roles, so carol gets in; a real app would check `role` / `realm_roles` and refuse her. |
+| `dave` | dave@idlab.example | `lab-user` (LDAP group) | **From LDAP.** The automated tests use dave for the directory logins and the `ldap-bind-failure` scenario. |
+| `erin` | erin@idlab.example | `lab-user`, `lab-admin` (LDAP groups) | From LDAP, with every lab role, like alice. |
+| `frank` | frank@idlab.example | *none* | From LDAP, in no group, like carol. |
+
+alice, bob and carol live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
 
 Every user also carries Keycloak's default roles (`default-roles-idlab`, `offline_access`, `uma_authorization`), and these show up in the claims too. In SAML, the `role` attribute also includes the built-in `account` client's roles (`view-profile`, `manage-account`, …). The OIDC `realm_roles` claim has realm roles only.
 
-**Password:** all three share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
+**Password:** all six share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
 
 ```bash
 grep '^DEMO_PASSWORD=' .env | cut -d= -f2
@@ -164,7 +174,7 @@ It's the same person through two protocols, but the identifiers differ. OIDC `su
 4. Open [runbook 02](runbooks/02-clock-skew.md) and follow *Where to look*. For example, `date -u; docker compose exec saml-sp date -u` shows the two clocks 10 minutes apart.
 5. Run `scripts/fix.sh clock-skew`. Close the private window, open a new one and log in again. It succeeds, and **SP clock − IssueInstant** is back near 0.
 
-Then try the other two scenarios the same way, using `scripts/break.sh` with no argument to list them.
+Then try the other scenarios the same way, using `scripts/break.sh` with no argument to list them.
 
 ## Scenarios
 
@@ -173,12 +183,13 @@ Then try the other two scenarios the same way, using `scripts/break.sh` with no 
 | 1 | `expired-signing-cert` | SAML | The IdP signing certificate pinned on the SP passes its `notAfter` date | `IdP signing certificate expired on <date>; the SP has no valid IdP certificate pinned` | [01-expired-signing-cert](runbooks/01-expired-signing-cert.md) |
 | 2 | `clock-skew` | SAML | The SP's clock runs 10 minutes fast (libfaketime in the SP container only) | `Could not validate timestamp: expired. Check system clock.` | [02-clock-skew](runbooks/02-clock-skew.md) |
 | 3 | `redirect-uri-mismatch` | OIDC | The client's registered redirect URI no longer matches what the app sends | Keycloak: `We are sorry... Invalid parameter: redirect_uri` | [03-redirect-uri-mismatch](runbooks/03-redirect-uri-mismatch.md) |
+| 4 | `ldap-bind-failure` | Both (tested on OIDC) | Keycloak's stored LDAP bind password no longer matches the service account, so the directory returns result 49, invalid credentials. Only LDAP users are affected; alice still logs in. | Keycloak (as dave): `Unexpected error when handling authentication request to identity provider.` A directory user who has never logged in gets `Invalid username or password.` | [04-ldap-bind-failure](runbooks/04-ldap-bind-failure.md) |
 
 Every scenario is:
 
 - **reproducible:** driven by scripts, with no manual clicking
 - **reversible:** `fix.sh` restores a working state
-- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API, container clocks, SP trust store), so running either twice is a no-op
+- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store), so running either twice is a no-op
 
 ## Tests
 
@@ -188,11 +199,12 @@ scripts/test.sh --fresh    # also delete the Keycloak database volume first, so 
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 36 checks cover:
+The 50 checks cover:
 
-- container health, the OIDC issuer, and both apps over TLS verified against the lab CA
-- a real Chromium login to each app
+- container health, the OIDC issuer, both apps over TLS verified against the lab CA, and an `ldapwhoami` bind as Keycloak's service account over LDAPS
+- a real Chromium login to each app, as a local user (alice) and as an LDAP user (dave)
 - for every scenario: break (twice), detected as broken, the exact error in the browser, the matching log line, fix (twice), detected as healthy, and a successful login again
+- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't
 
 Screenshots, page HTML and a full log go to `test-results/`. [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
 
@@ -203,9 +215,9 @@ scripts/setup.sh --rotate     # new random value for every secret in .env; certi
 scripts/test.sh --fresh       # recreate the lab with them, then prove it still works
 ```
 
-`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET` and the two apps' session keys. It prints none of them.
+`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD` and the two apps' session keys. It prints none of them.
 
-The second step matters. Postgres, the Keycloak admin account, the demo users and the OIDC client secret only receive their values when the database is first created. `--fresh` deletes the Keycloak database volume and re-imports the realm. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
+The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secret and the directory's passwords only receive their values when the databases are first created. `--fresh` deletes the Keycloak and LDAP volumes, re-imports the realm and re-seeds the directory. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
 
 When you'd do it:
 
@@ -234,8 +246,9 @@ curl -sS --cacert certs/ca.crt https://localhost:8181/healthz    # {"status":"ok
 ## Repository layout
 
 ```
-compose.yaml                 Keycloak, Postgres, saml-sp, oidc-rp, tests (profile "test")
-keycloak/idlab-realm.json    realm, clients and demo users; secrets injected via placeholders
+compose.yaml                 Keycloak, Postgres, OpenLDAP, saml-sp, oidc-rp, tests (profile "test")
+keycloak/idlab-realm.json    realm, clients, demo users and LDAP federation; secrets injected via placeholders
+ldap/                        OpenLDAP image: cn=config and directory seed LDIF, first-boot entrypoint
 apps/saml-sp/                Flask + python3-saml service provider
 apps/oidc-rp/                Flask + Authlib relying party
 scenarios/<name>.sh          detect / break / fix for each scenario
@@ -261,6 +274,9 @@ runbooks/                    one support runbook per scenario
   - A metadata-refreshing SP follows along and never fails.
 
   Real outages happen at SPs that pinned the certificate at onboarding, so the SP models that. The scenario installs a certificate that is valid for 20 seconds and lets it expire.
+- **OpenLDAP built from Debian, not a ready-made image.** The popular OpenLDAP images are either stuck on OpenLDAP 2.4 and unmaintained, or frozen "legacy" builds that no longer get updates. `ldap/Dockerfile` installs Debian's pinned `slapd` 2.6 instead. On first boot, `slapadd` loads `cn=config` and the seed LDIF, with passwords hashed from `.env` (read on stdin, never in argv). After that, the data lives in a volume, just like the realm import.
+- **LDAPS, and a dedicated bind account.** Keycloak connects with `ldaps://ldap:1636` and verifies the directory's certificate against the lab CA (`KC_TRUSTSTORE_PATHS`). It binds as `cn=keycloak-svc`, which may read entries but never `userPassword`, and not as the directory administrator. Connection pooling is off so a changed bind credential takes effect on the next request.
+- **The LDAP scenario asks Keycloak, not a file.** Keycloak never returns the stored bind password, so `status.sh` uses Keycloak's own connection test (the console's *Test authentication*). Result 49 counts as broken. Anything else, such as the directory being down, is reported as `unknown` rather than mistaken for this scenario.
 - **python3-saml doesn't check certificate dates.** The SP enforces `notBefore`/`notAfter` on its pinned IdP certificates itself, as many commercial SPs do. The runbook says so.
 - **Clock skew without touching the host.** libfaketime is preloaded only in the SP container. It reads its offset from a file on every call, so a scenario can shift the clock without a restart. `FAKETIME_DONT_FAKE_MONOTONIC` is deliberately unset: with libfaketime 0.9.10 it makes Python 3.13's `time.sleep()` fail with `EINVAL`, which crashed gunicorn.
 - **lxml and xmlsec are compiled from source** against Debian's libxml2, avoiding the well-known `lxml & xmlsec libxml2 library version mismatch` failure between their binary wheels.
@@ -271,14 +287,14 @@ runbooks/                    one support runbook per scenario
   - GitHub Actions to commit SHAs
 
   Each version was at least two weeks old when chosen.
-- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and its health endpoint is on the unpublished management port.
+- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and its health endpoint is on the unpublished management port. The directory publishes no host port at all.
 
 ## Known limitations
 
-- **Apt pins can break builds.** Debian removes superseded security updates from its mirrors, so a pinned apt version (for example `libxml2 2.9.14+dfsg-1.3~deb12u6`) will eventually fail to install. The fix is to bump the pin, or to build from `snapshot.debian.org`.
+- **Apt pins can break builds.** Debian removes superseded security updates from its mirrors, so a pinned apt version (for example `libxml2 2.9.14+dfsg-1.3~deb12u6` or `slapd 2.6.10+dfsg-1`) will eventually fail to install. The fix is to bump the pin, or to build from `snapshot.debian.org`.
 - **Single-worker apps.** Each app runs one gunicorn worker with an in-memory store for decoded logins. That's fine for a lab, not for production.
 - **Tested platform.** The lab has only been tested on x86_64 Linux.
-- **Not production configuration.** Demo users share one password, Keycloak's bootstrap admin is used for the scenario scripts, and the SAML SP doesn't do Single Logout.
+- **Not production configuration.** Demo users share one password, the directory runs as a single server with no replication, Keycloak's bootstrap admin is used for the scenario scripts, and the SAML SP doesn't do Single Logout.
 
 ## How this was built
 
