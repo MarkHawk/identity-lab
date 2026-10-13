@@ -68,7 +68,11 @@ ldap_bind_ok() { # the by-hand test from runbook 04; the password goes in on std
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
-  compose logs --no-log-prefix --since "$1" "$2" | grep -E -m1 -- "$3" \
+  # Read the logs first: piping into grep -m1 would SIGPIPE compose when the
+  # match isn't near the end, and pipefail would turn a match into a failure.
+  local logs
+  logs="$(compose logs --no-log-prefix --since "$1" "$2")"
+  grep -E -m1 -- "$3" <<<"$logs" \
     || { echo "no log line matching /$3/ in $2 since $1"; return 1; }
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" healthy ...
