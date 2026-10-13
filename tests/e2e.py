@@ -4,7 +4,8 @@
     e2e.py oidc --expect-error "Invalid parameter: redirect_uri"
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
-over), signs in as a demo user, and checks where the flow ends up. Exit
+over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
+dave work the same way), and checks where the flow ends up. Exit
 status 0 means the expectation held. A screenshot and the final page HTML
 are written to /results on every run.
 """

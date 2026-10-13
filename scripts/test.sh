@@ -6,10 +6,12 @@
 #                              database volume, so the realm is re-imported
 #   scripts/test.sh --down     stop the lab afterwards (keeps the volume)
 #
-# Checks: service health; a scripted browser login to each app; then for
-# every scenario: break (twice), detected as broken, the expected error in
-# the browser, the expected log line, fix (twice), detected healthy, and a
-# successful login again. Failed checks don't stop the run; the exit status
+# Checks: service health and an LDAP bind as Keycloak's service account; a
+# scripted browser login to each app as a local user (alice) and an LDAP user
+# (dave); then for every scenario: break (twice), detected as broken, the
+# expected error in the browser, the expected log line, a user outside the
+# blast radius still logging in (where a scenario names one), fix (twice),
+# detected healthy, and a successful login again. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/.
 # shellcheck source=lib.sh
@@ -54,6 +56,16 @@ check() {
 expect_state() { [[ "$("$LAB_ROOT/scripts/status.sh" "$1")" == "$2" ]] || { echo "state is not $2"; "$LAB_ROOT/scripts/status.sh" | tail -n 6; return 1; }; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser ...
 browser()      { compose run --rm tests "$@"; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_as ...
+browser_as()   { local user="$1"; shift; compose run --rm -e E2E_USER="$user" tests "$@"; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" ldap_bind_ok
+ldap_bind_ok() { # the by-hand test from runbook 04; the password goes in on stdin
+  local out
+  out="$(printf '%s' "$LDAP_BIND_PASSWORD" | compose exec -T ldap ldapwhoami -x -H ldaps://ldap:1636 \
+    -D cn=keycloak-svc,ou=services,dc=idlab,dc=example -y /dev/stdin 2>&1)" || { echo "$out"; return 1; }
+  echo "$out"
+  [[ "$out" == "dn:cn=keycloak-svc,ou=services,dc=idlab,dc=example" ]]
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
   compose logs --no-log-prefix --since "$1" "$2" | grep -E -m1 -- "$3" \
@@ -97,32 +109,40 @@ compose up -d --wait --wait-timeout 300 >>"$LOG" 2>&1 \
 
 # --- Health -----------------------------------------------------------------------
 log "health"
-for svc in postgres keycloak saml-sp oidc-rp; do
+for svc in postgres ldap keycloak saml-sp oidc-rp; do
   check "health: $svc container healthy" healthy "$svc"
 done
 check "health: Keycloak issuer is https://$LAB_HOST:$KC_PORT/realms/$REALM" issuer_ok
 check "health: SAML SP /healthz over verified TLS" http_ok /healthz "$SAML_SP_PORT"
 check "health: OIDC RP /healthz over verified TLS" http_ok /healthz "$OIDC_RP_PORT"
+check "health: LDAP bind as keycloak-svc (ldapwhoami over LDAPS)" ldap_bind_ok
 
 # --- Baseline logins --------------------------------------------------------------
 log "baseline logins"
 check "login: SAML SP (alice)" browser saml --expect ok
 check "login: OIDC RP (alice)" browser oidc --expect ok
+check "login: SAML SP (dave, from LDAP)" browser_as dave saml --expect ok
+check "login: OIDC RP (dave, from LDAP)" browser_as dave oidc --expect ok
 
 # --- Scenarios --------------------------------------------------------------------
 for name in $(scenario_names); do
   load_scenario "$name"
+  user="${SCENARIO_USER:-alice}"
   log "scenario: $name"
   check "$name: break"                         "$LAB_ROOT/scripts/break.sh" "$name"
   check "$name: detected as broken"            expect_state "$name" broken
   check "$name: break again is a no-op"        "$LAB_ROOT/scripts/break.sh" "$name"
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  check "$name: user sees \"$SCENARIO_EXPECT\"" browser "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
+  check "$name: $user sees \"$SCENARIO_EXPECT\"" browser_as "$user" "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
   check "$name: log shows ${SCENARIO_LOG#* }"  log_has "$since" "${SCENARIO_LOG%% *}" "${SCENARIO_LOG#* }"
+  if [[ -n "${SCENARIO_UNAFFECTED:-}" ]]; then
+    read -r ua_app ua_user <<<"$SCENARIO_UNAFFECTED"
+    check "$name: $ua_user still logs in to $ua_app while broken" browser_as "$ua_user" "$ua_app" --expect ok
+  fi
   check "$name: fix"                           "$LAB_ROOT/scripts/fix.sh" "$name"
   check "$name: detected as healthy"           expect_state "$name" healthy
   check "$name: fix again is a no-op"          "$LAB_ROOT/scripts/fix.sh" "$name"
-  check "$name: login works again"             browser "$SCENARIO_APP" --expect ok
+  check "$name: login works again ($user)"     browser_as "$user" "$SCENARIO_APP" --expect ok
 done
 
 # --- Summary ----------------------------------------------------------------------

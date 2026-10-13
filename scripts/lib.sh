@@ -34,7 +34,7 @@ load_env() {
   source "$ENV_FILE"
   set +a
   local v
-  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT KC_ADMIN_USER KC_ADMIN_PASSWORD; do
+  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT KC_ADMIN_USER KC_ADMIN_PASSWORD LDAP_BIND_PASSWORD; do
     [[ -n "${!v:-}" ]] || die "$v is missing from .env -- re-run scripts/setup.sh"
   done
 }
@@ -133,6 +133,8 @@ REALM=idlab
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
+#   SCENARIO_USER      optional: demo user who sees the failure (default alice)
+#   SCENARIO_UNAFFECTED optional: "<saml|oidc> <user>" who must still log in while broken
 #   scenario_detect    print "broken|healthy|unknown<TAB>detail", from live lab state
 #   scenario_break / scenario_fix
 SCENARIOS_DIR="$LAB_ROOT/scenarios"
@@ -147,6 +149,7 @@ load_scenario() {
   [[ "$name" =~ ^[a-z0-9-]+$ && -f "$SCENARIOS_DIR/$name.sh" ]] \
     || die "unknown scenario '$name' (available: $(scenario_names | tr '\n' ' '))"
   unset -f scenario_detect scenario_break scenario_fix
+  unset SCENARIO_USER SCENARIO_UNAFFECTED
   # shellcheck disable=SC1090
   source "$SCENARIOS_DIR/$name.sh"
 }
@@ -158,13 +161,13 @@ app_title() { case "$1" in saml) echo "SAML" ;; oidc) echo "OIDC" ;; esac; }
 
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {
-  local t; t="$(app_title "$SCENARIO_APP")"
+  local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
   cat <<TXT
 
     Try it:
       1. Open a NEW private/incognito window. An existing app or Keycloak
          session in a normal window can hide the error.
-      2. Go to $(app_url "$SCENARIO_APP") and click "Log in with $t" (sign in as alice if asked).
+      2. Go to $(app_url "$SCENARIO_APP") and click "Log in with $t" (sign in as $u if asked).
       3. Expect, $SCENARIO_SEEN_AT:
            $SCENARIO_EXPECT
     Runbook: $SCENARIO_RUNBOOK
@@ -174,11 +177,11 @@ TXT
 
 # How to confirm recovery (after fix.sh).
 print_confirm() {
-  local t; t="$(app_title "$SCENARIO_APP")"
+  local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
   cat <<TXT
 
     Confirm recovery: in a NEW private window, go to $(app_url "$SCENARIO_APP"),
-    click "Log in with $t" and sign in as alice. You should land on the
+    click "Log in with $t" and sign in as $u. You should land on the
     "$t login succeeded" page. scripts/status.sh should show $1 as healthy.
 TXT
 }
