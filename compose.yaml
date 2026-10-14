@@ -1,6 +1,7 @@
-# identity-lab -- Keycloak IdP with an OpenLDAP directory, plus SAML and OIDC sample apps.
+# identity-lab -- Keycloak IdP with an OpenLDAP directory, plus SAML and OIDC sample
+# apps, and a FreeRADIUS server with a NAS that authenticates against the directory.
 # Run scripts/setup.sh first; it generates .env and certs/.
-# Host ports are restricted to 8180-8189. LDAP publishes no host port.
+# Host ports are restricted to 8180-8189. LDAP and RADIUS publish no host port.
 
 name: identity-lab
 
@@ -45,6 +46,66 @@ services:
     healthcheck:
       # Anonymous whoami over LDAPS: proves slapd is up and TLS verifies.
       test: ["CMD", "ldapwhoami", "-x", "-H", "ldaps://ldap:1636"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # FreeRADIUS: PAP Access-Requests from the NAS, users checked against the
+  # directory. UDP 1812/1813 on the compose networks only, no host port.
+  radius:
+    build: ./radius
+    image: identity-lab/radius:local
+    user: "${LAB_UID}:0"
+    depends_on:
+      ldap:
+        condition: service_healthy
+    environment:
+      # Expanded by FreeRADIUS as $ENV{...} in clients.conf and mods/ldap.
+      RADIUS_SECRET: ${RADIUS_SECRET:?run scripts/setup.sh}
+      RADIUS_LDAP_BIND_PASSWORD: ${RADIUS_LDAP_BIND_PASSWORD:?run scripts/setup.sh}
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+    networks:
+      - default
+      - radius
+    healthcheck:
+      # Status-Server over loopback. The secret goes to radclient as a file
+      # (process substitution), never on its command line.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          radclient -q -r 1 -t 2 -S <(printenv RADIUS_SECRET) 127.0.0.1:1812 status
+          <<<'Message-Authenticator = 0x00'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # The lab's NAS (RADIUS client), like a switch or VPN gateway. It holds its
+  # own copy of the shared secret in the nasdata volume; send a request with
+  # `docker compose exec nas nas-auth <user>`. Its IP is fixed because the
+  # server identifies clients by source address (radius/clients.conf).
+  nas:
+    build: ./nas
+    image: identity-lab/nas:local
+    user: "${LAB_UID}:0"
+    init: true
+    depends_on:
+      radius:
+        condition: service_healthy
+    environment:
+      # Only read on first boot, to seed /var/lib/nas/secret.
+      RADIUS_SECRET: ${RADIUS_SECRET:?run scripts/setup.sh}
+    volumes:
+      - nasdata:/var/lib/nas
+    networks:
+      radius:
+        ipv4_address: 172.30.181.10
+    healthcheck:
+      test: ["CMD", "test", "-s", "/var/lib/nas/secret"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -194,3 +255,15 @@ services:
 volumes:
   pgdata:
   ldapdata:
+  nasdata:
+
+networks:
+  default:
+  # RADIUS between the NAS and the server. Internal: no route off the host.
+  # The subnet is fixed so clients.conf can name the NAS by IP; change both
+  # if it clashes with a network you already have.
+  radius:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.181.0/24

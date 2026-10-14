@@ -1,0 +1,52 @@
+# The lab's only virtual server: PAP Access-Requests checked against LDAP.
+server default {
+	listen {
+		type = auth
+		ipaddr = *
+		port = 1812
+	}
+	listen {
+		type = acct
+		ipaddr = *
+		port = 1813
+	}
+
+	authorize {
+		# Loopback is only for the health check (Status-Server, below).
+		if (&Client-Shortname == "localhost") {
+			reject
+		}
+
+		# Find the user. If found and the NAS sent a password, check it by
+		# binding to the directory as that user.
+		ldap
+		if ((ok || updated) && &User-Password) {
+			update control {
+				&Auth-Type := ldap
+			}
+		}
+
+		# Status-Server (the health check) runs only this section.
+		Autz-Type Status-Server {
+			ok
+		}
+	}
+
+	authenticate {
+		Auth-Type LDAP {
+			ldap
+		}
+	}
+
+	preacct {
+	}
+
+	accounting {
+		ok
+	}
+
+	post-auth {
+		Post-Auth-Type REJECT {
+		}
+	}
+}

@@ -1,0 +1,8 @@
+# rlm_always: modules that just return a fixed result, used by name in
+# sites/default ("reject", "ok").
+always reject {
+	rcode = reject
+}
+always ok {
+	rcode = ok
+}

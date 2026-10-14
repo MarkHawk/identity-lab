@@ -1,0 +1,43 @@
+# rlm_ldap: find users in the lab directory and check their passwords by
+# binding as them. The search account (radius-svc) can't read passwords.
+ldap {
+	server = 'ldaps://ldap'
+	port = 1636
+
+	identity = 'cn=radius-svc,ou=services,dc=idlab,dc=example'
+	password = $ENV{RADIUS_LDAP_BIND_PASSWORD}
+
+	base_dn = 'dc=idlab,dc=example'
+
+	user {
+		base_dn = "ou=people,${..base_dn}"
+		filter = "(uid=%{%{Stripped-User-Name}:-%{User-Name}})"
+		scope = 'one'
+	}
+
+	options {
+		chase_referrals = no
+		res_timeout = 5
+		srv_timelimit = 5
+		net_timeout = 3
+	}
+
+	tls {
+		# LDAPS verified against the lab CA, and the name "ldap" must match.
+		ca_file = /etc/idlab/ca.crt
+		require_cert = 'demand'
+	}
+
+	pool {
+		# Connect on first use, so a slow directory can't stop the server
+		# from starting.
+		start = 0
+		min = 0
+		max = 8
+		spare = 2
+		uses = 0
+		retry_delay = 5
+		lifetime = 0
+		idle_timeout = 60
+	}
+}
