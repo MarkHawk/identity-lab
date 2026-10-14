@@ -34,7 +34,7 @@ load_env() {
   source "$ENV_FILE"
   set +a
   local v
-  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT KC_ADMIN_USER KC_ADMIN_PASSWORD LDAP_BIND_PASSWORD; do
+  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT KC_ADMIN_USER KC_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET; do
     [[ -n "${!v:-}" ]] || die "$v is missing from .env -- re-run scripts/setup.sh"
   done
 }

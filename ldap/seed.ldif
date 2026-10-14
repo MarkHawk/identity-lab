@@ -28,6 +28,15 @@ cn: keycloak-svc
 description: Keycloak user federation (read only)
 userPassword: ${LDAP_BIND_PASSWORD_HASH}
 
+# FreeRADIUS binds as this account to search for users (RADIUS_LDAP_BIND_PASSWORD).
+# It checks each user's password by binding as that user, never by reading it.
+dn: cn=radius-svc,ou=services,dc=idlab,dc=example
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: radius-svc
+description: FreeRADIUS user search (read only)
+userPassword: ${RADIUS_LDAP_BIND_PASSWORD_HASH}
+
 dn: uid=dave,ou=people,dc=idlab,dc=example
 objectClass: inetOrgPerson
 uid: dave

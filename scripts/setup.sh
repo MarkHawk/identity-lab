@@ -127,6 +127,9 @@ SAML_SP_SECRET_KEY=$(keep SAML_SP_SECRET_KEY "$(rand 48)")
 OIDC_RP_SECRET_KEY=$(keep OIDC_RP_SECRET_KEY "$(rand 48)")
 LDAP_ADMIN_PASSWORD=$(keep LDAP_ADMIN_PASSWORD "$(rand 32)")
 LDAP_BIND_PASSWORD=$(keep LDAP_BIND_PASSWORD "$(rand 32)")
+RADIUS_LDAP_BIND_PASSWORD=$(keep RADIUS_LDAP_BIND_PASSWORD "$(rand 32)")
+# Shared secret between the FreeRADIUS server and the lab's NAS (the client).
+RADIUS_SECRET=$(keep RADIUS_SECRET "$(rand 32)")
 
 # Public certificate (not secret): Keycloak uses it to verify signed AuthnRequests.
 SP_SIGNING_CERT=$(cert_b64 "$CERTS_DIR/sp-signing.crt")
@@ -134,11 +137,11 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
   warn "demo user passwords, OIDC client secret and LDAP passwords are only applied when the"
-  warn "databases are created."
-  warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak and LDAP volumes)"
+  warn "databases are created, and the RADIUS secret when the NAS volume is created."
+  warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak, LDAP and NAS volumes)"
   exit 0
 fi
 ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)"

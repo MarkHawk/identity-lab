@@ -35,6 +35,7 @@ services:
     environment:
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:?run scripts/setup.sh}
       LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:?run scripts/setup.sh}
+      RADIUS_LDAP_BIND_PASSWORD: ${RADIUS_LDAP_BIND_PASSWORD:?run scripts/setup.sh}
       DEMO_PASSWORD: ${DEMO_PASSWORD}
     volumes:
       - ldapdata:/var/lib/idlab-ldap

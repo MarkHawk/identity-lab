@@ -44,6 +44,7 @@ olcDbMaxSize: 67108864
 olcDbIndex: objectClass eq
 olcDbIndex: uid,cn,mail,member eq
 # Passwords: usable for binding, never readable. Everything else: readable
-# by the Keycloak service account and by each user for their own entry.
+# by the Keycloak and FreeRADIUS service accounts and by each user for their
+# own entry.
 olcAccess: {0}to attrs=userPassword by self =xw by anonymous auth by * none
-olcAccess: {1}to * by dn.exact="cn=keycloak-svc,ou=services,dc=idlab,dc=example" read by self read by * none
+olcAccess: {1}to * by dn.exact="cn=keycloak-svc,ou=services,dc=idlab,dc=example" read by dn.exact="cn=radius-svc,ou=services,dc=idlab,dc=example" read by self read by * none
