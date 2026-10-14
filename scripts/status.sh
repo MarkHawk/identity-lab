@@ -23,7 +23,7 @@ for name in $(scenario_names); do
   case "$state" in
     healthy) colour="$C_GRN" ;; broken) colour="$C_RED" ;; *) colour="$C_YLW" ;;
   esac
-  printf '  %-24s %s%-8s%s %s\n' "$name" "$colour" "$state" "$C_OFF" "$detail"
+  printf '  %-30s %s%-8s%s %s\n' "$name" "$colour" "$state" "$C_OFF" "$detail"
 done
 echo
 echo "  Keycloak  https://$LAB_HOST:$KC_PORT/admin/   SAML SP  https://$LAB_HOST:$SAML_SP_PORT/   OIDC RP  https://$LAB_HOST:$OIDC_RP_PORT/"
