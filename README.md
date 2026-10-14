@@ -146,7 +146,7 @@ scripts/fix.sh radius-shared-secret-mismatch
 
 ## Run it in Codespaces
 
-No local setup: GitHub Codespaces runs the whole lab in a cloud container you drive from your browser.
+No local setup: GitHub Codespaces runs the whole lab in a cloud container you drive from your browser. New to Codespaces? Follow the [step-by-step guide](docs/codespaces.md).
 
 1. Click **Open in GitHub Codespaces** at the top of this page, then **Create codespace**. It picks a **2-core, 8 GB** machine, the smallest size: the whole lab uses about 1 GB once running and peaked at 1.7 GB while building and testing.
 2. Wait for the terminal to show `setup complete for https://localhost:8180`. Creating the codespace takes a few minutes; `scripts/setup.sh` itself takes a few seconds. Secrets and certificates are generated inside your codespace and never committed.
@@ -167,15 +167,9 @@ No local setup: GitHub Codespaces runs the whole lab in a cloud container you dr
 
    Any scenario from the [table](#scenarios) works the same way, and `scripts/test.sh` checks each one's browser error and log evidence for you.
 
-**Browser logins aren't supported in the codespace's own forwarded URLs.** The Ports tab lists 8180 (Keycloak), 8181 (SAML SP) and 8182 (OIDC RP), but Codespaces gives each port its own hostname, `https://<codespace>-8181.app.github.dev` with no port number. The lab's issuer, SAML entity IDs and redirect URIs are all `https://LAB_HOST:<port>` (in a codespace, `https://localhost:8181` and so on), so a login started there is sent back to `localhost` and fails. Making the lab follow per-port hostnames would mean a different URL scheme from the one you'd see locally and in CI, so it doesn't. Use `scripts/test.sh` instead: it runs real Chromium logins inside the codespace and saves screenshots and page HTML to `test-results/`.
+**Browser logins aren't supported in the codespace's own forwarded URLs.** The Ports tab lists 8180 (Keycloak), 8181 (SAML SP) and 8182 (OIDC RP), but Codespaces gives each port its own hostname, `https://<codespace>-8181.app.github.dev` with no port number. The lab's issuer, SAML entity IDs and redirect URIs are all `https://LAB_HOST:<port>` (in a codespace, `https://localhost:8181` and so on), so a login started there is sent back to `localhost` and fails. Making the lab follow per-port hostnames would mean a different URL scheme from the one you'd see locally and in CI, so it doesn't. Use desktop VS Code (below) to log in yourself, or `scripts/test.sh`: it runs real Chromium logins inside the codespace and saves screenshots and page HTML to `test-results/`.
 
-**Optional, not yet tested: clicking through the apps yourself.** If you have the [GitHub CLI](https://cli.github.com/) on your own computer, you can forward the three ports to your own `localhost` on the same numbers, so every URL matches:
-
-```bash
-gh codespace ports forward 8180:8180 8181:8181 8182:8182   # pick the codespace when asked; leave it running
-```
-
-Then open `https://localhost:8181/` and the other URLs from [Open the apps](#open-the-apps-https-only) with `localhost` in place of `idlab.home`. Opening the codespace in desktop VS Code forwards ports to your `localhost` in the same way.
+**Clicking through the apps yourself: open the codespace in desktop VS Code.** With the GitHub Codespaces extension installed, use [github.com/codespaces](https://github.com/codespaces) > **...** > **Open in** > **Visual Studio Code**. VS Code forwards ports 8180 to 8182 to your own `localhost` on the same numbers, so `https://localhost:8181/` and the other [lab URLs](#open-the-apps-https-only), with `localhost` in place of `idlab.home`, work in your own browser. [docs/codespaces.md](docs/codespaces.md) is a step-by-step guide for first-time Codespaces users.
 
 **Codespaces uses your own GitHub allowance.** Personal accounts get a free monthly quota of core hours and storage; a 2-core machine uses two core hours for every hour it runs. Stop the codespace when you're done (it also stops itself when idle), and delete it from [github.com/codespaces](https://github.com/codespaces) to free its storage. See GitHub's [Codespaces billing documentation](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-codespaces/about-billing-for-github-codespaces) for the current quotas.
 
@@ -312,6 +306,7 @@ scenarios/<name>.sh          detect / break / fix for each scenario
 scripts/                     setup, pin-idp-cert, break, fix, status, test, lib
 tests/                       Playwright image and e2e.py
 runbooks/                    one support runbook per scenario
+docs/codespaces.md           step-by-step guide to running the lab in GitHub Codespaces
 ```
 
 ## Design decisions
