@@ -1,6 +1,6 @@
 # identity-lab
 
-A self-contained SSO lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, and two sample apps (one SAML, one OIDC) run in Docker Compose. One-command scenarios reproduce real single sign-on failures, and each scenario has a support-style runbook for diagnosing and fixing it.
+A self-contained identity lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, two sample apps (one SAML, one OIDC), and a FreeRADIUS server with a NAS that authenticates the same directory users, all run in Docker Compose. One-command scenarios reproduce real single sign-on and network login failures, and each scenario has a support-style runbook for diagnosing and fixing it.
 
 ## The problem this solves
 
@@ -8,10 +8,10 @@ When enterprise SSO breaks, the support engineer usually sees only the customer'
 
 This lab makes those failures **reproducible and safe to practise on**:
 
-- **Break it:** `scripts/break.sh <scenario>` puts the lab into a realistic failure, such as an expired IdP certificate, a skewed clock, a mismatched redirect URI or a failing LDAP bind.
-- **See it as the customer does:** the apps show the exact error a user would see. Their debug pages show the decoded SAML assertion or ID token.
+- **Break it:** `scripts/break.sh <scenario>` puts the lab into a realistic failure, such as an expired IdP certificate, a skewed clock, a mismatched redirect URI, a failing LDAP bind or a RADIUS shared secret mismatch.
+- **See it as the customer does:** the apps show the exact error a user would see. Their debug pages show the decoded SAML assertion or ID token. The NAS shows what a switch or VPN gateway would: Access-Accept, Access-Reject or no reply.
 - **Diagnose it as support would:** every scenario has a runbook covering the symptom, where to look, diagnosis, fix, prevention, and the questions to ask the customer.
-- **Prove it:** `scripts/test.sh` runs a real headless-browser login against each app, breaks every scenario, asserts the user-facing error and the log evidence, fixes it, and asserts recovery. CI runs the same script.
+- **Prove it:** `scripts/test.sh` runs a real headless-browser login against each app and a RADIUS login from the NAS, breaks every scenario, asserts the user-facing error and the log evidence, fixes it, and asserts recovery. CI runs the same script.
 
 ## Architecture
 
@@ -27,6 +27,10 @@ flowchart LR
         sp["SAML SP<br/>Flask + python3-saml<br/>:8181 HTTPS<br/>libfaketime"]
         rp["OIDC RP<br/>Flask + Authlib<br/>:8182 HTTPS"]
         pin[/".state/saml-sp/<br/>pinned IdP cert<br/>faketime offset"/]
+        subgraph radnet["internal network radius · 172.30.181.0/24"]
+            nas["NAS (RADIUS client)<br/>radclient · 172.30.181.10<br/>own copy of the shared secret"]
+        end
+        radius["FreeRADIUS 3.2<br/>UDP 1812/1813<br/>internal only"]
     end
 
     user -- "AuthnRequest / login form" --> kc
@@ -36,13 +40,17 @@ flowchart LR
     kc --- pg
     kc -- "LDAPS: bind as keycloak-svc,<br/>search users and groups,<br/>bind as the user" --> ldap
     pin -. "read on every login" .-> sp
+    nas -- "Access-Request (PAP)<br/>+ Message-Authenticator,<br/>shared secret" --> radius
+    radius -- "LDAPS: bind as radius-svc,<br/>search the user,<br/>bind as the user" --> ldap
     scripts["scripts/break.sh · fix.sh · status.sh"] -- "Admin REST API" --> kc
     scripts -- "pin cert, set clock offset" --> pin
+    scripts -- "set the NAS's secret<br/>(docker compose exec)" --> nas
 ```
 
 - **Front channel:** browsers reach everything at `https://$LAB_HOST:818x`. Keycloak issues tokens with that issuer.
 - **Back channel:** the OIDC RP talks to Keycloak directly over the compose network (`KC_HOSTNAME_BACKCHANNEL_DYNAMIC`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
 - **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
+- **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin and frank can log in over RADIUS as well as through Keycloak. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
 - **SP trust:** the SAML SP doesn't fetch IdP metadata. Like most SaaS service providers, it trusts the IdP certificate pinned at onboarding (`scripts/pin-idp-cert.sh`).
 
 ## Quick start
@@ -54,12 +62,13 @@ git clone <this repo> identity-lab && cd identity-lab
 
 scripts/setup.sh                 # CA, certificates and random secrets -> .env and certs/ (prints no secrets)
                                  # set LAB_HOST=localhost first if you have no DNS name for this machine
-docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + both apps (first build takes a few minutes)
+docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + FreeRADIUS + NAS + both apps (first build takes a few minutes)
 scripts/pin-idp-cert.sh          # "onboard" the SAML SP: trust the IdP's current signing certificate
 scripts/status.sh                # service health and the live state of every scenario
+docker compose exec nas nas-auth dave   # a RADIUS login from the NAS; enter the demo password -> "nas: Access-Accept"
 ```
 
-**Upgrading a lab from before the LDAP directory was added?** Run `scripts/setup.sh` (it adds the LDAP secrets and certificate to your existing `.env` and `certs/`), then `scripts/test.sh --fresh`. The LDAP federation is created at realm import, which only happens when the Keycloak database is new. `--fresh` deletes the Keycloak and LDAP volumes.
+**Upgrading a lab from before the LDAP directory or RADIUS was added?** Run `scripts/setup.sh` (it adds the new secrets and certificate to your existing `.env` and `certs/`), then `scripts/test.sh --fresh`. The LDAP federation is created at realm import, which only happens when the Keycloak database is new, and the directory's `radius-svc` account is created when the directory is first seeded. `--fresh` deletes the Keycloak, LDAP and NAS volumes.
 
 ### Open the apps: HTTPS only
 
@@ -103,11 +112,13 @@ If you imported it earlier, remove it:
 | `alice` | alice@idlab.example | `lab-user`, `lab-admin` | The default user: the walkthrough and the automated tests sign in as alice. She has every lab role, so the `role` attribute and `realm_roles` claim are fully populated. |
 | `bob` | bob@idlab.example | `lab-user` | An ordinary user. Compare his debug pages with alice's to see how a role difference shows up in the SAML assertion and the ID token. |
 | `carol` | carol@idlab.example | *none* | Signed in but not authorised. Logging in succeeds because authentication only proves who she is. The sample apps don't enforce roles, so carol gets in; a real app would check `role` / `realm_roles` and refuse her. |
-| `dave` | dave@idlab.example | `lab-user` (LDAP group) | **From LDAP.** The automated tests use dave for the directory logins and the `ldap-bind-failure` scenario. |
+| `dave` | dave@idlab.example | `lab-user` (LDAP group) | **From LDAP.** The automated tests use dave for the directory logins, the RADIUS logins, and the `ldap-bind-failure` and `radius-shared-secret-mismatch` scenarios. |
 | `erin` | erin@idlab.example | `lab-user`, `lab-admin` (LDAP groups) | From LDAP, with every lab role, like alice. |
 | `frank` | frank@idlab.example | *none* | From LDAP, in no group, like carol. |
 
 alice, bob and carol live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
+
+Over RADIUS, only the directory users can log in: FreeRADIUS reads the directory, not Keycloak, so alice, bob and carol get Access-Reject from the NAS.
 
 Every user also carries Keycloak's default roles (`default-roles-idlab`, `offline_access`, `uma_authorization`), and these show up in the claims too. In SAML, the `role` attribute also includes the built-in `account` client's roles (`view-profile`, `manage-account`, …). The OIDC `realm_roles` claim has realm roles only.
 
@@ -125,6 +136,10 @@ Don't paste it into tickets, chats or screenshots. If it does leak, [rotate the 
 scripts/break.sh clock-skew      # now try the SAML login
 scripts/status.sh                # clock-skew  broken  saml-sp clock is +600s vs host ...
 scripts/fix.sh clock-skew        # or: scripts/fix.sh --all
+
+scripts/break.sh radius-shared-secret-mismatch
+docker compose exec nas nas-auth dave   # nas: no reply from radius:1812 after 3 attempts (6s): RADIUS server not responding
+scripts/fix.sh radius-shared-secret-mismatch
 ```
 
 ## Try it in 10 minutes
@@ -184,27 +199,29 @@ Then try the other scenarios the same way, using `scripts/break.sh` with no argu
 | 2 | `clock-skew` | SAML | The SP's clock runs 10 minutes fast (libfaketime in the SP container only) | `Could not validate timestamp: expired. Check system clock.` | [02-clock-skew](runbooks/02-clock-skew.md) |
 | 3 | `redirect-uri-mismatch` | OIDC | The client's registered redirect URI no longer matches what the app sends | Keycloak: `We are sorry... Invalid parameter: redirect_uri` | [03-redirect-uri-mismatch](runbooks/03-redirect-uri-mismatch.md) |
 | 4 | `ldap-bind-failure` | Both (tested on OIDC) | Keycloak's stored LDAP bind password no longer matches the service account, so the directory returns result 49, invalid credentials. Only LDAP users are affected; alice still logs in. | Keycloak (as dave): `Unexpected error when handling authentication request to identity provider.` A directory user who has never logged in gets `Invalid username or password.` | [04-ldap-bind-failure](runbooks/04-ldap-bind-failure.md) |
+| 5 | `radius-shared-secret-mismatch` | RADIUS (NAS) | The NAS's copy of the RADIUS shared secret no longer matches the server's client entry, so the server can't verify its requests and drops them. Web SSO for the same LDAP users still works. | NAS: `nas: no reply from radius:1812 after 3 attempts (6s): RADIUS server not responding`. Server log: `invalid Message-Authenticator!  (Shared secret is incorrect.)` | [05-radius-shared-secret-mismatch](runbooks/05-radius-shared-secret-mismatch.md) |
 
 Every scenario is:
 
 - **reproducible:** driven by scripts, with no manual clicking
 - **reversible:** `fix.sh` restores a working state
-- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store), so running either twice is a no-op
+- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store, the NAS's secret), so running either twice is a no-op
 
 ## Tests
 
 ```bash
 scripts/test.sh            # build, start or reuse the lab, run every check
-scripts/test.sh --fresh    # also delete the Keycloak database volume first, so the realm is re-imported
+scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, directory, NAS secret), so everything is re-created
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 50 checks cover:
+The 64 checks cover:
 
 - container health, the OIDC issuer, both apps over TLS verified against the lab CA, and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - a real Chromium login to each app, as a local user (alice) and as an LDAP user (dave)
-- for every scenario: break (twice), detected as broken, the exact error in the browser, the matching log line, fix (twice), detected as healthy, and a successful login again
-- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't
+- a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
+- for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
+- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't; for `radius-shared-secret-mismatch`, that dave still logs in to the OIDC app while RADIUS is broken
 
 Screenshots, page HTML and a full log go to `test-results/`. [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
 
@@ -215,9 +232,9 @@ scripts/setup.sh --rotate     # new random value for every secret in .env; certi
 scripts/test.sh --fresh       # recreate the lab with them, then prove it still works
 ```
 
-`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD` and the two apps' session keys. It prints none of them.
+`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET` and the two apps' session keys. It prints none of them.
 
-The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secret and the directory's passwords only receive their values when the databases are first created. `--fresh` deletes the Keycloak and LDAP volumes, re-imports the realm and re-seeds the directory. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
+The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secret and the directory's passwords only receive their values when the databases are first created, and the NAS stores its copy of the RADIUS secret when its volume is first created. `--fresh` deletes the Keycloak, LDAP and NAS volumes, re-imports the realm, re-seeds the directory and the NAS. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
 
 When you'd do it:
 
@@ -246,9 +263,11 @@ curl -sS --cacert certs/ca.crt https://localhost:8181/healthz    # {"status":"ok
 ## Repository layout
 
 ```
-compose.yaml                 Keycloak, Postgres, OpenLDAP, saml-sp, oidc-rp, tests (profile "test")
+compose.yaml                 Keycloak, Postgres, OpenLDAP, FreeRADIUS, NAS, saml-sp, oidc-rp, tests (profile "test")
 keycloak/idlab-realm.json    realm, clients, demo users and LDAP federation; secrets injected via placeholders
 ldap/                        OpenLDAP image: cn=config and directory seed LDIF, first-boot entrypoint
+radius/                      FreeRADIUS image: minimal config, clients.conf, LDAP module, the one virtual server
+nas/                         NAS image: first-boot secret seeding and nas-auth (one Access-Request)
 apps/saml-sp/                Flask + python3-saml service provider
 apps/oidc-rp/                Flask + Authlib relying party
 scenarios/<name>.sh          detect / break / fix for each scenario
@@ -277,6 +296,10 @@ runbooks/                    one support runbook per scenario
 - **OpenLDAP built from Debian, not a ready-made image.** The popular OpenLDAP images are either stuck on OpenLDAP 2.4 and unmaintained, or frozen "legacy" builds that no longer get updates. `ldap/Dockerfile` installs Debian's pinned `slapd` 2.6 instead. On first boot, `slapadd` loads `cn=config` and the seed LDIF, with passwords hashed from `.env` (read on stdin, never in argv). After that, the data lives in a volume, just like the realm import.
 - **LDAPS, and a dedicated bind account.** Keycloak connects with `ldaps://ldap:1636` and verifies the directory's certificate against the lab CA (`KC_TRUSTSTORE_PATHS`). It binds as `cn=keycloak-svc`, which may read entries but never `userPassword`, and not as the directory administrator. Connection pooling is off so a changed bind credential takes effect on the next request.
 - **The LDAP scenario asks Keycloak, not a file.** Keycloak never returns the stored bind password, so `status.sh` uses Keycloak's own connection test (the console's *Test authentication*). Result 49 counts as broken. Anything else, such as the directory being down, is reported as `unknown` rather than mistaken for this scenario.
+- **FreeRADIUS from the project's own image, with its stock configuration removed.** `freeradius/freeradius-server:3.2.10` is maintained by the FreeRADIUS project. `radius/Dockerfile` deletes everything it ships except the dictionaries, so nothing such as the example `testing123` client is live, and copies in a configuration small enough to read in one sitting. Secrets reach it as `$ENV{...}` references, expanded at start from `.env`. The NAS image builds on the same pinned image, for its `radclient`.
+- **Message-Authenticator is required** from every RADIUS client (BlastRADIUS, CVE-2024-3596), as in current FreeRADIUS defaults. Besides being the secure setting, it makes a wrong shared secret show up as `Shared secret is incorrect` instead of looking like a wrong password; runbook 05 explains why.
+- **The RADIUS scenario changes the NAS, not the server.** The NAS keeps its own copy of the shared secret in a volume, as a real NAS keeps it in its configuration. `break.sh` and `fix.sh` write that file through `docker compose exec` on stdin, and `status.sh` compares it with `.env` using `cmp`, so the secret is never on a command line or printed. `nas-auth` reads the user's password on stdin too. It uses `radclient` rather than `radtest`, which takes both the password and the secret as arguments.
+- **A fixed subnet for the RADIUS network.** RADIUS servers identify clients by source IP, so the NAS has a fixed address on an internal network (`172.30.181.0/24`, no route off the host). If that subnet clashes with one you already use, change it in `compose.yaml` and `radius/clients.conf` together.
 - **python3-saml doesn't check certificate dates.** The SP enforces `notBefore`/`notAfter` on its pinned IdP certificates itself, as many commercial SPs do. The runbook says so.
 - **Clock skew without touching the host.** libfaketime is preloaded only in the SP container. It reads its offset from a file on every call, so a scenario can shift the clock without a restart. `FAKETIME_DONT_FAKE_MONOTONIC` is deliberately unset: with libfaketime 0.9.10 it makes Python 3.13's `time.sleep()` fail with `EINVAL`, which crashed gunicorn.
 - **lxml and xmlsec are compiled from source** against Debian's libxml2, avoiding the well-known `lxml & xmlsec libxml2 library version mismatch` failure between their binary wheels.
@@ -287,14 +310,16 @@ runbooks/                    one support runbook per scenario
   - GitHub Actions to commit SHAs
 
   Each version was at least two weeks old when chosen.
-- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and its health endpoint is on the unpublished management port. The directory publishes no host port at all.
+- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and its health endpoint is on the unpublished management port. The directory and the RADIUS server publish no host port at all.
 
 ## Known limitations
 
 - **Apt pins can break builds.** Debian removes superseded security updates from its mirrors, so a pinned apt version (for example `libxml2 2.9.14+dfsg-1.3~deb12u6` or `slapd 2.6.10+dfsg-1`) will eventually fail to install. The fix is to bump the pin, or to build from `snapshot.debian.org`.
 - **Single-worker apps.** Each app runs one gunicorn worker with an in-memory store for decoded logins. That's fine for a lab, not for production.
 - **Tested platform.** The lab has only been tested on x86_64 Linux.
-- **Not production configuration.** Demo users share one password, the directory runs as a single server with no replication, Keycloak's bootstrap admin is used for the scenario scripts, and the SAML SP doesn't do Single Logout.
+- **FreeRADIUS's TLS warning.** At start, FreeRADIUS warns that `libldap is using GnuTLS, while FreeRADIUS is using OpenSSL`. That's how Ubuntu builds the image's libldap. LDAPS to the directory works and is tested, but the warning is real for production; there, use a libldap built against OpenSSL.
+- **RADIUS is PAP only.** The NAS sends PAP over the internal network. There's no EAP (802.1X), RadSec or accounting scenario.
+- **Not production configuration.** Demo users share one password, the directory and the RADIUS server each run as a single server with no replication or failover, Keycloak's bootstrap admin is used for the scenario scripts, and the SAML SP doesn't do Single Logout.
 
 ## How this was built
 
