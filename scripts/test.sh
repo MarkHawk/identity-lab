@@ -2,14 +2,17 @@
 # End-to-end test of the lab.
 #
 #   scripts/test.sh            build, start (or reuse) the lab, run all checks
-#   scripts/test.sh --fresh    first remove the lab's containers AND its Keycloak
-#                              database volume, so the realm is re-imported
+#   scripts/test.sh --fresh    first remove the lab's containers AND its volumes
+#                              (Keycloak database, directory, NAS secret), so
+#                              everything is re-created from the repo and .env
 #   scripts/test.sh --down     stop the lab afterwards (keeps the volume)
 #
 # Checks: service health and an LDAP bind as Keycloak's service account; a
 # scripted browser login to each app as a local user (alice) and an LDAP user
-# (dave); then for every scenario: break (twice), detected as broken, the
-# expected error in the browser, the expected log line, a user outside the
+# (dave); a RADIUS Access-Request from the NAS for dave (accepted) and with a
+# wrong password (rejected); then for every scenario: break (twice), detected
+# as broken, the expected error in the browser (or in the NAS's output, for
+# RADIUS scenarios), the expected log line, a user outside the
 # blast radius still logging in (where a scenario names one), fix (twice),
 # detected healthy, and a successful login again. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
@@ -58,6 +61,23 @@ expect_state() { [[ "$("$LAB_ROOT/scripts/status.sh" "$1")" == "$2" ]] || { echo
 browser()      { compose run --rm tests "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_as ...
 browser_as()   { local user="$1"; shift; compose run --rm -e E2E_USER="$user" tests "$@"; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_login ...
+radius_login() { # <user> <password> <text nas-auth must print>; the password goes in on stdin
+  local out
+  out="$(printf '%s' "$2" | compose exec -T nas nas-auth "$1" 2>&1)" || true
+  echo "$out"
+  grep -qF -- "$3" <<<"$out" || { echo "expected: $3"; return 1; }
+}
+# login_as <user> <saml|oidc|radius> --expect ok | --expect-error <text>
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" login_as ...
+login_as()     {
+  local user="$1" app="$2"; shift 2
+  [[ "$app" == radius ]] || { browser_as "$user" "$app" "$@"; return; }
+  case "$1" in
+    --expect)       radius_login "$user" "$DEMO_PASSWORD" "nas: Access-Accept" ;;
+    --expect-error) radius_login "$user" "$DEMO_PASSWORD" "$2" ;;
+  esac
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" ldap_bind_ok
 ldap_bind_ok() { # the by-hand test from runbook 04; the password goes in on stdin
   local out
@@ -113,7 +133,7 @@ compose up -d --wait --wait-timeout 300 >>"$LOG" 2>&1 \
 
 # --- Health -----------------------------------------------------------------------
 log "health"
-for svc in postgres ldap keycloak saml-sp oidc-rp; do
+for svc in postgres ldap keycloak saml-sp oidc-rp radius nas; do
   check "health: $svc container healthy" healthy "$svc"
 done
 check "health: Keycloak issuer is https://$LAB_HOST:$KC_PORT/realms/$REALM" issuer_ok
@@ -127,6 +147,8 @@ check "login: SAML SP (alice)" browser saml --expect ok
 check "login: OIDC RP (alice)" browser oidc --expect ok
 check "login: SAML SP (dave, from LDAP)" browser_as dave saml --expect ok
 check "login: OIDC RP (dave, from LDAP)" browser_as dave oidc --expect ok
+check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave "$DEMO_PASSWORD" "nas: Access-Accept"
+check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave "not-the-demo-password" "nas: Access-Reject"
 
 # --- Scenarios --------------------------------------------------------------------
 for name in $(scenario_names); do
@@ -137,16 +159,16 @@ for name in $(scenario_names); do
   check "$name: detected as broken"            expect_state "$name" broken
   check "$name: break again is a no-op"        "$LAB_ROOT/scripts/break.sh" "$name"
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  check "$name: $user sees \"$SCENARIO_EXPECT\"" browser_as "$user" "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
+  check "$name: $user sees \"$SCENARIO_EXPECT\"" login_as "$user" "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
   check "$name: log shows ${SCENARIO_LOG#* }"  log_has "$since" "${SCENARIO_LOG%% *}" "${SCENARIO_LOG#* }"
   if [[ -n "${SCENARIO_UNAFFECTED:-}" ]]; then
     read -r ua_app ua_user <<<"$SCENARIO_UNAFFECTED"
-    check "$name: $ua_user still logs in to $ua_app while broken" browser_as "$ua_user" "$ua_app" --expect ok
+    check "$name: $ua_user still logs in to $ua_app while broken" login_as "$ua_user" "$ua_app" --expect ok
   fi
   check "$name: fix"                           "$LAB_ROOT/scripts/fix.sh" "$name"
   check "$name: detected as healthy"           expect_state "$name" healthy
   check "$name: fix again is a no-op"          "$LAB_ROOT/scripts/fix.sh" "$name"
-  check "$name: login works again ($user)"     browser_as "$user" "$SCENARIO_APP" --expect ok
+  check "$name: login works again ($user)"     login_as "$user" "$SCENARIO_APP" --expect ok
 done
 
 # --- Summary ----------------------------------------------------------------------

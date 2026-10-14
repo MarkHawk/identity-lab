@@ -129,7 +129,8 @@ REALM=idlab
 # Each scenarios/<name>.sh defines:
 #   SCENARIO_SUMMARY   one line for status output
 #   SCENARIO_RUNBOOK   path of the runbook
-#   SCENARIO_APP       saml|oidc  -- which app's login shows the failure
+#   SCENARIO_APP       saml|oidc|radius  -- which login shows the failure (radius:
+#                      an Access-Request from the NAS, docker compose exec nas nas-auth)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
@@ -162,6 +163,19 @@ app_title() { case "$1" in saml) echo "SAML" ;; oidc) echo "OIDC" ;; esac; }
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {
   local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
+  if [[ "$SCENARIO_APP" == radius ]]; then
+    cat <<TXT
+
+    Try it:
+      1. Send a login from the NAS:  docker compose exec nas nas-auth $u
+         and enter the demo password (DEMO_PASSWORD in .env).
+      2. Expect, $SCENARIO_SEEN_AT:
+           $SCENARIO_EXPECT
+    Runbook: $SCENARIO_RUNBOOK
+    Undo:    scripts/fix.sh $1
+TXT
+    return
+  fi
   cat <<TXT
 
     Try it:
@@ -178,6 +192,15 @@ TXT
 # How to confirm recovery (after fix.sh).
 print_confirm() {
   local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
+  if [[ "$SCENARIO_APP" == radius ]]; then
+    cat <<TXT
+
+    Confirm recovery: docker compose exec nas nas-auth $u, enter the demo
+    password, and expect "nas: Access-Accept". scripts/status.sh should show
+    $1 as healthy.
+TXT
+    return
+  fi
   cat <<TXT
 
     Confirm recovery: in a NEW private window, go to $(app_url "$SCENARIO_APP"),
