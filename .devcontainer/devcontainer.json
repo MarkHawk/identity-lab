@@ -1,0 +1,41 @@
+// GitHub Codespaces / dev container for identity-lab.
+// The lab runs under Docker inside this container (docker-in-docker), so the
+// bind mounts in compose.yaml (./certs, ./.state) resolve here, not on a host.
+// Secrets and certificates are generated on creation by scripts/setup.sh and
+// are gitignored; nothing secret is committed.
+{
+  "name": "identity-lab",
+  // Has bash, openssl, curl, jq and base64, which the scripts require.
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae",
+  "features": {
+    // docker-in-docker 2.17.0: Docker Engine with the compose v2 plugin.
+    "ghcr.io/devcontainers/features/docker-in-docker@sha256:25b9f05705ffba7dbe503230ac76081419306f8c8bc88e0ce78c4ecd99a0c78c": {
+      "dockerDashComposeVersion": "v2"
+    }
+  },
+
+  // The whole stack idles at about 0.8 GB; the smallest machine is plenty.
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  // Forwarded URLs (https://<name>-<port>.app.github.dev) give each port its
+  // own hostname, but the lab's issuer, SAML entity IDs and redirect URIs are
+  // https://LAB_HOST:<port>. So, as in CI, the lab uses localhost, and
+  // browser logins only work when the ports reach the reviewer's own
+  // localhost on the same numbers (see "Run it in Codespaces" in README.md).
+  "containerEnv": {
+    "LAB_HOST": "localhost"
+  },
+  "postCreateCommand": "scripts/setup.sh",
+
+  "forwardPorts": [8180, 8181, 8182],
+  "portsAttributes": {
+    // The services terminate TLS themselves with the lab's own CA.
+    "8180": { "label": "Keycloak (IdP)", "protocol": "https", "onAutoForward": "silent" },
+    "8181": { "label": "SAML SP", "protocol": "https", "onAutoForward": "silent" },
+    "8182": { "label": "OIDC RP", "protocol": "https", "onAutoForward": "silent" }
+  }
+}
