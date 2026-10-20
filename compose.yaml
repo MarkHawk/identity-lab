@@ -1,7 +1,9 @@
 # identity-lab -- Keycloak IdP with an OpenLDAP directory, plus SAML and OIDC sample
 # apps, and a FreeRADIUS server with a NAS that authenticates against the directory.
 # Run scripts/setup.sh first; it generates .env and certs/.
-# Host ports are restricted to 8180-8189. LDAP and RADIUS publish no host port.
+# An nginx reverse proxy publishes Keycloak and a second copy of each app on
+# 8183-8185. Host ports are restricted to 8180-8189. LDAP and RADIUS publish
+# no host port.
 
 name: identity-lab
 
@@ -10,6 +12,9 @@ x-lab-env: &lab-env
   KC_PORT: ${KC_PORT}
   SAML_SP_PORT: ${SAML_SP_PORT}
   OIDC_RP_PORT: ${OIDC_RP_PORT}
+  PROXY_KC_PORT: ${PROXY_KC_PORT:?run scripts/setup.sh}
+  PROXY_SAML_SP_PORT: ${PROXY_SAML_SP_PORT}
+  PROXY_OIDC_RP_PORT: ${PROXY_OIDC_RP_PORT}
 
 services:
   postgres:
@@ -155,6 +160,7 @@ services:
       # Placeholders substituted into keycloak/idlab-realm.json at import.
       DEMO_PASSWORD: ${DEMO_PASSWORD}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_PROXIED_CLIENT_SECRET: ${OIDC_PROXIED_CLIENT_SECRET:?run scripts/setup.sh}
       SP_SIGNING_CERT: ${SP_SIGNING_CERT}
       LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD}
     volumes:
@@ -162,6 +168,9 @@ services:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
       - ./certs/tls.key:/etc/idlab/tls.key:ro
+    networks:
+      - default
+      - proxy
     ports:
       - "${KC_PORT}:8180"
     healthcheck:
@@ -184,7 +193,7 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
-    environment:
+    environment: &saml-sp-env
       <<: *lab-env
       PORT: "8181"
       SAML_SP_SECRET_KEY: ${SAML_SP_SECRET_KEY}
@@ -198,7 +207,7 @@ services:
       FAKETIME_NO_CACHE: "1"
       # Do not set FAKETIME_DONT_FAKE_MONOTONIC: with libfaketime 0.9.10 it
       # makes Python 3.13's time.sleep() fail with EINVAL.
-    volumes:
+    volumes: &saml-sp-volumes
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
       - ./certs/tls.key:/etc/idlab/tls.key:ro
@@ -228,7 +237,7 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
-    environment:
+    environment: &oidc-rp-env
       <<: *lab-env
       PORT: "8182"
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
@@ -242,6 +251,90 @@ services:
     ports:
       - "${OIDC_RP_PORT}:8182"
     healthcheck: *app-healthcheck
+    restart: unless-stopped
+
+  # Second copies of the apps, reachable only through the proxy. Same images
+  # and settings; they know their public URLs as the proxy's ports, and
+  # Keycloak has a client for each (keycloak/idlab-realm.json).
+  saml-sp-proxied:
+    build: ./apps/saml-sp
+    image: identity-lab/saml-sp:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: *saml-sp-env
+      KC_PORT: ${PROXY_KC_PORT}
+      SAML_SP_PORT: ${PROXY_SAML_SP_PORT}
+    volumes: *saml-sp-volumes
+    networks:
+      - proxy
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
+  oidc-rp-proxied:
+    build: ./apps/oidc-rp
+    image: identity-lab/oidc-rp:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: *oidc-rp-env
+      KC_PORT: ${PROXY_KC_PORT}
+      OIDC_RP_PORT: ${PROXY_OIDC_RP_PORT}
+      OIDC_CLIENT_ID: oidc-rp-proxied
+      OIDC_CLIENT_SECRET: ${OIDC_PROXIED_CLIENT_SECRET}
+      # Back channel through the proxy too, so tokens carry the proxy's issuer.
+      OIDC_BACKCHANNEL_BASE: https://proxy:8183
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+    networks:
+      - proxy
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
+  # nginx reverse proxy (proxy/nginx.conf). The settings the proxy-* scenarios
+  # change are in .state/proxy/ (healthy defaults in proxy/defaults/, copied
+  # by setup.sh); scenarios rewrite them and reload nginx. Fixed address,
+  # because Keycloak trusts X-Forwarded-* only from it.
+  proxy:
+    # 1.30.6 was 6 days old when pinned, an exception to the two-week rule:
+    # it fixes five CVEs, including CVE-2026-93479 (a buffer overflow when
+    # evaluating variables, which affects request logging as used here).
+    image: nginx:1.30.6-alpine@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
+    user: "${LAB_UID}:0"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      saml-sp-proxied:
+        condition: service_healthy
+      oidc-rp-proxied:
+        condition: service_healthy
+    environment:
+      NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./.state/proxy:/etc/nginx/idlab:ro
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+    networks:
+      proxy:
+        ipv4_address: 172.30.182.10
+    ports:
+      - "${PROXY_KC_PORT}:8183"
+      - "${PROXY_SAML_SP_PORT}:8184"
+      - "${PROXY_OIDC_RP_PORT}:8185"
+    healthcheck:
+      # nginx itself, over verified TLS; never reaches an upstream.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "--cacert", "/etc/idlab/ca.crt", "https://localhost:8183/nginx-healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
 
   # Headless browser used by scripts/test.sh (docker compose run --rm tests ...).
@@ -274,3 +367,10 @@ networks:
     ipam:
       config:
         - subnet: 172.30.181.0/24
+  # The proxy, Keycloak and the apps behind the proxy. Fixed subnet so the
+  # proxy has a fixed address (KC_PROXY_TRUSTED_ADDRESSES); change both if
+  # it clashes. Not internal: the proxy publishes ports.
+  proxy:
+    ipam:
+      config:
+        - subnet: 172.30.182.0/24

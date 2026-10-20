@@ -53,8 +53,9 @@ if [[ ! -f "$CERTS_DIR/ca.key" || ! -f "$CERTS_DIR/ca.crt" ]]; then
   rm -f "$CERTS_DIR/tls.crt" "$CERTS_DIR/sp-signing.crt" "$CERTS_DIR/ldap.crt"   # force reissue under the new CA
 fi
 
-# --- TLS certificate shared by all three services ---------------------------
-SAN="DNS:$LAB_HOST,DNS:keycloak,DNS:saml-sp,DNS:oidc-rp,IP:127.0.0.1"
+# --- TLS certificate shared by the services and the proxy -------------------
+# DNS:proxy: oidc-rp-proxied reaches Keycloak through https://proxy:8183.
+SAN="DNS:$LAB_HOST,DNS:keycloak,DNS:saml-sp,DNS:oidc-rp,DNS:proxy,IP:127.0.0.1"
 [[ "$LAB_HOST" != "localhost" ]] && SAN="$SAN,DNS:localhost"
 needs_tls=0
 if [[ ! -f "$CERTS_DIR/tls.crt" ]]; then
@@ -64,6 +65,9 @@ elif ! openssl x509 -in "$CERTS_DIR/tls.crt" -noout -checkend $((30*86400)) >/de
 elif ! openssl x509 -in "$CERTS_DIR/tls.crt" -noout -ext subjectAltName 2>/dev/null \
        | grep -q "DNS:$LAB_HOST\b"; then
   needs_tls=1
+elif ! openssl x509 -in "$CERTS_DIR/tls.crt" -noout -ext subjectAltName 2>/dev/null \
+       | grep -q "DNS:proxy\b"; then
+  needs_tls=1   # issued before the reverse proxy existed
 fi
 if (( needs_tls )); then
   log "issuing TLS certificate for $LAB_HOST"
@@ -91,6 +95,11 @@ chmod 600 "$CERTS_DIR"/*.key
 # --- Scenario state -----------------------------------------------------------
 # libfaketime offset read by the SAML SP (see scenarios/clock-skew.sh).
 [[ -f "$STATE_DIR/saml-sp/faketime.rc" ]] || echo "+0" >"$STATE_DIR/saml-sp/faketime.rc"
+# The reverse proxy's scenario-owned settings, healthy defaults from proxy/defaults/.
+mkdir -p "$STATE_DIR/proxy"
+for f in "$LAB_ROOT"/proxy/defaults/*.conf; do
+  [[ -f "$STATE_DIR/proxy/${f##*/}" ]] || install -m 644 "$f" "$STATE_DIR/proxy/${f##*/}"
+done
 
 # --- .env ---------------------------------------------------------------------
 # Keep an existing secret, unless rotating.
@@ -117,12 +126,18 @@ LAB_UID=$(id -u)
 KC_PORT=8180
 SAML_SP_PORT=8181
 OIDC_RP_PORT=8182
+# The same three, through the nginx reverse proxy.
+PROXY_KC_PORT=8183
+PROXY_SAML_SP_PORT=8184
+PROXY_OIDC_RP_PORT=8185
 
 KC_ADMIN_USER=admin
 KC_ADMIN_PASSWORD=$(keep KC_ADMIN_PASSWORD "$(rand 32)")
 POSTGRES_PASSWORD=$(keep POSTGRES_PASSWORD "$(rand 32)")
 DEMO_PASSWORD=$(keep DEMO_PASSWORD "$(rand 20)")
 OIDC_CLIENT_SECRET=$(keep OIDC_CLIENT_SECRET "$(rand 40)")
+# Client secret of oidc-rp-proxied, the OIDC RP behind the proxy.
+OIDC_PROXIED_CLIENT_SECRET=$(keep OIDC_PROXIED_CLIENT_SECRET "$(rand 40)")
 SAML_SP_SECRET_KEY=$(keep SAML_SP_SECRET_KEY "$(rand 48)")
 OIDC_RP_SECRET_KEY=$(keep OIDC_RP_SECRET_KEY "$(rand 48)")
 LDAP_ADMIN_PASSWORD=$(keep LDAP_ADMIN_PASSWORD "$(rand 32)")
@@ -137,14 +152,15 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
-  warn "demo user passwords, OIDC client secret and LDAP passwords are only applied when the"
+  warn "demo user passwords, OIDC client secrets and LDAP passwords are only applied when the"
   warn "databases are created, and the RADIUS secret when the NAS volume is created."
   warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak, LDAP and NAS volumes)"
   exit 0
 fi
 ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)"
+echo "    Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP)."
 echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."

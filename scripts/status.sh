@@ -27,3 +27,5 @@ for name in $(scenario_names); do
 done
 echo
 echo "  Keycloak  https://$LAB_HOST:$KC_PORT/admin/   SAML SP  https://$LAB_HOST:$SAML_SP_PORT/   OIDC RP  https://$LAB_HOST:$OIDC_RP_PORT/"
+echo "  Through the reverse proxy:"
+echo "  Keycloak  https://$LAB_HOST:$PROXY_KC_PORT/admin/   SAML SP  https://$LAB_HOST:$PROXY_SAML_SP_PORT/   OIDC RP  https://$LAB_HOST:$PROXY_OIDC_RP_PORT/"
