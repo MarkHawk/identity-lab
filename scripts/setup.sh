@@ -95,6 +95,10 @@ chmod 600 "$CERTS_DIR"/*.key
 # --- Scenario state -----------------------------------------------------------
 # libfaketime offset read by the SAML SP (see scenarios/clock-skew.sh).
 [[ -f "$STATE_DIR/saml-sp/faketime.rc" ]] || echo "+0" >"$STATE_DIR/saml-sp/faketime.rc"
+# Extra seconds the OIDC RP behind the proxy takes to answer its callback
+# (see scenarios/proxy-gateway-timeout.sh).
+mkdir -p "$STATE_DIR/oidc-rp-proxied"
+[[ -f "$STATE_DIR/oidc-rp-proxied/callback-delay" ]] || echo "0" >"$STATE_DIR/oidc-rp-proxied/callback-delay"
 # The reverse proxy's scenario-owned settings, healthy defaults from proxy/defaults/.
 mkdir -p "$STATE_DIR/proxy"
 for f in "$LAB_ROOT"/proxy/defaults/*.conf; do

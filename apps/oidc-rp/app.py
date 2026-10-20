@@ -14,6 +14,7 @@ import os
 import secrets
 import shlex
 import threading
+import time
 from collections import OrderedDict
 
 from authlib.common.errors import AuthlibBaseError
@@ -36,6 +37,11 @@ DISCOVERY_URL = os.environ.get(
 )
 FRONTCHANNEL_BASE = f"https://{LAB_HOST}:{os.environ['KC_PORT']}"
 BACKCHANNEL_ENDPOINTS = ("token_endpoint", "userinfo_endpoint", "jwks_uri")
+# Extra seconds the callback takes before it redeems the code, standing in
+# for a slow token endpoint or database behind the app. Re-read on every
+# request; only the copy behind the reverse proxy has the file
+# (scenarios/proxy-gateway-timeout.sh).
+DELAY_FILE = os.environ.get("OIDC_RP_DELAY_FILE")
 
 app = Flask(__name__)
 app.secret_key = os.environ["OIDC_RP_SECRET_KEY"]
@@ -79,6 +85,16 @@ def kv(**fields):
 # One gunicorn worker, so an in-process store is enough for a lab.
 _logins = OrderedDict()
 _logins_lock = threading.Lock()
+
+
+def callback_delay():
+    if not DELAY_FILE:
+        return 0.0
+    try:
+        with open(DELAY_FILE) as fh:
+            return max(0.0, float(fh.read().strip() or 0))
+    except (OSError, ValueError):
+        return 0.0
 
 
 def store_login(data):
@@ -137,6 +153,7 @@ def login():
 
 @app.get("/auth/callback")
 def callback():
+    started = time.monotonic()
     if "error" in request.args:
         # The IdP redirected back with an error instead of a code.
         raise LoginError(
@@ -144,6 +161,9 @@ def callback():
             request.args.get("error_description") or request.args["error"],
             f"state={request.args.get('state', '')}",
         )
+    delay = callback_delay()
+    if delay:
+        time.sleep(delay)
     try:
         token = oauth.keycloak.authorize_access_token()
     except AuthlibBaseError as exc:
@@ -166,7 +186,10 @@ def callback():
         "received_at": now_utc(),
     })
     session["login_key"] = key
-    log.info(kv(event="oidc_login_ok", sub=claims.get("sub"), email=claims.get("email"), iss=claims.get("iss")))
+    log.info(kv(
+        event="oidc_login_ok", sub=claims.get("sub"), email=claims.get("email"), iss=claims.get("iss"),
+        elapsed=f"{time.monotonic() - started:.2f}s",
+    ))
     return redirect(url_for("debug"))
 
 

@@ -288,10 +288,14 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_PROXIED_CLIENT_SECRET}
       # Back channel through the proxy too, so tokens carry the proxy's issuer.
       OIDC_BACKCHANNEL_BASE: https://proxy:8183
+      # Seconds the callback is slowed by ("0" normally); see
+      # scenarios/proxy-gateway-timeout.sh.
+      OIDC_RP_DELAY_FILE: /var/lib/idlab/state/callback-delay
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
       - ./certs/tls.key:/etc/idlab/tls.key:ro
+      - ./.state/oidc-rp-proxied:/var/lib/idlab/state:ro
     networks:
       - proxy
     healthcheck: *app-healthcheck
