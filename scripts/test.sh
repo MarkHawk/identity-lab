@@ -16,7 +16,8 @@
 # blast radius still logging in (where a scenario names one), fix (twice),
 # detected healthy, and a successful login again. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
-# page HTML, full output) goes to test-results/.
+# page HTML, full output) goes to test-results/; values of secrets from .env
+# are replaced with <redacted> in test.log.
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 require docker curl jq openssl
@@ -37,12 +38,44 @@ LOG="$RESULTS/test.log"
 declare -a NAMES=() OUTCOMES=()
 FAILED=0
 
+# Values of every *PASSWORD, *SECRET and *SECRET_KEY in .env, filled in after
+# load_env. Nothing that reaches test.log or the terminal may contain them.
+declare -a SECRETS=()
+load_secrets() {
+  local v
+  while read -r v; do
+    [[ -n "${!v:-}" ]] && SECRETS+=("${!v}")
+  done < <(sed -n 's/^\([A-Z_]*\(PASSWORD\|SECRET\|SECRET_KEY\)\)=.*/\1/p' "$ENV_FILE")
+  return 0
+}
+
+# redact <text> -- print text with every secret value replaced.
+redact() {
+  local s="$1" v
+  for v in "${SECRETS[@]}"; do s="${s//"$v"/<redacted>}"; done
+  printf '%s' "$s"
+}
+
+# Backstop for output that doesn't go through check (build, compose, fix.sh):
+# rewrite the whole log with secrets replaced when the script exits.
+# shellcheck disable=SC2329  # invoked by the EXIT trap
+redact_log() {
+  [[ -f "$LOG" && ${#SECRETS[@]} -gt 0 ]] || return 0
+  local all
+  all="$(<"$LOG")"
+  { redact "$all"; echo; } >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+}
+trap redact_log EXIT
+
 # check <description> <command...> -- run, record, show output on failure.
+# Pass secrets by name (see radius_login), never as arguments: the command
+# line is logged.
 check() {
   local name="$1"; shift
   local out rc=0
-  printf '%s\n=== %s\n$ %s\n' "" "$name" "$*" >>"$LOG"
+  printf '%s\n=== %s\n$ %s\n' "" "$name" "$(redact "$*")" >>"$LOG"
   out="$("$@" 2>&1)" || rc=$?
+  out="$(redact "$out")"
   printf '%s\n(exit %d)\n' "$out" "$rc" >>"$LOG"
   NAMES+=("$name")
   if (( rc == 0 )); then
@@ -62,9 +95,14 @@ browser()      { compose run --rm tests "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_as ...
 browser_as()   { local user="$1"; shift; compose run --rm -e E2E_USER="$user" tests "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_login ...
-radius_login() { # <user> <password> <text nas-auth must print>; the password goes in on stdin
-  local out
-  out="$(printf '%s' "$2" | compose exec -T nas nas-auth "$1" 2>&1)" || true
+radius_login() { # <user> <demo|wrong> <text nas-auth must print>; the password goes in on stdin
+  local out pw
+  case "$2" in
+    demo)  pw="$DEMO_PASSWORD" ;;
+    wrong) pw="not-the-demo-password" ;;   # deliberately wrong, not a secret
+    *)     echo "radius_login: password must be demo or wrong"; return 2 ;;
+  esac
+  out="$(printf '%s' "$pw" | compose exec -T nas nas-auth "$1" 2>&1)" || true
   echo "$out"
   grep -qF -- "$3" <<<"$out" || { echo "expected: $3"; return 1; }
 }
@@ -74,8 +112,8 @@ login_as()     {
   local user="$1" app="$2"; shift 2
   [[ "$app" == radius ]] || { browser_as "$user" "$app" "$@"; return; }
   case "$1" in
-    --expect)       radius_login "$user" "$DEMO_PASSWORD" "nas: Access-Accept" ;;
-    --expect-error) radius_login "$user" "$DEMO_PASSWORD" "$2" ;;
+    --expect)       radius_login "$user" demo "nas: Access-Accept" ;;
+    --expect-error) radius_login "$user" demo "$2" ;;
   esac
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" ldap_bind_ok
@@ -113,6 +151,7 @@ issuer_ok()    {
 # --- Bring the lab up -----------------------------------------------------------
 [[ -f "$ENV_FILE" ]] || "$LAB_ROOT/scripts/setup.sh"
 load_env
+load_secrets
 log "LAB_HOST=$LAB_HOST"
 
 if (( FRESH )); then
@@ -147,8 +186,8 @@ check "login: SAML SP (alice)" browser saml --expect ok
 check "login: OIDC RP (alice)" browser oidc --expect ok
 check "login: SAML SP (dave, from LDAP)" browser_as dave saml --expect ok
 check "login: OIDC RP (dave, from LDAP)" browser_as dave oidc --expect ok
-check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave "$DEMO_PASSWORD" "nas: Access-Accept"
-check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave "not-the-demo-password" "nas: Access-Reject"
+check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
+check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
 
 # --- Scenarios --------------------------------------------------------------------
 for name in $(scenario_names); do
