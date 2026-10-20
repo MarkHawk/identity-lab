@@ -83,6 +83,9 @@ def flow(page, app):
     """Drive the login and report (where-we-ended-up, visible text)."""
     base, kc = APPS[app]
     page.goto(base + "/", wait_until="load")
+    # An error page in front of the app (e.g. a 502 from the reverse proxy).
+    if page.locator("#login").count() == 0:
+        return f"{app}:error", page.inner_text("body")
     page.click("#login")
     # Either Keycloak's login form, or a Keycloak error page (e.g. a bad
     # redirect_uri is rejected before any form is shown).

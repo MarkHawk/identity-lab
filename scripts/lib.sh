@@ -250,3 +250,52 @@ pin_idp_cert() {
   mv "$tmp" "$IDP_PIN_FILE"
   echo "$n"
 }
+
+# --- Reverse proxy -----------------------------------------------------------------
+# The proxy-* scenarios each own one include file in .state/proxy/ (mounted at
+# /etc/nginx/idlab/ in the proxy; healthy defaults in proxy/defaults/).
+PROXY_STATE_DIR="$STATE_DIR/proxy"
+PROXY_DEFAULTS_DIR="$LAB_ROOT/proxy/defaults"
+
+proxy_running() { [[ -n "$(compose ps -q --status running proxy 2>/dev/null)" ]]; }
+
+# Directives in an include file as the proxy sees it (comments and blank
+# lines dropped, whitespace squeezed), one per line.
+_proxy_directives() { grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' | tr -s ' \t' ' '; }
+proxy_conf_live()    { compose exec -T proxy cat "/etc/nginx/idlab/$1" | _proxy_directives; }
+proxy_conf_default() { _proxy_directives <"$PROXY_DEFAULTS_DIR/$1"; }
+
+# proxy_conf_set <file> -- replace an include file with stdin, then test and
+# reload nginx, the way an admin edits the config and runs `nginx -s reload`.
+# If nginx rejects the result, the previous file is put back.
+proxy_conf_set() {
+  local f="$PROXY_STATE_DIR/$1" tmp
+  tmp="$(mktemp "$PROXY_STATE_DIR/.$1.XXXXXX")"
+  cat >"$tmp"; chmod 644 "$tmp"
+  cp -p "$f" "$f.prev"
+  mv "$tmp" "$f"
+  # The reload's "signal process started" notice is only shown on failure.
+  # shellcheck disable=SC2016  # expanded by the proxy's shell, not this one
+  if ! compose exec -T proxy sh -c 'nginx -t -q && { out="$(nginx -s reload 2>&1)" || { echo "$out" >&2; exit 1; }; }'; then
+    mv "$f.prev" "$f"
+    die "nginx rejected the new $1; the previous file is back in place"
+  fi
+  rm -f "$f.prev"
+  sleep 1   # let the new worker processes take over
+}
+
+# proxy_conf_restore <file> -- back to the healthy default.
+proxy_conf_restore() { proxy_conf_set "$1" <"$PROXY_DEFAULTS_DIR/$1"; }
+
+# proxy_conf_detect <file> <broken-detail> -- healthy when the live file has the
+# default's directives, otherwise broken.
+proxy_conf_detect() {
+  local live
+  proxy_running || { printf 'unknown\tthe proxy container is not running\n'; return; }
+  live="$(proxy_conf_live "$1" 2>/dev/null)" || { printf 'unknown\tcould not read %s in the proxy\n' "$1"; return; }
+  if [[ "$live" == "$(proxy_conf_default "$1")" ]]; then
+    printf 'healthy\t%s: %s\n' "$1" "$(tr '\n' ' ' <<<"$live" | sed 's/ $//')"
+  else
+    printf 'broken\t%s: %s (%s)\n' "$1" "$(tr '\n' ' ' <<<"$live" | sed 's/ $//')" "$2"
+  fi
+}
