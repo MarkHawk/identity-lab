@@ -2,7 +2,7 @@
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/MarkHawk/identity-lab?quickstart=1)
 
-A self-contained identity lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, two sample apps (one SAML, one OIDC), and a FreeRADIUS server with a NAS that authenticates the same directory users, all run in Docker Compose. One-command scenarios reproduce real single sign-on and network login failures, and each scenario has a support-style runbook for diagnosing and fixing it.
+A self-contained identity lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, two sample apps (one SAML, one OIDC), an nginx reverse proxy in front of Keycloak and a second copy of each app, and a FreeRADIUS server with a NAS that authenticates the same directory users, all run in Docker Compose. One-command scenarios reproduce real single sign-on and network login failures, and each scenario has a support-style runbook for diagnosing and fixing it.
 
 ## The problem this solves
 
@@ -10,10 +10,13 @@ When enterprise SSO breaks, the support engineer usually sees only the customer'
 
 This lab makes those failures **reproducible and safe to practise on**:
 
-- **Break it:** `scripts/break.sh <scenario>` puts the lab into a realistic failure, such as an expired IdP certificate, a skewed clock, a mismatched redirect URI, a failing LDAP bind or a RADIUS shared secret mismatch.
-- **See it as the customer does:** the apps show the exact error a user would see. Their debug pages show the decoded SAML assertion or ID token. The NAS shows what a switch or VPN gateway would: Access-Accept, Access-Reject or no reply.
+- **Break it:** `scripts/break.sh <scenario>` puts the lab into a realistic failure, such as:
+  - an expired IdP certificate, a skewed clock or a mismatched redirect URI
+  - a failing LDAP bind or a RADIUS shared secret mismatch
+  - a reverse proxy returning 502 Bad Gateway, 504 Gateway Time-out or 429 Too Many Requests, sending Keycloak the wrong X-Forwarded headers, or with a header buffer too small for Keycloak's cookies
+- **See it as the customer does:** the apps, Keycloak and the proxy show the exact error a user would see. Their debug pages show the decoded SAML assertion or ID token. The NAS shows what a switch or VPN gateway would: Access-Accept, Access-Reject or no reply.
 - **Diagnose it as support would:** every scenario has a runbook covering the symptom, where to look, diagnosis, fix, prevention, and the questions to ask the customer.
-- **Prove it:** `scripts/test.sh` runs a real headless-browser login against each app and a RADIUS login from the NAS, breaks every scenario, asserts the user-facing error and the log evidence, fixes it, and asserts recovery. CI runs the same script.
+- **Prove it:** `scripts/test.sh` runs a real headless-browser login against each app, directly and through the proxy, and a RADIUS login from the NAS, breaks every scenario, asserts the user-facing error and the log evidence, fixes it, and asserts recovery. CI runs the same script.
 
 ## Architecture
 
@@ -28,6 +31,12 @@ flowchart LR
         ldap[("OpenLDAP 2.6<br/>dc=idlab,dc=example<br/>ldaps://ldap:1636<br/>internal only")]
         sp["SAML SP<br/>Flask + python3-saml<br/>:8181 HTTPS<br/>libfaketime"]
         rp["OIDC RP<br/>Flask + Authlib<br/>:8182 HTTPS"]
+        subgraph proxynet["network proxy · 172.30.182.0/24"]
+            proxy["nginx 1.30 reverse proxy<br/>172.30.182.10<br/>:8183 Keycloak · :8184 SAML SP · :8185 OIDC RP<br/>HTTPS to the browser and to each upstream"]
+            spp["SAML SP copy<br/>saml-sp-proxied<br/>no host port"]
+            rpp["OIDC RP copy<br/>oidc-rp-proxied<br/>no host port"]
+        end
+        pstate[/".state/proxy/<br/>the settings scenarios change"/]
         pin[/".state/saml-sp/<br/>pinned IdP cert<br/>faketime offset"/]
         subgraph radnet["internal network radius · 172.30.181.0/24"]
             nas["NAS (RADIUS client)<br/>radclient · 172.30.181.10<br/>own copy of the shared secret"]
@@ -39,6 +48,12 @@ flowchart LR
     user -- "SAMLResponse (POST)" --> sp
     user -- "code + state (redirect)" --> rp
     rp -- "back channel: discovery, token,<br/>userinfo, JWKS · https://keycloak:8180" --> kc
+    user -- "the same logins,<br/>through the proxy" --> proxy
+    proxy -- "X-Forwarded-Proto, -Host, -Port<br/>(trusted from 172.30.182.10 only)" --> kc
+    proxy --> spp
+    proxy --> rpp
+    rpp -- "back channel<br/>https://proxy:8183" --> proxy
+    pstate -. "included, nginx -s reload" .-> proxy
     kc --- pg
     kc -- "LDAPS: bind as keycloak-svc,<br/>search users and groups,<br/>bind as the user" --> ldap
     pin -. "read on every login" .-> sp
@@ -47,9 +62,11 @@ flowchart LR
     scripts["scripts/break.sh · fix.sh · status.sh"] -- "Admin REST API" --> kc
     scripts -- "pin cert, set clock offset" --> pin
     scripts -- "set the NAS's secret<br/>(docker compose exec)" --> nas
+    scripts -- "rewrite a proxy setting" --> pstate
 ```
 
-- **Front channel:** browsers reach everything at `https://$LAB_HOST:818x`. Keycloak issues tokens with that issuer.
+- **Front channel:** browsers reach everything at `https://$LAB_HOST:818x`. Keycloak issues tokens with the issuer for the port they used: `:8180` directly, `:8183` through the proxy.
+- **Reverse proxy:** nginx publishes Keycloak and a second copy of each app on 8183–8185, so the whole login can go through it, as it would behind a real load balancer or ingress. It verifies each upstream's TLS certificate against the lab CA. It tells Keycloak the scheme and port the browser used in `X-Forwarded-*` headers, which Keycloak trusts only from the proxy's fixed address. The copies behind it have no host port of their own, and the proxied OIDC RP's back channel goes through the proxy too.
 - **Back channel:** the OIDC RP talks to Keycloak directly over the compose network at `https://keycloak:8180`, rewriting the token, userinfo and JWKS endpoints from discovery to that address (`OIDC_BACKCHANNEL_BASE`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
 - **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
 - **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin and frank can log in over RADIUS as well as through Keycloak. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
@@ -57,20 +74,22 @@ flowchart LR
 
 ## Quick start
 
-**Prerequisites:** Linux with Docker Engine and Compose v2, plus `bash`, `openssl`, `curl` and `jq`. It uses host ports 8180–8182.
+**Prerequisites:** Linux with Docker Engine and Compose v2, plus `bash`, `openssl`, `curl` and `jq`. It uses host ports 8180–8185.
 
 ```bash
 git clone <this repo> identity-lab && cd identity-lab
 
 scripts/setup.sh                 # CA, certificates and random secrets -> .env and certs/ (prints no secrets)
                                  # set LAB_HOST=localhost first if you have no DNS name for this machine
-docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + FreeRADIUS + NAS + both apps (first build takes a few minutes)
+docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + FreeRADIUS + NAS + both apps + the proxy (first build takes a few minutes)
 scripts/pin-idp-cert.sh          # "onboard" the SAML SP: trust the IdP's current signing certificate
 scripts/status.sh                # service health and the live state of every scenario
 docker compose exec nas nas-auth dave   # a RADIUS login from the NAS; enter the demo password -> "nas: Access-Accept"
 ```
 
 **Upgrading a lab from before the LDAP directory or RADIUS was added?** Run `scripts/setup.sh` (it adds the new secrets and certificate to your existing `.env` and `certs/`), then `scripts/test.sh --fresh`. The LDAP federation is created at realm import, which only happens when the Keycloak database is new, and the directory's `radius-svc` account is created when the directory is first seeded. `--fresh` deletes the Keycloak, LDAP and NAS volumes.
+
+**Upgrading a lab from before the reverse proxy was added?** Run `scripts/setup.sh` (it adds the proxy's ports and the `oidc-rp-proxied` client secret to your existing `.env`, reissues the TLS certificate with the name `proxy`, and writes the proxy's settings to `.state/proxy/`), then `scripts/test.sh --fresh`. Keycloak's clients for the apps behind the proxy are created at realm import, which only happens when the Keycloak database is new. `--fresh` deletes the lab's volumes: the Keycloak database, the directory and the NAS's secret.
 
 ### Open the apps: HTTPS only
 
@@ -81,6 +100,9 @@ Use a browser on a machine that resolves `LAB_HOST` to the lab host. **Every URL
 | Keycloak (IdP); admin console at `/admin/` | **https://idlab.home:8180** |
 | SAML service provider | **https://idlab.home:8181** |
 | OIDC relying party | **https://idlab.home:8182** |
+| Keycloak through the reverse proxy | **https://idlab.home:8183** |
+| SAML service provider through the reverse proxy | **https://idlab.home:8184** |
+| OIDC relying party through the reverse proxy | **https://idlab.home:8185** |
 
 If you set a different `LAB_HOST`, use that instead of `idlab.home`.
 
@@ -90,7 +112,7 @@ Sign in to the apps as one of the [demo users](#demo-users). The Keycloak admin 
 
 The first time you open each URL, the browser warns *"Your connection is not private"* (`NET::ERR_CERT_AUTHORITY_INVALID` in Chrome and Edge). That's because `setup.sh` created the lab's **own certificate authority**, and your browser has never heard of it. For a lab, it's fine to click **Advanced → Continue/Proceed**.
 
-Accept the warning on all three URLs **before** you first log in. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. If that happens, accept it and start the login again. Private/incognito windows ask again.
+Accept the warning on each URL you'll use (all six, if you try the proxy) **before** you first log in. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. If that happens, accept it and start the login again. Private/incognito windows ask again.
 
 #### Don't install the lab CA as trusted on your computer
 
@@ -142,15 +164,19 @@ scripts/fix.sh clock-skew        # or: scripts/fix.sh --all
 scripts/break.sh radius-shared-secret-mismatch
 docker compose exec nas nas-auth dave   # nas: no reply from radius:1812 after 3 attempts (6s): RADIUS server not responding
 scripts/fix.sh radius-shared-secret-mismatch
+
+scripts/break.sh proxy-rate-limit       # now log in at https://idlab.home:8185: 429 Too Many Requests
+docker compose logs proxy | grep 'limiting requests'
+scripts/fix.sh proxy-rate-limit
 ```
 
 ## Run it in Codespaces
 
 No local setup: GitHub Codespaces runs the whole lab in a cloud container you drive from your browser. New to Codespaces? Follow the [step-by-step guide](docs/codespaces.md).
 
-1. Click **Open in GitHub Codespaces** at the top of this page, then **Create codespace**. It picks a **2-core, 8 GB** machine, the smallest size: the whole lab uses about 1 GB once running and peaked at 1.7 GB while building and testing.
+1. Click **Open in GitHub Codespaces** at the top of this page, then **Create codespace**. It picks a **2-core, 8 GB** machine, the smallest size: the whole lab, reverse proxy included, uses about 1.1 GB once running.
 2. Wait for the terminal to show `setup complete for https://localhost:8180`. Creating the codespace takes a few minutes; `scripts/setup.sh` itself takes a few seconds. Secrets and certificates are generated inside your codespace and never committed.
-3. In the terminal, build the lab and prove it works. The first run takes about 8 to 10 minutes because it builds every image, including a Chromium test image:
+3. In the terminal, build the lab and prove it works. The first run takes about 10 minutes because it builds every image, including a Chromium test image:
 
    ```bash
    scripts/test.sh --fresh
@@ -167,9 +193,9 @@ No local setup: GitHub Codespaces runs the whole lab in a cloud container you dr
 
    Any scenario from the [table](#scenarios) works the same way, and `scripts/test.sh` checks each one's browser error and log evidence for you.
 
-**Browser logins aren't supported in the codespace's own forwarded URLs.** The Ports tab lists 8180 (Keycloak), 8181 (SAML SP) and 8182 (OIDC RP), but Codespaces gives each port its own hostname, `https://<codespace>-8181.app.github.dev` with no port number. The lab's issuer, SAML entity IDs and redirect URIs are all `https://LAB_HOST:<port>` (in a codespace, `https://localhost:8181` and so on), so a login started there is sent back to `localhost` and fails. Making the lab follow per-port hostnames would mean a different URL scheme from the one you'd see locally and in CI, so it doesn't. Use desktop VS Code (below) to log in yourself, or `scripts/test.sh`: it runs real Chromium logins inside the codespace and saves screenshots and page HTML to `test-results/`.
+**Browser logins aren't supported in the codespace's own forwarded URLs.** The Ports tab lists 8180 (Keycloak), 8181 (SAML SP), 8182 (OIDC RP) and the proxy's 8183 to 8185, but Codespaces gives each port its own hostname, `https://<codespace>-8181.app.github.dev` with no port number. The lab's issuer, SAML entity IDs and redirect URIs are all `https://LAB_HOST:<port>` (in a codespace, `https://localhost:8181` and so on), so a login started there is sent back to `localhost` and fails. Making the lab follow per-port hostnames would mean a different URL scheme from the one you'd see locally and in CI, so it doesn't. Use desktop VS Code (below) to log in yourself, or `scripts/test.sh`: it runs real Chromium logins inside the codespace and saves screenshots and page HTML to `test-results/`.
 
-**Clicking through the apps yourself: open the codespace in desktop VS Code.** With the GitHub Codespaces extension installed, use [github.com/codespaces](https://github.com/codespaces) > **...** > **Open in** > **Visual Studio Code**. VS Code forwards ports 8180 to 8182 to your own `localhost` on the same numbers, so `https://localhost:8181/` and the other [lab URLs](#open-the-apps-https-only), with `localhost` in place of `idlab.home`, work in your own browser. [docs/codespaces.md](docs/codespaces.md) is a step-by-step guide for first-time Codespaces users.
+**Clicking through the apps yourself: open the codespace in desktop VS Code.** With the GitHub Codespaces extension installed, use [github.com/codespaces](https://github.com/codespaces) > **...** > **Open in** > **Visual Studio Code**. VS Code forwards ports 8180 to 8185 to your own `localhost` on the same numbers, so `https://localhost:8181/` and the other [lab URLs](#open-the-apps-https-only), with `localhost` in place of `idlab.home`, work in your own browser. [docs/codespaces.md](docs/codespaces.md) is a step-by-step guide for first-time Codespaces users.
 
 **Codespaces uses your own GitHub allowance.** Personal accounts get a free monthly quota of core hours and storage; a 2-core machine uses two core hours for every hour it runs. Stop the codespace when you're done (it also stops itself when idle), and delete it from [github.com/codespaces](https://github.com/codespaces) to free its storage. See GitHub's [Codespaces billing documentation](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-codespaces/about-billing-for-github-codespaces) for the current quotas.
 
@@ -227,16 +253,23 @@ Then try the other scenarios the same way, using `scripts/break.sh` with no argu
 | # | Scenario | App | What breaks | What the user sees | Runbook |
 |---|---|---|---|---|---|
 | 1 | `expired-signing-cert` | SAML | The IdP signing certificate pinned on the SP passes its `notAfter` date | `IdP signing certificate expired on <date>; the SP has no valid IdP certificate pinned` | [01-expired-signing-cert](runbooks/01-expired-signing-cert.md) |
-| 2 | `clock-skew` | SAML | The SP's clock runs 10 minutes fast (libfaketime in the SP container only) | `Could not validate timestamp: expired. Check system clock.` | [02-clock-skew](runbooks/02-clock-skew.md) |
+| 2 | `clock-skew` | SAML | The SP's clock runs 10 minutes fast (libfaketime in the SP container only). The SAML SP behind the proxy reads the same clock offset, so it's affected too. | `Could not validate timestamp: expired. Check system clock.` | [02-clock-skew](runbooks/02-clock-skew.md) |
 | 3 | `redirect-uri-mismatch` | OIDC | The client's registered redirect URI no longer matches what the app sends | Keycloak: `We are sorry... Invalid parameter: redirect_uri` | [03-redirect-uri-mismatch](runbooks/03-redirect-uri-mismatch.md) |
 | 4 | `ldap-bind-failure` | Both (tested on OIDC) | Keycloak's stored LDAP bind password no longer matches the service account, so the directory returns result 49, invalid credentials. Only LDAP users are affected; alice still logs in. | Keycloak (as dave): `Unexpected error when handling authentication request to identity provider.` A directory user who has never logged in gets `Invalid username or password.` | [04-ldap-bind-failure](runbooks/04-ldap-bind-failure.md) |
 | 5 | `radius-shared-secret-mismatch` | RADIUS (NAS) | The NAS's copy of the RADIUS shared secret no longer matches the server's client entry, so the server can't verify its requests and drops them. Web SSO for the same LDAP users still works. | NAS: `nas: no reply from radius:1812 after 3 attempts (6s): RADIUS server not responding`. Server log: `invalid Message-Authenticator!  (Shared secret is incorrect.)` | [05-radius-shared-secret-mismatch](runbooks/05-radius-shared-secret-mismatch.md) |
+| 6 | `proxy-bad-gateway` | OIDC through the proxy | The proxy's upstream for the OIDC RP says `http://` where the app only speaks HTTPS. The app is healthy, and `:8182` still works. | nginx: `502 Bad Gateway`, before the app's page. Proxy log: `upstream prematurely closed connection while reading response header from upstream` | [06-proxy-bad-gateway](runbooks/06-proxy-bad-gateway.md) |
+| 7 | `proxy-gateway-timeout` | OIDC through the proxy | The app's login callback takes 10 s, the proxy waits 5 s. The app finishes the login anyway, after the user has seen the error. | nginx: `504 Gateway Time-out`, 5 s after the password. Proxy log: `upstream timed out (110: Operation timed out) while reading response header from upstream` | [07-proxy-gateway-timeout](runbooks/07-proxy-gateway-timeout.md) |
+| 8 | `proxy-rate-limit` | OIDC through the proxy | The proxy's limit on Keycloak's `/realms/` goes from 10 r/s (burst 20) to 6 r/m, no burst. Every browser shares one client address, so all logins share the limit. | nginx: `429 Too Many Requests` when the password is submitted, with no `Retry-After`. Proxy log: `limiting requests, excess: ... by zone "kc_login"` | [08-proxy-rate-limit](runbooks/08-proxy-rate-limit.md) |
+| 9 | `proxy-forwarded-headers` | SAML through the proxy (OIDC breaks too) | The proxy sends Keycloak `X-Forwarded-Port 443` instead of 8183, so Keycloak's issuer and URLs lose the port. | Keycloak: `We are sorry... Invalid Request`. Keycloak log: `error="invalid_authn_request", reason="invalid_destination"`. The OIDC login form posts to port 443: `ERR_CONNECTION_REFUSED` | [09-proxy-forwarded-headers](runbooks/09-proxy-forwarded-headers.md) |
+| 10 | `proxy-header-too-large` | SAML through the proxy (OIDC breaks too) | The proxy's `proxy_buffer_size` for Keycloak goes from 16k to 1k; Keycloak's login page sends about 2 KB of headers (its session cookies). | nginx: `502 Bad Gateway` where the login page should be. Proxy log: `upstream sent too big header while reading response header from upstream` | [10-proxy-header-too-large](runbooks/10-proxy-header-too-large.md) |
 
 Every scenario is:
 
 - **reproducible:** driven by scripts, with no manual clicking
 - **reversible:** `fix.sh` restores a working state
-- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store, the NAS's secret), so running either twice is a no-op
+- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store, the NAS's secret, the proxy's settings as the proxy container sees them, and the issuer Keycloak reports through the proxy), so running either twice is a no-op
+
+The proxy scenarios change one setting file each in `.state/proxy/` (healthy defaults in `proxy/defaults/`) and reload nginx with `nginx -t && nginx -s reload`, as an admin would. If nginx rejects a change, the previous file is put back. `proxy-gateway-timeout` changes the app behind the proxy instead, through `.state/oidc-rp-proxied/callback-delay`; the proxy keeps its timeout.
 
 ## Tests
 
@@ -246,13 +279,16 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 64 checks cover:
+The 125 checks cover:
 
-- container health, the OIDC issuer, both apps over TLS verified against the lab CA, and an `ldapwhoami` bind as Keycloak's service account over LDAPS
-- a real Chromium login to each app, as a local user (alice) and as an LDAP user (dave)
+- container health, the OIDC issuer directly and through the proxy, both apps over TLS verified against the lab CA (directly and through the proxy), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
+- that Keycloak ignores X-Forwarded headers sent by anyone but the proxy (a direct request with forged headers still gets the `:8180` issuer)
+- a real Chromium login to each app, directly and through the proxy, as a local user (alice) and as an LDAP user (dave)
 - a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
 - for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
-- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't; for `radius-shared-secret-mismatch`, that dave still logs in to the OIDC app while RADIUS is broken
+- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't; for `radius-shared-secret-mismatch`, that dave still logs in to the OIDC app while RADIUS is broken; for every proxy scenario, that alice still logs in to the same app directly, bypassing the proxy
+
+`scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log.
 
 Screenshots, page HTML and a full log go to `test-results/`. [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
 
@@ -263,9 +299,9 @@ scripts/setup.sh --rotate     # new random value for every secret in .env; certi
 scripts/test.sh --fresh       # recreate the lab with them, then prove it still works
 ```
 
-`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET` and the two apps' session keys. It prints none of them.
+`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `OIDC_PROXIED_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET` and the two apps' session keys. It prints none of them.
 
-The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secret and the directory's passwords only receive their values when the databases are first created, and the NAS stores its copy of the RADIUS secret when its volume is first created. `--fresh` deletes the Keycloak, LDAP and NAS volumes, re-imports the realm, re-seeds the directory and the NAS. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
+The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secrets and the directory's passwords only receive their values when the databases are first created, and the NAS stores its copy of the RADIUS secret when its volume is first created. `--fresh` deletes the Keycloak, LDAP and NAS volumes, re-imports the realm, re-seeds the directory and the NAS. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
 
 When you'd do it:
 
@@ -295,13 +331,16 @@ curl -sS --cacert certs/ca.crt https://localhost:8181/healthz    # {"status":"ok
 
 ```
 .devcontainer/               GitHub Codespaces / dev container: docker-in-docker, runs setup.sh on creation
-compose.yaml                 Keycloak, Postgres, OpenLDAP, FreeRADIUS, NAS, saml-sp, oidc-rp, tests (profile "test")
+compose.yaml                 Keycloak, Postgres, OpenLDAP, FreeRADIUS, NAS, saml-sp, oidc-rp, the proxy and the
+                             apps behind it, tests (profile "test")
 keycloak/idlab-realm.json    realm, clients, demo users and LDAP federation; secrets injected via placeholders
 ldap/                        OpenLDAP image: cn=config and directory seed LDIF, first-boot entrypoint
 radius/                      FreeRADIUS image: minimal config, clients.conf, LDAP module, the one virtual server
 nas/                         NAS image: first-boot secret seeding and nas-auth (one Access-Request)
 apps/saml-sp/                Flask + python3-saml service provider
 apps/oidc-rp/                Flask + Authlib relying party
+proxy/                       nginx.conf for the reverse proxy, and defaults/ with the healthy value of each
+                             setting the proxy scenarios change
 scenarios/<name>.sh          detect / break / fix for each scenario
 scripts/                     setup, pin-idp-cert, break, fix, status, test, lib
 tests/                       Playwright image and e2e.py
@@ -323,6 +362,11 @@ docs/codespaces.md           step-by-step guide to running the lab in GitHub Cod
   - `KC_PROXY_HEADERS=xforwarded`: Keycloak builds its URLs from the proxy's `X-Forwarded-Proto`, `-Host` and `-Port`.
   - `KC_PROXY_TRUSTED_ADDRESSES`: those headers count only when they come from the proxy's fixed address. Anyone else who sends them, including the apps on the compose network, is ignored, so a client can't make Keycloak issue tokens for a host of its choosing.
   - **The OIDC RP rewrites its back-channel endpoints.** Keycloak only accepts `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` with a full URL, so discovery now lists `https://LAB_HOST:8180/...` for every endpoint. With `LAB_HOST=localhost` (CI, Codespaces) that address is the RP's own container, so the RP replaces it with `https://keycloak:8180` for the token, userinfo and JWKS calls it makes itself. Keycloak still sets the issuer from `LAB_HOST` and the port the request arrived on (8180), so tokens carry the same issuer the browser sees.
+- **A second copy of each app behind the proxy,** rather than the same containers on two routes. An app knows its public URL (its SAML entity ID, its OIDC redirect URI, the Keycloak address it sends the browser to), so one container can't be reached both ways. The copies use the same images with the proxy's ports, have their own Keycloak clients, and publish no host port, so the only way to them is through nginx.
+- **nginx settings the scenarios change are separate include files** in `.state/proxy/`, mounted read-only into the proxy. `nginx.conf` itself never changes at run time. A scenario rewrites one small file and reloads nginx, and `status.sh` compares the file as the proxy container sees it with the default in `proxy/defaults/`. nginx runs as `LAB_UID` (so it can read the 0600 TLS key), with its pid file and temporary files in `/tmp`.
+- **nginx re-resolves its upstreams** (`server ... resolve` with Docker's DNS) instead of keeping the address from start-up. Compose gives a recreated container a new address, and without this the proxy would send traffic to the old one: a 502 that only a proxy restart fixes.
+- **nginx 1.30.6, 6 days old when pinned:** the one exception to the two-week rule below. It fixes five CVEs, including CVE-2026-93479, a buffer overflow when evaluating variables, which affects request logging as this proxy's log format uses it.
+- **The gateway timeout comes from a slow app, not a lowered timeout.** The proxied OIDC RP reads an optional delay for its login callback from `.state/oidc-rp-proxied/callback-delay` on every request, like the SP's libfaketime offset. Only the copy behind the proxy has the file, so the direct app can never be slowed.
 - **Scenario state is detected, not remembered.** No flag files. `status.sh` reports what the lab is actually doing, so it also catches drift caused by someone editing Keycloak by hand.
 - **Why the SAML SP pins the IdP certificate.** The first design had the SP refresh IdP metadata and Keycloak sign with an expired certificate. Building it showed that Keycloak 26.7 won't do that:
   - It refuses to import an expired certificate (`400 "Certificate is not valid"`).
@@ -347,11 +391,13 @@ docs/codespaces.md           step-by-step guide to running the lab in GitHub Cod
   - GitHub Actions to commit SHAs
 
   Each version was at least two weeks old when chosen.
-- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and its health endpoint is on the unpublished management port. The directory and the RADIUS server publish no host port at all.
+- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and nginx on 8183–8185 inside its own; Keycloak's health endpoint is on the unpublished management port. The directory and the RADIUS server publish no host port at all.
 
 ## Known limitations
 
 - **Apt pins can break builds.** Debian removes superseded security updates from its mirrors, so a pinned apt version (for example `libxml2 2.9.14+dfsg-1.3~deb12u6` or `slapd 2.6.10+dfsg-1`) will eventually fail to install. The fix is to bump the pin, or to build from `snapshot.debian.org`.
+- **The clock-skew scenario also affects the SAML SP behind the proxy.** Both SAML SPs read the same `.state/saml-sp/` files, the pinned IdP certificate and the libfaketime offset, so while `clock-skew` is broken a SAML login through `:8184` fails too. `scripts/test.sh` doesn't check the proxied SP during that scenario. `expired-signing-cert` changes the shared pinned certificate in the same way.
+- **One rate-limit bucket for every browser.** All browser traffic reaches the proxy from the Docker gateway's address, so `proxy-rate-limit` limits every user together, and a `rate-limit-probe` run shares the bucket with your own logins for a few seconds.
 - **Single-worker apps.** Each app runs one gunicorn worker with an in-memory store for decoded logins. That's fine for a lab, not for production.
 - **Tested platform.** The lab has only been tested on x86_64 Linux.
 - **Codespaces: no browser logins at the forwarded URLs.** In a codespace, use `scripts/test.sh`, or forward the ports to your own `localhost` (see [Run it in Codespaces](#run-it-in-codespaces)).
