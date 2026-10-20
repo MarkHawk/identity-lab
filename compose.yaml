@@ -129,10 +129,16 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      # Browsers use LAB_HOST; the apps call https://keycloak:8180 on the
-      # compose network and get backchannel URLs for that host.
-      KC_HOSTNAME: https://${LAB_HOST}:${KC_PORT}
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Hostname only, not a URL: Keycloak takes the scheme and port from each
+      # request, so it answers as https://LAB_HOST:8180 directly and as
+      # https://LAB_HOST:8183 through the reverse proxy. The OIDC RP calls
+      # https://keycloak:8180 on the compose network and rewrites the
+      # endpoints it calls itself (OIDC_BACKCHANNEL_BASE in apps/oidc-rp).
+      KC_HOSTNAME: ${LAB_HOST}
+      # X-Forwarded-* headers are honoured only from the reverse proxy's
+      # fixed address; from anyone else they are ignored.
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_TRUSTED_ADDRESSES: 172.30.182.10
       # Listen on 8180 inside the container too, so 8080 appears nowhere.
       KC_HTTP_ENABLED: "false"
       KC_HTTPS_PORT: "8180"
@@ -227,6 +233,7 @@ services:
       PORT: "8182"
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       OIDC_RP_SECRET_KEY: ${OIDC_RP_SECRET_KEY}
+      OIDC_BACKCHANNEL_BASE: https://keycloak:8180
       REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro

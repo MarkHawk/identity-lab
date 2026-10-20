@@ -23,12 +23,19 @@ from flask import Flask, redirect, render_template, request, session, url_for
 LAB_HOST = os.environ["LAB_HOST"]
 RP_BASE = f"https://{LAB_HOST}:{os.environ['OIDC_RP_PORT']}"
 REDIRECT_URI = f"{RP_BASE}/auth/callback"
-# Discovery goes over the compose network. Keycloak answers with a browser-
-# facing authorization endpoint and issuer (LAB_HOST) and backchannel token,
-# userinfo and JWKS endpoints (keycloak:8180).
+# Discovery goes over the compose network. Keycloak takes its hostname from
+# KC_HOSTNAME (LAB_HOST) and the port from the request, so it answers with
+# the browser-facing issuer and endpoints, https://LAB_HOST:KC_PORT/...
+# LAB_HOST may be localhost, which inside this container is the container
+# itself, so the endpoints this app calls directly (token, userinfo, JWKS)
+# are rewritten to BACKCHANNEL_BASE. The issuer and the authorization
+# endpoint the browser is sent to are left alone.
+BACKCHANNEL_BASE = os.environ.get("OIDC_BACKCHANNEL_BASE", "https://keycloak:8180")
 DISCOVERY_URL = os.environ.get(
-    "OIDC_DISCOVERY_URL", "https://keycloak:8180/realms/idlab/.well-known/openid-configuration"
+    "OIDC_DISCOVERY_URL", f"{BACKCHANNEL_BASE}/realms/idlab/.well-known/openid-configuration"
 )
+FRONTCHANNEL_BASE = f"https://{LAB_HOST}:{os.environ['KC_PORT']}"
+BACKCHANNEL_ENDPOINTS = ("token_endpoint", "userinfo_endpoint", "jwks_uri")
 
 app = Flask(__name__)
 app.secret_key = os.environ["OIDC_RP_SECRET_KEY"]
@@ -49,6 +56,19 @@ oauth.register(
     server_metadata_url=DISCOVERY_URL,
     client_kwargs={"scope": "openid email profile", "code_challenge_method": "S256"},
 )
+_load_server_metadata = oauth.keycloak.load_server_metadata
+
+
+def load_server_metadata():
+    metadata = _load_server_metadata()
+    for key in BACKCHANNEL_ENDPOINTS:
+        url = metadata.get(key, "")
+        if url.startswith(FRONTCHANNEL_BASE + "/"):
+            metadata[key] = BACKCHANNEL_BASE + url[len(FRONTCHANNEL_BASE):]
+    return metadata
+
+
+oauth.keycloak.load_server_metadata = load_server_metadata
 
 
 def kv(**fields):

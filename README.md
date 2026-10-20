@@ -50,7 +50,7 @@ flowchart LR
 ```
 
 - **Front channel:** browsers reach everything at `https://$LAB_HOST:818x`. Keycloak issues tokens with that issuer.
-- **Back channel:** the OIDC RP talks to Keycloak directly over the compose network (`KC_HOSTNAME_BACKCHANNEL_DYNAMIC`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
+- **Back channel:** the OIDC RP talks to Keycloak directly over the compose network at `https://keycloak:8180`, rewriting the token, userinfo and JWKS endpoints from discovery to that address (`OIDC_BACKCHANNEL_BASE`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
 - **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
 - **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin and frank can log in over RADIUS as well as through Keycloak. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
 - **SP trust:** the SAML SP doesn't fetch IdP metadata. Like most SaaS service providers, it trusts the IdP certificate pinned at onboarding (`scripts/pin-idp-cert.sh`).
@@ -319,6 +319,10 @@ docs/codespaces.md           step-by-step guide to running the lab in GitHub Cod
   - The realm JSON contains only `${PLACEHOLDERS}`.
   - The admin password reaches `curl` on stdin, not in the argument list.
   - `.env`, `certs/` and `.state/` are git-ignored.
+- **Keycloak takes its port and scheme from the request.** `KC_HOSTNAME` is just `LAB_HOST`, not a full URL, so Keycloak answers as `https://LAB_HOST:8180` when reached directly and as the proxy's address when reached through the reverse proxy. A full URL would pin one address: logins through the proxy would get the wrong issuer, and the proxy's X-Forwarded headers could never matter, so there would be nothing for the forwarded-headers scenario to break. Three settings go with it:
+  - `KC_PROXY_HEADERS=xforwarded`: Keycloak builds its URLs from the proxy's `X-Forwarded-Proto`, `-Host` and `-Port`.
+  - `KC_PROXY_TRUSTED_ADDRESSES`: those headers count only when they come from the proxy's fixed address. Anyone else who sends them, including the apps on the compose network, is ignored, so a client can't make Keycloak issue tokens for a host of its choosing.
+  - **The OIDC RP rewrites its back-channel endpoints.** Keycloak only accepts `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` with a full URL, so discovery now lists `https://LAB_HOST:8180/...` for every endpoint. With `LAB_HOST=localhost` (CI, Codespaces) that address is the RP's own container, so the RP replaces it with `https://keycloak:8180` for the token, userinfo and JWKS calls it makes itself. Keycloak still sets the issuer from `LAB_HOST` and the port the request arrived on (8180), so tokens carry the same issuer the browser sees.
 - **Scenario state is detected, not remembered.** No flag files. `status.sh` reports what the lab is actually doing, so it also catches drift caused by someone editing Keycloak by hand.
 - **Why the SAML SP pins the IdP certificate.** The first design had the SP refresh IdP metadata and Keycloak sign with an expired certificate. Building it showed that Keycloak 26.7 won't do that:
   - It refuses to import an expired certificate (`400 "Certificate is not valid"`).
