@@ -7,9 +7,11 @@
 #                              everything is re-created from the repo and .env
 #   scripts/test.sh --down     stop the lab afterwards (keeps the volume)
 #
-# Checks: service health and an LDAP bind as Keycloak's service account; a
-# scripted browser login to each app as a local user (alice) and an LDAP user
-# (dave); a RADIUS Access-Request from the NAS for dave (accepted) and with a
+# Checks: service health and an LDAP bind as Keycloak's service account;
+# Keycloak's issuer directly and through the reverse proxy, and that it ignores
+# X-Forwarded-* headers that don't come from the proxy; a scripted browser
+# login to each app, directly and through the proxy, as a local user (alice)
+# and an LDAP user (dave); a RADIUS Access-Request from the NAS for dave (accepted) and with a
 # wrong password (rejected); then for every scenario: break (twice), detected
 # as broken, the expected error in the browser (or in the NAS's output, for
 # RADIUS scenarios), the expected log line, a user outside the
@@ -142,10 +144,12 @@ healthy()      {
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" http_ok ...
 http_ok()      { kc_curl -o /dev/null --resolve "$LAB_HOST:$2:127.0.0.1" "https://$LAB_HOST:$2$1"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" issuer_ok ...
-issuer_ok()    {
-  local iss
-  iss="$(kc_curl "https://$LAB_HOST:$KC_PORT/realms/$REALM/.well-known/openid-configuration" | jq -r .issuer)"
-  [[ "$iss" == "https://$LAB_HOST:$KC_PORT/realms/$REALM" ]] || { echo "issuer is $iss"; return 1; }
+issuer_ok()    { # <port> [curl args...] -- discovery at that port reports it as the issuer
+  local port="$1" iss; shift
+  iss="$(kc_curl --resolve "$LAB_HOST:$port:127.0.0.1" "$@" \
+    "https://$LAB_HOST:$port/realms/$REALM/.well-known/openid-configuration" | jq -r .issuer)"
+  echo "issuer: $iss"
+  [[ "$iss" == "https://$LAB_HOST:$port/realms/$REALM" ]] || { echo "expected https://$LAB_HOST:$port/realms/$REALM"; return 1; }
 }
 
 # --- Bring the lab up -----------------------------------------------------------
@@ -172,12 +176,18 @@ compose up -d --wait --wait-timeout 300 >>"$LOG" 2>&1 \
 
 # --- Health -----------------------------------------------------------------------
 log "health"
-for svc in postgres ldap keycloak saml-sp oidc-rp radius nas; do
+for svc in postgres ldap keycloak saml-sp oidc-rp radius nas proxy saml-sp-proxied oidc-rp-proxied; do
   check "health: $svc container healthy" healthy "$svc"
 done
-check "health: Keycloak issuer is https://$LAB_HOST:$KC_PORT/realms/$REALM" issuer_ok
+check "health: Keycloak issuer is https://$LAB_HOST:$KC_PORT/realms/$REALM" issuer_ok "$KC_PORT"
+check "health: Keycloak issuer through the proxy is https://$LAB_HOST:$PROXY_KC_PORT/realms/$REALM" issuer_ok "$PROXY_KC_PORT"
+# Sent straight to Keycloak, not from the proxy's address: must change nothing.
+check "health: Keycloak ignores X-Forwarded-* except from the proxy" issuer_ok "$KC_PORT" \
+  -H "X-Forwarded-Proto: http" -H "X-Forwarded-Host: attacker.example" -H "X-Forwarded-Port: 9999"
 check "health: SAML SP /healthz over verified TLS" http_ok /healthz "$SAML_SP_PORT"
 check "health: OIDC RP /healthz over verified TLS" http_ok /healthz "$OIDC_RP_PORT"
+check "health: SAML SP /healthz through the proxy" http_ok /healthz "$PROXY_SAML_SP_PORT"
+check "health: OIDC RP /healthz through the proxy" http_ok /healthz "$PROXY_OIDC_RP_PORT"
 check "health: LDAP bind as keycloak-svc (ldapwhoami over LDAPS)" ldap_bind_ok
 
 # --- Baseline logins --------------------------------------------------------------
@@ -186,6 +196,10 @@ check "login: SAML SP (alice)" browser saml --expect ok
 check "login: OIDC RP (alice)" browser oidc --expect ok
 check "login: SAML SP (dave, from LDAP)" browser_as dave saml --expect ok
 check "login: OIDC RP (dave, from LDAP)" browser_as dave oidc --expect ok
+check "login: SAML SP through the proxy (alice)" browser saml-proxy --expect ok
+check "login: OIDC RP through the proxy (alice)" browser oidc-proxy --expect ok
+check "login: SAML SP through the proxy (dave, from LDAP)" browser_as dave saml-proxy --expect ok
+check "login: OIDC RP through the proxy (dave, from LDAP)" browser_as dave oidc-proxy --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
 

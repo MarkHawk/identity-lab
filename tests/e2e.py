@@ -2,6 +2,10 @@
 
     e2e.py saml --expect ok
     e2e.py oidc --expect-error "Invalid parameter: redirect_uri"
+    e2e.py oidc-proxy --expect ok
+
+saml-proxy and oidc-proxy are the copies of the apps behind the nginx
+reverse proxy; their whole login, Keycloak included, goes through it.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
@@ -20,10 +24,18 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
 LAB_HOST = os.environ["LAB_HOST"]
-KC = f"https://{LAB_HOST}:{os.environ['KC_PORT']}"
+
+
+def url(port_var):
+    return f"https://{LAB_HOST}:{os.environ[port_var]}"
+
+
+# target: (app base URL, the Keycloak address that app sends the browser to)
 APPS = {
-    "saml": f"https://{LAB_HOST}:{os.environ['SAML_SP_PORT']}",
-    "oidc": f"https://{LAB_HOST}:{os.environ['OIDC_RP_PORT']}",
+    "saml": (url("SAML_SP_PORT"), url("KC_PORT")),
+    "oidc": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "saml-proxy": (url("PROXY_SAML_SP_PORT"), url("PROXY_KC_PORT")),
+    "oidc-proxy": (url("PROXY_OIDC_RP_PORT"), url("PROXY_KC_PORT")),
 }
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
@@ -32,7 +44,6 @@ RESULTS = os.environ.get("RESULTS_DIR", "/results")
 
 
 def run(app, expect_error=None):
-    base = APPS[app]
     args = ["--disable-dev-shm-usage"]
     if LAB_HOST != "localhost":
         # Resolve LAB_HOST to this machine without relying on LAN DNS.
@@ -41,7 +52,7 @@ def run(app, expect_error=None):
         browser = pw.chromium.launch(args=args)
         page = browser.new_context().new_page()
         try:
-            outcome = flow(page, base)
+            outcome = flow(page, app)
         finally:
             stamp = f"{app}-{int(time.time())}"
             os.makedirs(RESULTS, exist_ok=True)
@@ -68,13 +79,14 @@ def run(app, expect_error=None):
     return 1
 
 
-def flow(page, base):
+def flow(page, app):
     """Drive the login and report (where-we-ended-up, visible text)."""
+    base, kc = APPS[app]
     page.goto(base + "/", wait_until="load")
     page.click("#login")
     # Either Keycloak's login form, or a Keycloak error page (e.g. a bad
     # redirect_uri is rejected before any form is shown).
-    page.wait_for_url(re.compile("^" + re.escape(KC)), timeout=15000)
+    page.wait_for_url(re.compile("^" + re.escape(kc)), timeout=15000)
     page.wait_for_load_state("load")
     if page.locator("#username").count() == 0:
         return "keycloak:error", page.inner_text("body")
@@ -87,12 +99,8 @@ def flow(page, base):
     except PWTimeout:
         return f"stuck:{page.url}", page.inner_text("body")
     if page.locator("#login-ok").count():
-        return f"{app_name(base)}:login-ok", page.inner_text("body")
-    return f"{app_name(base)}:error", page.inner_text("body")
-
-
-def app_name(base):
-    return next(k for k, v in APPS.items() if v == base)
+        return f"{app}:login-ok", page.inner_text("body")
+    return f"{app}:error", page.inner_text("body")
 
 
 def excerpt(text, n=600):

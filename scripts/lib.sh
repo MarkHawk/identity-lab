@@ -129,13 +129,14 @@ REALM=idlab
 # Each scenarios/<name>.sh defines:
 #   SCENARIO_SUMMARY   one line for status output
 #   SCENARIO_RUNBOOK   path of the runbook
-#   SCENARIO_APP       saml|oidc|radius  -- which login shows the failure (radius:
-#                      an Access-Request from the NAS, docker compose exec nas nas-auth)
+#   SCENARIO_APP       saml|oidc|saml-proxy|oidc-proxy|radius  -- which login shows
+#                      the failure (*-proxy: the app copies behind the reverse proxy;
+#                      radius: an Access-Request from the NAS, docker compose exec nas nas-auth)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
 #   SCENARIO_USER      optional: demo user who sees the failure (default alice)
-#   SCENARIO_UNAFFECTED optional: "<saml|oidc> <user>" who must still log in while broken
+#   SCENARIO_UNAFFECTED optional: "<app> <user>" who must still log in while broken
 #   scenario_detect    print "broken|healthy|unknown<TAB>detail", from live lab state
 #   scenario_break / scenario_fix
 SCENARIOS_DIR="$LAB_ROOT/scenarios"
@@ -157,8 +158,15 @@ load_scenario() {
 
 scenario_state() { scenario_detect | cut -f1; }
 
-app_url()   { case "$1" in saml) echo "https://$LAB_HOST:$SAML_SP_PORT/" ;; oidc) echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;; esac; }
-app_title() { case "$1" in saml) echo "SAML" ;; oidc) echo "OIDC" ;; esac; }
+app_url()   {
+  case "$1" in
+    saml)       echo "https://$LAB_HOST:$SAML_SP_PORT/" ;;
+    oidc)       echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
+    saml-proxy) echo "https://$LAB_HOST:$PROXY_SAML_SP_PORT/" ;;
+    oidc-proxy) echo "https://$LAB_HOST:$PROXY_OIDC_RP_PORT/" ;;
+  esac
+}
+app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc|oidc-proxy) echo "OIDC" ;; esac; }
 
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {
