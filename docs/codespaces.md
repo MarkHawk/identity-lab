@@ -14,13 +14,18 @@ A codespace is a Linux machine in the cloud with this repository already checked
 
 **The free allowance.** GitHub Free accounts get **120 core hours** and **15 GB of storage** a month for Codespaces. This lab uses a **2-core** machine, so each hour it runs uses 2 core hours: about 60 hours of running time a month. Storage is counted for as long as the codespace exists, even when it's stopped. GitHub's [Codespaces billing documentation](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-codespaces/about-billing-for-github-codespaces) has the current figures.
 
-**The three ports.** The lab serves everything over HTTPS on three ports:
+**The ports.** The lab serves everything over HTTPS on six ports:
 
 | Port | Service | What it is |
 |---|---|---|
 | 8180 | Keycloak (IdP) | The identity provider: the login page, and the admin console at `/admin/` |
 | 8181 | SAML SP | A sample app that signs you in with SAML |
 | 8182 | OIDC RP | A sample app that signs you in with OpenID Connect |
+| 8183 | Proxy: Keycloak | The same Keycloak, through an nginx reverse proxy |
+| 8184 | Proxy: SAML SP | A second copy of the SAML app, reachable only through the proxy |
+| 8185 | Proxy: OIDC RP | A second copy of the OIDC app, reachable only through the proxy |
+
+You only need 8183 to 8185 for the reverse proxy scenarios (6 to 10 in [step 5](#5-break-it-and-fix-it)).
 
 **The demo users.** You'll use two of the six:
 
@@ -47,6 +52,7 @@ A browser tab opens with the VS Code editor and a terminal at the bottom. Creati
 
 ```
  ok  setup complete for https://localhost:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)
+    Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP).
 ```
 
 At this point the lab is set up but not yet running. You start it in [step 3](#3-check-the-lab).
@@ -55,7 +61,7 @@ At this point the lab is set up but not yet running. You start it in [step 3](#3
 
 You can run every command from the browser tab. To log in to the apps yourself, though, open the codespace in VS Code on your own computer.
 
-**Why:** the lab's addresses are `https://localhost:8180`, `https://localhost:8181` and `https://localhost:8182`. Keycloak's issuer, the SAML entity IDs and the OIDC redirect URIs all use them. Desktop VS Code forwards the codespace's ports to `localhost` on your own computer, on the same port numbers, so those addresses work in your browser.
+**Why:** the lab's addresses are `https://localhost:8180`, `https://localhost:8181` and `https://localhost:8182`, and 8183 to 8185 through the proxy. Keycloak's issuer, the SAML entity IDs and the OIDC redirect URIs all use them. Desktop VS Code forwards the codespace's ports to `localhost` on your own computer, on the same port numbers, so those addresses work in your browser.
 
 The browser tab offers forwarded links of the form `https://<codespace-name>-8181.app.github.dev` instead. **These don't work for logins.** Each port gets its own hostname with no port number, so Keycloak sends you back to `localhost` and the login fails.
 
@@ -66,7 +72,7 @@ The browser tab offers forwarded links of the form `https://<codespace-name>-818
 3. Next to your codespace, click the **...** menu, then **Open in** > **Visual Studio Code**. Allow the browser to open VS Code if it asks.
 4. VS Code opens a window connected to the codespace. The bottom-left corner shows **Codespaces** and the codespace's name.
 5. Open a terminal in that window: **Terminal** > **New Terminal**. Its prompt is a Linux prompt in the repository folder, not your own computer's.
-6. Open the **Ports** tab, next to the terminal. Ports 8180, 8181 and 8182 are listed as Keycloak (IdP), SAML SP and OIDC RP. Check that the **Forwarded Address** column shows `localhost:8180`, `localhost:8181` and `localhost:8182`. If any number differs, see [Troubleshooting](#troubleshooting).
+6. Open the **Ports** tab, next to the terminal. Ports 8180, 8181 and 8182 are listed as Keycloak (IdP), SAML SP and OIDC RP, and 8183, 8184 and 8185 as the same three through the proxy. Check that the **Forwarded Address** column shows the same number for each, `localhost:8180` to `localhost:8185`. If any number differs, see [Troubleshooting](#troubleshooting).
 
 You can close the browser tab from step 1 now. The rest of this guide uses desktop VS Code.
 
@@ -105,10 +111,10 @@ The first part lists the services again. The second part, `scenarios (detected f
 scripts/test.sh --fresh
 ```
 
-This deletes the lab's data, rebuilds it, and runs real headless-browser logins, RADIUS logins and every scenario. The first run takes about 8 to 10 minutes. It ends with:
+This deletes the lab's data, rebuilds it, and runs real headless-browser logins, RADIUS logins and every scenario. The first run takes about 10 minutes. It ends with:
 
 ```
-  64 checks, 64 passed, 0 failed. Full log: /workspaces/identity-lab/test-results/test.log
+  125 checks, 125 passed, 0 failed. Full log: /workspaces/identity-lab/test-results/test.log
 ```
 
 Screenshots and page HTML for every check go to `test-results/`. `--fresh` also pins the certificate, so you don't need to run `pin-idp-cert.sh` again afterwards.
@@ -122,8 +128,9 @@ Use the browser on your own computer. Every address is `https://`: an `http://` 
 - https://localhost:8180
 - https://localhost:8181
 - https://localhost:8182
+- for the proxy scenarios: https://localhost:8183, https://localhost:8184 and https://localhost:8185
 
-Do all three before your first login. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. Don't install the lab's CA as trusted on your computer: the README [explains why](../README.md#dont-install-the-lab-ca-as-trusted-on-your-computer).
+Do them before your first login. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. Don't install the lab's CA as trusted on your computer: the README [explains why](../README.md#dont-install-the-lab-ca-as-trusted-on-your-computer).
 
 **OIDC as alice:**
 
@@ -178,6 +185,11 @@ Running `break.sh` or `fix.sh` twice is safe: the second run does nothing.
 | 3 | `redirect-uri-mismatch` | https://localhost:8182, **Log in with OIDC** | Keycloak error page, before any login form: `We are sorry...` `Invalid parameter: redirect_uri` | [03](../runbooks/03-redirect-uri-mismatch.md) |
 | 4 | `ldap-bind-failure` | https://localhost:8182, **Log in with OIDC**, as `dave`. alice still logs in. | Keycloak error page after you sign in: `Unexpected error when handling authentication request to identity provider.` A directory user who has never logged in gets `Invalid username or password.` instead. | [04](../runbooks/04-ldap-bind-failure.md) |
 | 5 | `radius-shared-secret-mismatch` | `docker compose exec nas nas-auth dave`, with the demo password. dave can still log in to the OIDC app. | After about 6 seconds: `nas: no reply from radius:1812 after 3 attempts (6s): RADIUS server not responding` | [05](../runbooks/05-radius-shared-secret-mismatch.md) |
+| 6 | `proxy-bad-gateway` | https://localhost:8185. https://localhost:8182 still works. | nginx error page straight away: `502 Bad Gateway` | [06](../runbooks/06-proxy-bad-gateway.md) |
+| 7 | `proxy-gateway-timeout` | https://localhost:8185, **Log in with OIDC**, as `alice` | About 5 seconds after you sign in: `504 Gateway Time-out` | [07](../runbooks/07-proxy-gateway-timeout.md) |
+| 8 | `proxy-rate-limit` | https://localhost:8185, **Log in with OIDC**, as `alice` | When you submit the password: `429 Too Many Requests` | [08](../runbooks/08-proxy-rate-limit.md) |
+| 9 | `proxy-forwarded-headers` | https://localhost:8184, **Log in with SAML** | Keycloak error page: `We are sorry...` `Invalid Request` | [09](../runbooks/09-proxy-forwarded-headers.md) |
+| 10 | `proxy-header-too-large` | https://localhost:8184, **Log in with SAML** | Where the login page should be: `502 Bad Gateway` | [10](../runbooks/10-proxy-header-too-large.md) |
 
 To put everything back at once, run `scripts/fix.sh --all`.
 
@@ -194,7 +206,7 @@ Stopping a codespace (or letting it stop itself when idle) stops the core hours,
 
 | Problem | What's happening | What to do |
 |---|---|---|
-| The **Ports** tab shows a different local number, such as `localhost:8183` for port 8181 | Something on your own computer already uses that port, for example a local copy of the lab, so VS Code picked another one. The lab's addresses only work on the same numbers. | Stop whatever uses the port on your computer, then in the Ports tab right-click the port and choose **Change Local Address Port** to set it back to 8180, 8181 or 8182. Or close and reopen the codespace in VS Code. |
+| The **Ports** tab shows a different local number, such as `localhost:8190` for port 8181 | Something on your own computer already uses that port, for example a local copy of the lab, so VS Code picked another one. The lab's addresses only work on the same numbers. | Stop whatever uses the port on your computer, then in the Ports tab right-click the port and choose **Change Local Address Port** to set it back to the port's own number (8180 to 8185). Or close and reopen the codespace in VS Code. |
 | The terminal shows a PowerShell prompt (`PS C:\...>`) or your own computer's shell, and commands like `scripts/status.sh` aren't found | The terminal belongs to your own computer, not the codespace. This happens in a VS Code window that isn't connected to the codespace. | Check the bottom-left corner of the window shows **Codespaces**. If it doesn't, reopen the codespace as in [step 2](#2-open-it-in-desktop-vs-code). Then open a new terminal in that window with **Terminal** > **New Terminal**. |
 | `docker compose ps` lists nothing, or services aren't `(healthy)`; the browser can't connect | The lab isn't running. It doesn't start on its own when the codespace is created, and may not be running after the codespace has been stopped. | Run `docker compose up -d --wait`, then `scripts/status.sh`. If that fails, `scripts/test.sh --fresh` rebuilds everything from scratch. |
 | A login sends you to an `*.app.github.dev` address, or starts there and fails | You opened the app through the codespace's forwarded link in the browser tab, not through `localhost`. | Open the codespace in desktop VS Code ([step 2](#2-open-it-in-desktop-vs-code)) and use `https://localhost:<port>` in your own browser. |
