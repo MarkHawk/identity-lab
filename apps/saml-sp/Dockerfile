@@ -41,13 +41,14 @@ RUN apt-get update \
 COPY --from=build /opt/venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 WORKDIR /app
-COPY app.py ./
+COPY app.py accesslog.py ./
 COPY templates ./templates
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8181
 # --timeout 0: the clock-skew scenario jumps the wall clock; gunicorn's
 # worker heartbeat must not mistake that for a hung worker.
+# Access log through accesslog.py: one-time login values are masked.
 CMD ["gunicorn", "--bind", "0.0.0.0:8181", \
      "--certfile", "/etc/idlab/tls.crt", "--keyfile", "/etc/idlab/tls.key", \
      "--workers", "1", "--threads", "4", "--timeout", "0", \
-     "--access-logfile", "-", "app:app"]
+     "--access-logfile", "-", "--logger-class", "accesslog.MaskingLogger", "app:app"]

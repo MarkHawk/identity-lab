@@ -20,7 +20,7 @@
 # blast radius still logging in (where a scenario names one), any extra check
 # the scenario defines (scenario_also_check), fix (twice),
 # detected healthy, and a successful login again; last, that no secret
-# from .env appears in any container's log. Failed checks don't stop the run; the exit status
+# from .env and no authorisation code appears in any container's log. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/; values of secrets from .env
 # are replaced with <redacted> in test.log.
@@ -147,15 +147,20 @@ print("reached Keycloak without the proxy")' 2>&1)"; then
   echo "$out"
   grep -qF "Failed to resolve 'keycloak'" <<<"$out" || { echo "expected: Failed to resolve 'keycloak'"; return 1; }
 }
+# An unmasked code= query value, or a Keycloak authorisation code anywhere
+# (<uuid>.<session id>.<uuid>). The apps' and the proxy's logs mask them.
+AUTH_CODE_RE='[?&]code=[^*&[:space:]"]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9_-]+\.[0-9a-f]{8}-'
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" logs_free_of_secrets
-logs_free_of_secrets() { # no value of a secret from .env in any service's log
-  local logs v n=0
+logs_free_of_secrets() { # no secret from .env and no authorisation code in any service's log
+  local logs v n=0 codes
   logs="$(compose logs --no-log-prefix 2>&1)"
   for v in "${SECRETS[@]}"; do
     if grep -qF -- "$v" <<<"$logs"; then n=$((n + 1)); fi
   done
+  codes="$(grep -cE -- "$AUTH_CODE_RE" <<<"$logs" || true)"
   echo "checked ${#SECRETS[@]} secret values against $(wc -l <<<"$logs") log lines: $n found"
-  (( n == 0 ))
+  echo "log lines with an authorisation code: $codes"
+  (( n == 0 && codes == 0 ))
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
@@ -267,7 +272,7 @@ done
 
 # --- Secrets ----------------------------------------------------------------------
 log "secrets"
-check "secrets: no value from .env in any container's log" logs_free_of_secrets
+check "secrets: no value from .env and no authorisation code in any container's log" logs_free_of_secrets
 
 # --- Summary ----------------------------------------------------------------------
 echo

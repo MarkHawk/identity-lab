@@ -5,10 +5,11 @@ ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 WORKDIR /app
-COPY app.py ./
+COPY app.py accesslog.py ./
 COPY templates ./templates
 EXPOSE 8182
+# Access log through accesslog.py: one-time login values are masked.
 CMD ["gunicorn", "--bind", "0.0.0.0:8182", \
      "--certfile", "/etc/idlab/tls.crt", "--keyfile", "/etc/idlab/tls.key", \
      "--workers", "1", "--threads", "4", \
-     "--access-logfile", "-", "app:app"]
+     "--access-logfile", "-", "--logger-class", "accesslog.MaskingLogger", "app:app"]
