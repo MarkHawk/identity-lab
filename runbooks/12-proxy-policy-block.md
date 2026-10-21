@@ -31,7 +31,13 @@ Squid's access log:
 1792571430.538      0 172.30.183.3 TCP_DENIED/403 3331 CONNECT keycloak:8180 - HIER_NONE/- text/html
 ```
 
-`TCP_DENIED/403` with `HIER_NONE/-`: refused by the proxy's own rules, without contacting Keycloak, and answered in 0 ms.
+`TCP_DENIED/403` with `HIER_NONE/-`: refused by the proxy's own rules, without contacting Keycloak, and answered in 0 ms. Sometimes the same refusal is logged as
+
+```
+1792574017.903      2 172.30.183.3 TCP_DENIED_ABORTED/403 293 CONNECT keycloak:8180 - HIER_NONE/- text/html
+```
+
+`_ABORTED` means the client hung up before Squid had sent the whole error page (293 bytes instead of 3331). Python's requests reads the status line of a refused CONNECT and closes the connection, so whether Squid finishes writing first is a race. It's the same refusal; search for both forms.
 
 How customers describe it: *"The IdP is blocking us."* It isn't: the IdP never received the request.
 
@@ -45,7 +51,7 @@ scripts/status.sh
 #  proxy-policy-block             broken   policy.conf: acl blocked_sites dstdomain keycloak .unapproved.example http_access deny CONNECT blocked_sites (keycloak is the IdP the RP needs)
 
 # The proxy's access log: refusals for the IdP
-docker compose logs squid | grep -E 'TCP_DENIED/403 .* keycloak'
+docker compose logs squid | grep -E 'TCP_DENIED(_ABORTED)?/403 .* keycloak'
 
 # Ask the proxy yourself, from the app's container, and read its answer
 docker compose exec oidc-rp-egress python -c "

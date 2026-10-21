@@ -12,7 +12,7 @@ SCENARIO_APP=oidc-egress
 SCENARIO_UNAFFECTED="oidc alice"
 SCENARIO_EXPECT="Tunnel connection failed: 407 Proxy Authentication Required"
 SCENARIO_SEEN_AT="on the app's \"OIDC login failed\" page, after the password (or straight after \"Log in\" if the app restarted since its last login)"
-SCENARIO_LOG='squid TCP_DENIED/407 [0-9]+ CONNECT keycloak:8180'
+SCENARIO_LOG='squid TCP_DENIED(_ABORTED)?/407 [0-9]+ CONNECT keycloak:8180'
 
 _par_file=auth.conf
 

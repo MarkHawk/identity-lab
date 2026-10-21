@@ -57,7 +57,7 @@ scripts/status.sh
 docker compose logs oidc-rp-egress | grep oidc_login_failed
 
 # The proxy's access log: who was refused, for what
-docker compose logs squid | grep -E 'TCP_DENIED/407'
+docker compose logs squid | grep -E 'TCP_DENIED(_ABORTED)?/407'
 #  ... 172.30.183.3 TCP_DENIED/407 3413 CONNECT keycloak:8180 - HIER_NONE/- text/html
 
 # The app's proxy settings, as its process sees them
