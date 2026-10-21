@@ -4,6 +4,8 @@
 
 A self-contained identity lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, two sample apps (one SAML, one OIDC), an nginx reverse proxy in front of Keycloak and a second copy of each app, a Squid egress proxy that a third copy of the OIDC app must use to reach Keycloak, and a FreeRADIUS server with a NAS that authenticates the same directory users, all run in Docker Compose. One-command scenarios reproduce real single sign-on and network login failures, and each scenario has a support-style runbook for diagnosing and fixing it.
 
+**[Walkthrough: one incident, every tool](docs/walkthrough.md)** follows one support ticket from the first message to the fix, with identity-lab, token-inspector, identity-support-splunk and rate-limit-probe.
+
 ## The problem this solves
 
 When enterprise SSO breaks, the support engineer usually sees only the customer's description: *"SSO stopped working for everyone"*. The cause is buried in signed XML, token claims, certificates, clocks and two sets of logs owned by different teams.
@@ -394,6 +396,7 @@ scripts/                     setup, pin-idp-cert, break, fix, status, test, lib
 tests/                       Playwright image and e2e.py
 runbooks/                    one support runbook per scenario
 docs/codespaces.md           step-by-step guide to running the lab in GitHub Codespaces
+docs/walkthrough.md          one support ticket from first message to fix, using the lab and its tools
 CHANGELOG.md                 what each phase added, and why upgrading needs setup.sh then test.sh --fresh
 ```
 
