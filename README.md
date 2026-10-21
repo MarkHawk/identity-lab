@@ -89,7 +89,7 @@ flowchart LR
 **Prerequisites:** Linux with Docker Engine and Compose v2, plus `bash`, `openssl`, `curl` and `jq`. It uses host ports 8180–8186.
 
 ```bash
-git clone <this repo> identity-lab && cd identity-lab
+git clone https://github.com/MarkHawk/identity-lab && cd identity-lab
 
 scripts/setup.sh                 # CA, certificates and random secrets -> .env and certs/ (prints no secrets)
                                  # set LAB_HOST=localhost first if you have no DNS name for this machine
@@ -98,12 +98,6 @@ scripts/pin-idp-cert.sh          # "onboard" the SAML SP: trust the IdP's curren
 scripts/status.sh                # service health and the live state of every scenario
 docker compose exec nas nas-auth dave   # a RADIUS login from the NAS; enter the demo password -> "nas: Access-Accept"
 ```
-
-**Upgrading a lab from before the LDAP directory or RADIUS was added?** Run `scripts/setup.sh` (it adds the new secrets and certificate to your existing `.env` and `certs/`), then `scripts/test.sh --fresh`. The LDAP federation is created at realm import, which only happens when the Keycloak database is new, and the directory's `radius-svc` account is created when the directory is first seeded. `--fresh` deletes the Keycloak, LDAP and NAS volumes.
-
-**Upgrading a lab from before the reverse proxy was added?** Run `scripts/setup.sh` (it adds the proxy's ports and the `oidc-rp-proxied` client secret to your existing `.env`, reissues the TLS certificate with the name `proxy`, and writes the proxy's settings to `.state/proxy/`), then `scripts/test.sh --fresh`. Keycloak's clients for the apps behind the proxy are created at realm import, which only happens when the Keycloak database is new. `--fresh` deletes the lab's volumes: the Keycloak database, the directory and the NAS's secret.
-
-**Upgrading a lab from before the egress proxy was added?** Run `scripts/setup.sh` (it adds port 8186, the `oidc-rp-egress` client secret and the egress proxy's password to your existing `.env`, creates the proxy's own inspection CA in `certs/`, and writes the egress proxy's settings to `.state/squid/` and `.state/oidc-rp-egress/`), then `scripts/test.sh --fresh`. Keycloak's `oidc-rp-egress` client is created at realm import, which only happens when the Keycloak database is new. The first build compiles Squid, which takes about 8 minutes on 4 cores. `--fresh` deletes the lab's volumes: the Keycloak database, the directory and the NAS's secret.
 
 ### Open the apps: HTTPS only
 
@@ -296,6 +290,27 @@ The proxy scenarios change one setting file each in `.state/proxy/` (healthy def
 
 The egress proxy scenarios 11 to 13 work the same way on Squid: one include file each in `.state/squid/` (healthy defaults in `squid/defaults/`), applied with `squid -k parse && squid -k reconfigure`. `proxy-bypass` changes the app instead: its `HTTPS_PROXY` and `NO_PROXY` are in `.state/oidc-rp-egress/proxy.env`, and as with any environment variable the container is recreated to pick them up. For 11 to 13 the app fails after the password, at the token request, because it already has Keycloak's discovery document; if it has restarted since its last login, the same error appears straight after **Log in**.
 
+## Scenarios and the tools that help
+
+Other tools of mine that help diagnose these scenarios:
+
+| Scenario | Runbook | What the user sees | Tool that helps |
+|---|---|---|---|
+| `expired-signing-cert` | [01-expired-signing-cert](runbooks/01-expired-signing-cert.md) | SAML SP: `IdP signing certificate expired on <date>` | [token-inspector](https://github.com/MarkHawk/token-inspector), [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `clock-skew` | [02-clock-skew](runbooks/02-clock-skew.md) | SAML SP: `Could not validate timestamp: expired. Check system clock.` | [token-inspector](https://github.com/MarkHawk/token-inspector), [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `redirect-uri-mismatch` | [03-redirect-uri-mismatch](runbooks/03-redirect-uri-mismatch.md) | Keycloak: `Invalid parameter: redirect_uri` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `ldap-bind-failure` | [04-ldap-bind-failure](runbooks/04-ldap-bind-failure.md) | Keycloak (LDAP users): `Unexpected error when handling authentication request to identity provider.` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `radius-shared-secret-mismatch` | [05-radius-shared-secret-mismatch](runbooks/05-radius-shared-secret-mismatch.md) | NAS: `RADIUS server not responding` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `proxy-bad-gateway` | [06-proxy-bad-gateway](runbooks/06-proxy-bad-gateway.md) | nginx: `502 Bad Gateway` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `proxy-gateway-timeout` | [07-proxy-gateway-timeout](runbooks/07-proxy-gateway-timeout.md) | nginx: `504 Gateway Time-out` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `proxy-rate-limit` | [08-proxy-rate-limit](runbooks/08-proxy-rate-limit.md) | nginx: `429 Too Many Requests` | [rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe), [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `proxy-forwarded-headers` | [09-proxy-forwarded-headers](runbooks/09-proxy-forwarded-headers.md) | Keycloak: `Invalid Request` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `proxy-header-too-large` | [10-proxy-header-too-large](runbooks/10-proxy-header-too-large.md) | nginx: `502 Bad Gateway` instead of the login page | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
+| `proxy-auth-required` | [11-proxy-auth-required](runbooks/11-proxy-auth-required.md) | App: `Tunnel connection failed: 407 Proxy Authentication Required` | None yet |
+| `proxy-policy-block` | [12-proxy-policy-block](runbooks/12-proxy-policy-block.md) | App: `Tunnel connection failed: 403 Forbidden` | None yet |
+| `proxy-tls-interception` | [13-proxy-tls-interception](runbooks/13-proxy-tls-interception.md) | App: `certificate verify failed: self-signed certificate in certificate chain` | None yet |
+| `proxy-bypass` | [14-proxy-bypass](runbooks/14-proxy-bypass.md) | App: `Failed to resolve 'keycloak'` | None yet |
+
 ## Tests
 
 ```bash
@@ -375,6 +390,7 @@ scripts/                     setup, pin-idp-cert, break, fix, status, test, lib
 tests/                       Playwright image and e2e.py
 runbooks/                    one support runbook per scenario
 docs/codespaces.md           step-by-step guide to running the lab in GitHub Codespaces
+CHANGELOG.md                 what each phase added, and why upgrading needs setup.sh then test.sh --fresh
 ```
 
 ## Design decisions
@@ -441,6 +457,17 @@ docs/codespaces.md           step-by-step guide to running the lab in GitHub Cod
 - **FreeRADIUS's TLS warning.** At start, FreeRADIUS warns that `libldap is using GnuTLS, while FreeRADIUS is using OpenSSL`. That's how Ubuntu builds the image's libldap. LDAPS to the directory works and is tested, but the warning is real for production; there, use a libldap built against OpenSSL.
 - **RADIUS is PAP only.** The NAS sends PAP over the internal network. There's no EAP (802.1X), RadSec or accounting scenario.
 - **Not production configuration.** Demo users share one password, the directory and the RADIUS server each run as a single server with no replication or failover, Keycloak's bootstrap admin is used for the scenario scripts, and the SAML SP doesn't do Single Logout.
+
+## Upgrading an existing lab
+
+After pulling a new version, run:
+
+```bash
+scripts/setup.sh          # adds any new secrets, certificates and settings; keeps your existing secrets
+scripts/test.sh --fresh   # rebuilds the lab from the repository and .env, and proves it works
+```
+
+`--fresh` deletes the lab's volumes: the Keycloak database (with anything you changed in the admin console), the LDAP directory and the NAS's copy of the RADIUS secret. They're re-created from the realm import, the seed LDIF and `.env`. Your `.env`, `certs/` and `.state/` are kept. [CHANGELOG.md](CHANGELOG.md) lists what each phase added and why it needs these steps.
 
 ## How this was built
 
