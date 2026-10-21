@@ -2,8 +2,9 @@
 # apps, and a FreeRADIUS server with a NAS that authenticates against the directory.
 # Run scripts/setup.sh first; it generates .env and certs/.
 # An nginx reverse proxy publishes Keycloak and a second copy of each app on
-# 8183-8185. Host ports are restricted to 8180-8189. LDAP and RADIUS publish
-# no host port.
+# 8183-8185. A third copy of the OIDC RP (8186) reaches Keycloak only through
+# a Squid egress proxy. Host ports are restricted to 8180-8189. LDAP, RADIUS
+# and Squid publish no host port.
 
 name: identity-lab
 
@@ -15,6 +16,7 @@ x-lab-env: &lab-env
   PROXY_KC_PORT: ${PROXY_KC_PORT:?run scripts/setup.sh}
   PROXY_SAML_SP_PORT: ${PROXY_SAML_SP_PORT}
   PROXY_OIDC_RP_PORT: ${PROXY_OIDC_RP_PORT}
+  EGRESS_OIDC_RP_PORT: ${EGRESS_OIDC_RP_PORT:?run scripts/setup.sh}
 
 services:
   postgres:
@@ -161,6 +163,7 @@ services:
       DEMO_PASSWORD: ${DEMO_PASSWORD}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       OIDC_PROXIED_CLIENT_SECRET: ${OIDC_PROXIED_CLIENT_SECRET:?run scripts/setup.sh}
+      OIDC_EGRESS_CLIENT_SECRET: ${OIDC_EGRESS_CLIENT_SECRET:?run scripts/setup.sh}
       SP_SIGNING_CERT: ${SP_SIGNING_CERT}
       LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD}
     volumes:
@@ -285,6 +288,7 @@ services:
       KC_PORT: ${PROXY_KC_PORT}
       OIDC_RP_PORT: ${PROXY_OIDC_RP_PORT}
       OIDC_CLIENT_ID: oidc-rp-proxied
+      OIDC_RP_SERVICE: oidc-rp-proxied
       OIDC_CLIENT_SECRET: ${OIDC_PROXIED_CLIENT_SECRET}
       # Back channel through the proxy too, so tokens carry the proxy's issuer.
       OIDC_BACKCHANNEL_BASE: https://proxy:8183
@@ -341,6 +345,71 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Squid egress proxy (squid/squid.conf), like a corporate forward proxy.
+  # On the internal egress network with oidc-rp-egress, and on the default
+  # network to reach Keycloak. The settings the egress scenarios change are
+  # in .state/squid/ (healthy defaults in squid/defaults/, copied by
+  # setup.sh); scenarios rewrite them and run `squid -k reconfigure`.
+  squid:
+    build: ./squid
+    image: identity-lab/squid:local
+    user: "${LAB_UID}:0"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      # Hashed into the proxy's password file at start, then unset.
+      EGRESS_PROXY_PASSWORD: ${EGRESS_PROXY_PASSWORD:?run scripts/setup.sh}
+    volumes:
+      - ./.state/squid:/etc/squid/idlab:ro
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/squid-ca.crt:/etc/idlab/squid-ca.crt:ro
+      - ./certs/squid-ca.key:/etc/idlab/squid-ca.key:ro
+    networks:
+      - default
+      - egress
+    healthcheck:
+      # Squid is running and answers signals; says nothing about its policy,
+      # so it stays healthy while a scenario is broken.
+      test: ["CMD", "squid", "-k", "check", "-f", "/etc/squid/squid.conf"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # Third copy of the OIDC RP, on a network whose only way out is Squid: its
+  # back channel (discovery, token, userinfo, JWKS) goes to
+  # https://keycloak:8180 as a CONNECT through the proxy, set by HTTPS_PROXY
+  # and NO_PROXY in .state/oidc-rp-egress/proxy.env. The browser reaches it
+  # on 8186 and Keycloak directly on 8180, like the direct app.
+  oidc-rp-egress:
+    build: ./apps/oidc-rp
+    image: identity-lab/oidc-rp:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      squid:
+        condition: service_healthy
+    env_file: ./.state/oidc-rp-egress/proxy.env
+    environment:
+      <<: *oidc-rp-env
+      OIDC_RP_PORT: ${EGRESS_OIDC_RP_PORT}
+      OIDC_CLIENT_ID: oidc-rp-egress
+      OIDC_RP_SERVICE: oidc-rp-egress
+      OIDC_CLIENT_SECRET: ${OIDC_EGRESS_CLIENT_SECRET}
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+    networks:
+      - egress
+      - egress-edge
+    ports:
+      - "${EGRESS_OIDC_RP_PORT}:8182"
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
   # Headless browser used by scripts/test.sh (docker compose run --rm tests ...).
   tests:
     profiles: ["test"]
@@ -378,3 +447,16 @@ networks:
     ipam:
       config:
         - subnet: 172.30.182.0/24
+  # oidc-rp-egress and Squid. Internal, so the RP's only way to Keycloak is
+  # the proxy, as on a server network with no direct route out. Fixed subnet
+  # because squid.conf allows clients by source network; change both if it
+  # clashes.
+  egress:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.183.0/24
+  # Only carries oidc-rp-egress's published port (Docker can't publish a port
+  # from an internal network). Nothing else is on it, so it is no route to
+  # Keycloak.
+  egress-edge:

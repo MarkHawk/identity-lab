@@ -303,6 +303,42 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "oidc-rp-egress",
+      "name": "OIDC RP sample app, calling Keycloak through the egress proxy",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${OIDC_EGRESS_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://${LAB_HOST}:${EGRESS_OIDC_RP_PORT}",
+      "baseUrl": "/",
+      "redirectUris": ["https://${LAB_HOST}:${EGRESS_OIDC_RP_PORT}/auth/callback"],
+      "webOrigins": ["https://${LAB_HOST}:${EGRESS_OIDC_RP_PORT}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://${LAB_HOST}:${EGRESS_OIDC_RP_PORT}/"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles in ID token",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     }
   ]
 }
