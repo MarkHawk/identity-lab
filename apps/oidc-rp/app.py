@@ -17,6 +17,7 @@ import threading
 import time
 from collections import OrderedDict
 
+import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, redirect, render_template, request, session, url_for
@@ -42,6 +43,8 @@ BACKCHANNEL_ENDPOINTS = ("token_endpoint", "userinfo_endpoint", "jwks_uri")
 # request; only the copy behind the reverse proxy has the file
 # (scenarios/proxy-gateway-timeout.sh).
 DELAY_FILE = os.environ.get("OIDC_RP_DELAY_FILE")
+# Compose service name, for the log hint on the error page.
+SERVICE = os.environ.get("OIDC_RP_SERVICE", "oidc-rp")
 
 app = Flask(__name__)
 app.secret_key = os.environ["OIDC_RP_SECRET_KEY"]
@@ -131,7 +134,7 @@ class LoginError(Exception):
 @app.errorhandler(LoginError)
 def login_error(exc):
     log.warning(kv(event="oidc_login_failed", reason=exc.reason, error=exc.message, detail=exc.detail or ""))
-    return render_template("error.html", error=exc, rp_clock=now_utc()), exc.status
+    return render_template("error.html", error=exc, rp_clock=now_utc(), service=SERVICE), exc.status
 
 
 @app.get("/healthz")
@@ -148,7 +151,12 @@ def index():
 @app.get("/login")
 def login():
     log.info(kv(event="oidc_authorize_redirect", redirect_uri=REDIRECT_URI))
-    return oauth.keycloak.authorize_redirect(REDIRECT_URI)
+    try:
+        # Loads discovery on first use (Authlib then keeps it for the life of
+        # the process), so a broken back channel can show up here.
+        return oauth.keycloak.authorize_redirect(REDIRECT_URI)
+    except requests.RequestException as exc:
+        raise LoginError("backchannel_failed", str(exc), f"{type(exc).__name__} fetching {DISCOVERY_URL}", status=502)
 
 
 @app.get("/auth/callback")
@@ -166,6 +174,9 @@ def callback():
         time.sleep(delay)
     try:
         token = oauth.keycloak.authorize_access_token()
+    except requests.RequestException as exc:
+        # The back channel itself failed (proxy, DNS, TLS), not the IdP's answer.
+        raise LoginError("backchannel_failed", str(exc), type(exc).__name__, status=502)
     except AuthlibBaseError as exc:
         raise LoginError(exc.error or "oauth_error", exc.description or str(exc), type(exc).__name__)
     except Exception as exc:  # noqa: BLE001 - e.g. ID token claim validation (joserfc)

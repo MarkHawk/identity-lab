@@ -6,6 +6,8 @@
 
 saml-proxy and oidc-proxy are the copies of the apps behind the nginx
 reverse proxy; their whole login, Keycloak included, goes through it.
+oidc-egress is the OIDC RP whose own calls to Keycloak go through the Squid
+egress proxy; the browser reaches it and Keycloak directly.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
@@ -36,6 +38,7 @@ APPS = {
     "oidc": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "saml-proxy": (url("PROXY_SAML_SP_PORT"), url("PROXY_KC_PORT")),
     "oidc-proxy": (url("PROXY_OIDC_RP_PORT"), url("PROXY_KC_PORT")),
+    "oidc-egress": (url("EGRESS_OIDC_RP_PORT"), url("KC_PORT")),
 }
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
@@ -87,9 +90,17 @@ def flow(page, app):
     if page.locator("#login").count() == 0:
         return f"{app}:error", page.inner_text("body")
     page.click("#login")
-    # Either Keycloak's login form, or a Keycloak error page (e.g. a bad
-    # redirect_uri is rejected before any form is shown).
-    page.wait_for_url(re.compile("^" + re.escape(kc)), timeout=15000)
+    # Either Keycloak's login form, a Keycloak error page (e.g. a bad
+    # redirect_uri is rejected before any form is shown), or the app's own
+    # error page when it can't start the login (e.g. it couldn't fetch
+    # Keycloak's discovery document through the egress proxy).
+    deadline = time.monotonic() + 15
+    while not page.url.startswith(kc + "/"):
+        if page.url.startswith(base + "/") and app_error_shown(page):
+            return f"{app}:error", page.inner_text("body")
+        if time.monotonic() > deadline:
+            raise PWTimeout(f"no Keycloak page after Log in; still at {page.url}")
+        page.wait_for_timeout(250)
     page.wait_for_load_state("load")
     if page.locator("#username").count() == 0:
         return "keycloak:error", page.inner_text("body")
@@ -104,6 +115,13 @@ def flow(page, app):
     if page.locator("#login-ok").count():
         return f"{app}:login-ok", page.inner_text("body")
     return f"{app}:error", page.inner_text("body")
+
+
+def app_error_shown(page):
+    try:
+        return page.locator("#error-message").count() > 0
+    except Exception:  # noqa: BLE001 - the page is mid-navigation; look again
+        return False
 
 
 def excerpt(text, n=600):
