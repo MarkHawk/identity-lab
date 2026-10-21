@@ -17,7 +17,8 @@
 # wrong password (rejected); then for every scenario: break (twice), detected
 # as broken, the expected error in the browser (or in the NAS's output, for
 # RADIUS scenarios), the expected log line, a user outside the
-# blast radius still logging in (where a scenario names one), fix (twice),
+# blast radius still logging in (where a scenario names one), any extra check
+# the scenario defines (scenario_also_check), fix (twice),
 # detected healthy, and a successful login again; last, that no secret
 # from .env appears in any container's log. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
@@ -254,6 +255,9 @@ for name in $(scenario_names); do
   if [[ -n "${SCENARIO_UNAFFECTED:-}" ]]; then
     read -r ua_app ua_user <<<"$SCENARIO_UNAFFECTED"
     check "$name: $ua_user still logs in to $ua_app while broken" login_as "$ua_user" "$ua_app" --expect ok
+  fi
+  if [[ -n "${SCENARIO_ALSO:-}" ]]; then
+    check "$name: $SCENARIO_ALSO" scenario_also_check
   fi
   check "$name: fix"                           "$LAB_ROOT/scripts/fix.sh" "$name"
   check "$name: detected as healthy"           expect_state "$name" healthy

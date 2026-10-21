@@ -138,6 +138,7 @@ REALM=idlab
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
 #   SCENARIO_USER      optional: demo user who sees the failure (default alice)
 #   SCENARIO_UNAFFECTED optional: "<app> <user>" who must still log in while broken
+#   SCENARIO_ALSO      optional: what scenario_also_check proves; test.sh runs it while broken
 #   scenario_detect    print "broken|healthy|unknown<TAB>detail", from live lab state
 #   scenario_break / scenario_fix
 SCENARIOS_DIR="$LAB_ROOT/scenarios"
@@ -151,8 +152,8 @@ load_scenario() {
   local name="$1"
   [[ "$name" =~ ^[a-z0-9-]+$ && -f "$SCENARIOS_DIR/$name.sh" ]] \
     || die "unknown scenario '$name' (available: $(scenario_names | tr '\n' ' '))"
-  unset -f scenario_detect scenario_break scenario_fix
-  unset SCENARIO_USER SCENARIO_UNAFFECTED
+  unset -f scenario_detect scenario_break scenario_fix scenario_also_check
+  unset SCENARIO_USER SCENARIO_UNAFFECTED SCENARIO_ALSO
   # shellcheck disable=SC1090
   source "$SCENARIOS_DIR/$name.sh"
 }
@@ -263,7 +264,9 @@ proxy_running() { [[ -n "$(compose ps -q --status running proxy 2>/dev/null)" ]]
 
 # Directives in an include file as the proxy sees it (comments and blank
 # lines dropped, whitespace squeezed), one per line.
-_proxy_directives() { grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' | tr -s ' \t' ' '; }
+# A file of comments only (some healthy Squid defaults) has no directives:
+# grep's "no lines" status 1 is not an error.
+_proxy_directives() { { grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' || (( $? == 1 )); } | tr -s ' \t' ' '; }
 proxy_conf_live()    { compose exec -T proxy cat "/etc/nginx/idlab/$1" | _proxy_directives; }
 proxy_conf_default() { _proxy_directives <"$PROXY_DEFAULTS_DIR/$1"; }
 
@@ -292,12 +295,58 @@ proxy_conf_restore() { proxy_conf_set "$1" <"$PROXY_DEFAULTS_DIR/$1"; }
 # proxy_conf_detect <file> <broken-detail> -- healthy when the live file has the
 # default's directives, otherwise broken.
 proxy_conf_detect() {
-  local live
   proxy_running || { printf 'unknown\tthe proxy container is not running\n'; return; }
-  live="$(proxy_conf_live "$1" 2>/dev/null)" || { printf 'unknown\tcould not read %s in the proxy\n' "$1"; return; }
-  if [[ "$live" == "$(proxy_conf_default "$1")" ]]; then
-    printf 'healthy\t%s: %s\n' "$1" "$(tr '\n' ' ' <<<"$live" | sed 's/ $//')"
+  _conf_detect proxy_conf_live proxy_conf_default "$@"
+}
+
+# _conf_detect <live-fn> <default-fn> <file> <broken-detail>
+_conf_detect() {
+  local live shown
+  live="$("$1" "$3" 2>/dev/null)" || { printf 'unknown\tcould not read %s in the container\n' "$3"; return; }
+  shown="$(tr '\n' ' ' <<<"$live" | sed 's/ $//')"
+  if [[ "$live" == "$("$2" "$3")" ]]; then
+    printf 'healthy\t%s: %s\n' "$3" "${shown:-(no directives)}"
   else
-    printf 'broken\t%s: %s (%s)\n' "$1" "$(tr '\n' ' ' <<<"$live" | sed 's/ $//')" "$2"
+    printf 'broken\t%s: %s (%s)\n' "$3" "${shown:-(no directives)}" "$4"
   fi
+}
+
+# --- Egress proxy (Squid) ------------------------------------------------------------
+# The proxy-* egress scenarios each own one include file in .state/squid/
+# (mounted at /etc/squid/idlab/ in squid; healthy defaults in squid/defaults/),
+# except proxy-bypass, which owns the RP's proxy settings in
+# .state/oidc-rp-egress/proxy.env.
+SQUID_STATE_DIR="$STATE_DIR/squid"
+SQUID_DEFAULTS_DIR="$LAB_ROOT/squid/defaults"
+
+squid_running() { [[ -n "$(compose ps -q --status running squid 2>/dev/null)" ]]; }
+squid_conf_live()    { compose exec -T squid cat "/etc/squid/idlab/$1" | _proxy_directives; }
+squid_conf_default() { _proxy_directives <"$SQUID_DEFAULTS_DIR/$1"; }
+
+# squid_conf_set <file> -- replace an include file with stdin, then check and
+# reconfigure Squid (`squid -k parse && squid -k reconfigure`), as an admin
+# would. If Squid rejects the result, the previous file is put back.
+squid_conf_set() {
+  local f="$SQUID_STATE_DIR/$1" tmp
+  tmp="$(mktemp "$SQUID_STATE_DIR/.$1.XXXXXX")"
+  cat >"$tmp"; chmod 644 "$tmp"
+  cp -p "$f" "$f.prev"
+  mv "$tmp" "$f"
+  # parse prints every line it reads; only show it when it fails.
+  # shellcheck disable=SC2016  # expanded by the squid container's shell, not this one
+  if ! compose exec -T squid sh -c 'out="$(squid -k parse -f /etc/squid/squid.conf 2>&1)" || { echo "$out" >&2; exit 1; }; out="$(squid -k reconfigure -f /etc/squid/squid.conf 2>&1)" || { echo "$out" >&2; exit 1; }'; then
+    mv "$f.prev" "$f"
+    die "squid rejected the new $1; the previous file is back in place"
+  fi
+  rm -f "$f.prev"
+  sleep 2   # reconfigure is asynchronous: let Squid reopen its port
+}
+
+# squid_conf_restore <file> -- back to the healthy default.
+squid_conf_restore() { squid_conf_set "$1" <"$SQUID_DEFAULTS_DIR/$1"; }
+
+# squid_conf_detect <file> <broken-detail> -- as proxy_conf_detect, for Squid.
+squid_conf_detect() {
+  squid_running || { printf 'unknown\tthe squid container is not running\n'; return; }
+  _conf_detect squid_conf_live squid_conf_default "$@"
 }
