@@ -350,3 +350,32 @@ squid_conf_detect() {
   squid_running || { printf 'unknown\tthe squid container is not running\n'; return; }
   _conf_detect squid_conf_live squid_conf_default "$@"
 }
+
+# The OIDC RP's own proxy settings (proxy-bypass). They are environment
+# variables, so a change means recreating the container, as redeploying the
+# app would; nothing else is restarted.
+EGRESS_ENV_FILE="$STATE_DIR/oidc-rp-egress/proxy.env"
+EGRESS_ENV_DEFAULT="$SQUID_DEFAULTS_DIR/oidc-rp-egress.env"
+
+egress_rp_running() { [[ -n "$(compose ps -q --status running oidc-rp-egress 2>/dev/null)" ]]; }
+# As the app's process sees them, in the env file's format. (The argument is
+# unused; _conf_detect passes the file name.)
+# shellcheck disable=SC2016  # expanded by the RP container's shell, not this one
+egress_env_live()    { compose exec -T oidc-rp-egress sh -c 'printf "HTTPS_PROXY=%s\nNO_PROXY=%s\n" "${HTTPS_PROXY-}" "${NO_PROXY-}"'; }
+egress_env_default() { _proxy_directives <"$EGRESS_ENV_DEFAULT"; }
+
+# egress_env_set -- replace the RP's proxy settings with stdin and recreate it.
+egress_env_set() {
+  local tmp out
+  tmp="$(mktemp "${EGRESS_ENV_FILE%/*}/.proxy.env.XXXXXX")"
+  cat >"$tmp"; chmod 644 "$tmp"
+  mv "$tmp" "$EGRESS_ENV_FILE"
+  out="$(compose up -d --no-deps --wait --wait-timeout 90 oidc-rp-egress 2>&1)" \
+    || { echo "$out" >&2; die "oidc-rp-egress did not come back healthy"; }
+}
+egress_env_restore() { egress_env_set <"$EGRESS_ENV_DEFAULT"; }
+
+egress_env_detect() {
+  egress_rp_running || { printf 'unknown\tthe oidc-rp-egress container is not running\n'; return; }
+  _conf_detect egress_env_live egress_env_default proxy.env "$1"
+}
