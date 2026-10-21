@@ -22,6 +22,8 @@ from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, redirect, render_template, request, session, url_for
 
+from accesslog import mask
+
 LAB_HOST = os.environ["LAB_HOST"]
 RP_BASE = f"https://{LAB_HOST}:{os.environ['OIDC_RP_PORT']}"
 REDIRECT_URI = f"{RP_BASE}/auth/callback"
@@ -133,7 +135,9 @@ class LoginError(Exception):
 
 @app.errorhandler(LoginError)
 def login_error(exc):
-    log.warning(kv(event="oidc_login_failed", reason=exc.reason, error=exc.message, detail=exc.detail or ""))
+    # One-time values (state, code) are masked in the log, as in the access
+    # log; the error page still shows them to the user who hit the error.
+    log.warning(kv(event="oidc_login_failed", reason=exc.reason, error=mask(exc.message), detail=mask(exc.detail or "")))
     return render_template("error.html", error=exc, rp_clock=now_utc(), service=SERVICE), exc.status
 
 
