@@ -306,10 +306,14 @@ Other tools of mine that help diagnose these scenarios:
 | `proxy-rate-limit` | [08-proxy-rate-limit](runbooks/08-proxy-rate-limit.md) | nginx: `429 Too Many Requests` | [rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe), [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
 | `proxy-forwarded-headers` | [09-proxy-forwarded-headers](runbooks/09-proxy-forwarded-headers.md) | Keycloak: `Invalid Request` | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
 | `proxy-header-too-large` | [10-proxy-header-too-large](runbooks/10-proxy-header-too-large.md) | nginx: `502 Bad Gateway` instead of the login page | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) |
-| `proxy-auth-required` | [11-proxy-auth-required](runbooks/11-proxy-auth-required.md) | App: `Tunnel connection failed: 407 Proxy Authentication Required` | None yet |
-| `proxy-policy-block` | [12-proxy-policy-block](runbooks/12-proxy-policy-block.md) | App: `Tunnel connection failed: 403 Forbidden` | None yet |
-| `proxy-tls-interception` | [13-proxy-tls-interception](runbooks/13-proxy-tls-interception.md) | App: `certificate verify failed: self-signed certificate in certificate chain` | None yet |
-| `proxy-bypass` | [14-proxy-bypass](runbooks/14-proxy-bypass.md) | App: `Failed to resolve 'keycloak'` | None yet |
+| `proxy-auth-required` | [11-proxy-auth-required](runbooks/11-proxy-auth-required.md) | App: `Tunnel connection failed: 407 Proxy Authentication Required` | Splunk support planned |
+| `proxy-policy-block` | [12-proxy-policy-block](runbooks/12-proxy-policy-block.md) | App: `Tunnel connection failed: 403 Forbidden` | Splunk support planned |
+| `proxy-tls-interception` | [13-proxy-tls-interception](runbooks/13-proxy-tls-interception.md) | App: `certificate verify failed: self-signed certificate in certificate chain` | Splunk support planned |
+| `proxy-bypass` | [14-proxy-bypass](runbooks/14-proxy-bypass.md) | App: `Failed to resolve 'keycloak'` | Splunk support planned |
+
+- **[token-inspector](https://github.com/MarkHawk/token-inspector)** decodes a SAML response or JWT offline and explains the likely cause, such as an expired or rotated signing certificate (01) or clock skew (02).
+- **[rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe)** shows whether a 429 comes from the client retrying too early, or from the API's limit or headers being wrong (08).
+- **[identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk)** is a Splunk app that shows when each failure started, who is affected and the likely cause, with a link to the runbook (01 to 10).
 
 ## Tests
 
