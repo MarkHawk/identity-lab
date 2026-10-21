@@ -89,6 +89,20 @@ if [[ ! -f "$CERTS_DIR/ldap.crt" ]] \
   issue_cert "$CERTS_DIR/ldap" ldap "-1 hour" "+397 days" server "DNS:ldap"
 fi
 
+# --- Egress proxy interception CA ----------------------------------------------
+# Squid re-signs intercepted TLS with this CA in the proxy-tls-interception
+# scenario. It is deliberately separate from the lab CA, and nothing trusts it.
+if [[ ! -f "$CERTS_DIR/squid-ca.key" || ! -f "$CERTS_DIR/squid-ca.crt" ]]; then
+  log "creating the egress proxy's interception CA"
+  ( umask 077
+    openssl req -x509 -new -newkey rsa:2048 -nodes -sha256 -days 3650 \
+      -keyout "$CERTS_DIR/squid-ca.key" -out "$CERTS_DIR/squid-ca.crt" \
+      -subj "/O=identity-lab egress proxy/CN=identity-lab Egress Inspection CA" \
+      -addext "basicConstraints=critical,CA:TRUE" \
+      -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null )
+  chmod 644 "$CERTS_DIR/squid-ca.crt"
+fi
+
 # Containers run as the invoking user (LAB_UID), so keys can stay 0600.
 chmod 600 "$CERTS_DIR"/*.key
 
@@ -104,6 +118,15 @@ mkdir -p "$STATE_DIR/proxy"
 for f in "$LAB_ROOT"/proxy/defaults/*.conf; do
   [[ -f "$STATE_DIR/proxy/${f##*/}" ]] || install -m 644 "$f" "$STATE_DIR/proxy/${f##*/}"
 done
+
+# The egress proxy's scenario-owned settings (squid/defaults/*.conf), and the
+# proxy settings of the OIDC RP behind it (see scenarios/proxy-bypass.sh).
+mkdir -p "$STATE_DIR/squid" "$STATE_DIR/oidc-rp-egress"
+for f in "$LAB_ROOT"/squid/defaults/*.conf; do
+  [[ -f "$STATE_DIR/squid/${f##*/}" ]] || install -m 644 "$f" "$STATE_DIR/squid/${f##*/}"
+done
+[[ -f "$STATE_DIR/oidc-rp-egress/proxy.env" ]] \
+  || install -m 644 "$LAB_ROOT/squid/defaults/oidc-rp-egress.env" "$STATE_DIR/oidc-rp-egress/proxy.env"
 
 # --- .env ---------------------------------------------------------------------
 # Keep an existing secret, unless rotating.
@@ -134,6 +157,8 @@ OIDC_RP_PORT=8182
 PROXY_KC_PORT=8183
 PROXY_SAML_SP_PORT=8184
 PROXY_OIDC_RP_PORT=8185
+# The OIDC RP whose calls to Keycloak go through the Squid egress proxy.
+EGRESS_OIDC_RP_PORT=8186
 
 KC_ADMIN_USER=admin
 KC_ADMIN_PASSWORD=$(keep KC_ADMIN_PASSWORD "$(rand 32)")
@@ -142,6 +167,8 @@ DEMO_PASSWORD=$(keep DEMO_PASSWORD "$(rand 20)")
 OIDC_CLIENT_SECRET=$(keep OIDC_CLIENT_SECRET "$(rand 40)")
 # Client secret of oidc-rp-proxied, the OIDC RP behind the proxy.
 OIDC_PROXIED_CLIENT_SECRET=$(keep OIDC_PROXIED_CLIENT_SECRET "$(rand 40)")
+# Client secret of oidc-rp-egress, the OIDC RP behind the egress proxy.
+OIDC_EGRESS_CLIENT_SECRET=$(keep OIDC_EGRESS_CLIENT_SECRET "$(rand 40)")
 SAML_SP_SECRET_KEY=$(keep SAML_SP_SECRET_KEY "$(rand 48)")
 OIDC_RP_SECRET_KEY=$(keep OIDC_RP_SECRET_KEY "$(rand 48)")
 LDAP_ADMIN_PASSWORD=$(keep LDAP_ADMIN_PASSWORD "$(rand 32)")
@@ -149,6 +176,9 @@ LDAP_BIND_PASSWORD=$(keep LDAP_BIND_PASSWORD "$(rand 32)")
 RADIUS_LDAP_BIND_PASSWORD=$(keep RADIUS_LDAP_BIND_PASSWORD "$(rand 32)")
 # Shared secret between the FreeRADIUS server and the lab's NAS (the client).
 RADIUS_SECRET=$(keep RADIUS_SECRET "$(rand 32)")
+# Password of egress-svc, the account Squid asks for when proxy login is on
+# (scenarios/proxy-auth-required.sh). Hashed inside the Squid container.
+EGRESS_PROXY_PASSWORD=$(keep EGRESS_PROXY_PASSWORD "$(rand 32)")
 
 # Public certificate (not secret): Keycloak uses it to verify signed AuthnRequests.
 SP_SIGNING_CERT=$(cert_b64 "$CERTS_DIR/sp-signing.crt")
@@ -156,7 +186,7 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
   warn "demo user passwords, OIDC client secrets and LDAP passwords are only applied when the"
   warn "databases are created, and the RADIUS secret when the NAS volume is created."
@@ -165,6 +195,7 @@ if (( ROTATE )); then
 fi
 ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)"
 echo "    Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP)."
+echo "    The OIDC RP behind the egress proxy (Squid): :8186."
 echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."
