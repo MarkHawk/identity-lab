@@ -9,14 +9,17 @@
 #
 # Checks: service health and an LDAP bind as Keycloak's service account;
 # Keycloak's issuer directly and through the reverse proxy, and that it ignores
-# X-Forwarded-* headers that don't come from the proxy; a scripted browser
-# login to each app, directly and through the proxy, as a local user (alice)
-# and an LDAP user (dave); a RADIUS Access-Request from the NAS for dave (accepted) and with a
+# X-Forwarded-* headers that don't come from the proxy; that the OIDC RP
+# behind the Squid egress proxy has no route to Keycloak without it; a
+# scripted browser login to each app, directly, through the reverse proxy
+# and (OIDC) through the egress proxy, as a local user (alice) and an LDAP
+# user (dave), with the egress RP's back channel in Squid's log; a RADIUS Access-Request from the NAS for dave (accepted) and with a
 # wrong password (rejected); then for every scenario: break (twice), detected
 # as broken, the expected error in the browser (or in the NAS's output, for
 # RADIUS scenarios), the expected log line, a user outside the
 # blast radius still logging in (where a scenario names one), fix (twice),
-# detected healthy, and a successful login again. Failed checks don't stop the run; the exit status
+# detected healthy, and a successful login again; last, that no secret
+# from .env appears in any container's log. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/; values of secrets from .env
 # are replaced with <redacted> in test.log.
@@ -126,6 +129,33 @@ ldap_bind_ok() { # the by-hand test from runbook 04; the password goes in on std
   echo "$out"
   [[ "$out" == "dn:cn=keycloak-svc,ou=services,dc=idlab,dc=example" ]]
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" egress_no_direct_route
+egress_no_direct_route() { # the egress RP calls Keycloak with its proxy settings ignored
+  local out
+  # shellcheck disable=SC2016  # Python, not shell
+  if out="$(compose exec -T oidc-rp-egress python -c '
+import requests, sys
+s = requests.Session(); s.trust_env = False
+try:
+    s.get("https://keycloak:8180/realms/idlab", timeout=5)
+except requests.RequestException as e:
+    print(type(e).__name__, e); sys.exit(1)
+print("reached Keycloak without the proxy")' 2>&1)"; then
+    echo "$out"; return 1
+  fi
+  echo "$out"
+  grep -qF "Failed to resolve 'keycloak'" <<<"$out" || { echo "expected: Failed to resolve 'keycloak'"; return 1; }
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" logs_free_of_secrets
+logs_free_of_secrets() { # no value of a secret from .env in any service's log
+  local logs v n=0
+  logs="$(compose logs --no-log-prefix 2>&1)"
+  for v in "${SECRETS[@]}"; do
+    if grep -qF -- "$v" <<<"$logs"; then n=$((n + 1)); fi
+  done
+  echo "checked ${#SECRETS[@]} secret values against $(wc -l <<<"$logs") log lines: $n found"
+  (( n == 0 ))
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
   # Read the logs first: piping into grep -m1 would SIGPIPE compose when the
@@ -176,7 +206,7 @@ compose up -d --wait --wait-timeout 300 >>"$LOG" 2>&1 \
 
 # --- Health -----------------------------------------------------------------------
 log "health"
-for svc in postgres ldap keycloak saml-sp oidc-rp radius nas proxy saml-sp-proxied oidc-rp-proxied; do
+for svc in postgres ldap keycloak saml-sp oidc-rp radius nas proxy saml-sp-proxied oidc-rp-proxied squid oidc-rp-egress; do
   check "health: $svc container healthy" healthy "$svc"
 done
 check "health: Keycloak issuer is https://$LAB_HOST:$KC_PORT/realms/$REALM" issuer_ok "$KC_PORT"
@@ -188,6 +218,8 @@ check "health: SAML SP /healthz over verified TLS" http_ok /healthz "$SAML_SP_PO
 check "health: OIDC RP /healthz over verified TLS" http_ok /healthz "$OIDC_RP_PORT"
 check "health: SAML SP /healthz through the proxy" http_ok /healthz "$PROXY_SAML_SP_PORT"
 check "health: OIDC RP /healthz through the proxy" http_ok /healthz "$PROXY_OIDC_RP_PORT"
+check "health: OIDC RP behind the egress proxy /healthz over verified TLS" http_ok /healthz "$EGRESS_OIDC_RP_PORT"
+check "health: OIDC RP behind the egress proxy has no route to Keycloak without it" egress_no_direct_route
 check "health: LDAP bind as keycloak-svc (ldapwhoami over LDAPS)" ldap_bind_ok
 
 # --- Baseline logins --------------------------------------------------------------
@@ -200,6 +232,11 @@ check "login: SAML SP through the proxy (alice)" browser saml-proxy --expect ok
 check "login: OIDC RP through the proxy (alice)" browser oidc-proxy --expect ok
 check "login: SAML SP through the proxy (dave, from LDAP)" browser_as dave saml-proxy --expect ok
 check "login: OIDC RP through the proxy (dave, from LDAP)" browser_as dave oidc-proxy --expect ok
+since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+check "login: OIDC RP through the egress proxy (alice)" browser oidc-egress --expect ok
+check "login: OIDC RP through the egress proxy: back channel tunnelled by Squid" \
+  log_has "$since" squid 'TCP_TUNNEL/200 [0-9]+ CONNECT keycloak:8180'
+check "login: OIDC RP through the egress proxy (dave, from LDAP)" browser_as dave oidc-egress --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
 
@@ -223,6 +260,10 @@ for name in $(scenario_names); do
   check "$name: fix again is a no-op"          "$LAB_ROOT/scripts/fix.sh" "$name"
   check "$name: login works again ($user)"     login_as "$user" "$SCENARIO_APP" --expect ok
 done
+
+# --- Secrets ----------------------------------------------------------------------
+log "secrets"
+check "secrets: no value from .env in any container's log" logs_free_of_secrets
 
 # --- Summary ----------------------------------------------------------------------
 echo
