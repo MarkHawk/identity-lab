@@ -138,7 +138,9 @@ REALM=idlab
 #                      oidc-egress: the OIDC RP whose back channel goes through Squid;
 #                      oidc-edge: the OIDC RP behind the reverse proxy on plain HTTP;
 #                      radius: an Access-Request from the NAS, docker compose exec nas nas-auth;
-#                      mtls: a request to the proxy's mutual-TLS route with the client's certificate)
+#                      mtls: a request to the proxy's mutual-TLS route with the client's certificate;
+#                      oidc-api, oidc-api-late, oidc-cors: the direct OIDC RP calling the API from
+#                      its debug page, itself or (oidc-cors) from the browser)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
@@ -169,7 +171,7 @@ scenario_state() { scenario_detect | cut -f1; }
 app_url()   {
   case "$1" in
     saml)       echo "https://$LAB_HOST:$SAML_SP_PORT/" ;;
-    oidc)       echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
+    oidc|oidc-api*|oidc-cors) echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
     saml-proxy) echo "https://$LAB_HOST:$PROXY_SAML_SP_PORT/" ;;
     oidc-proxy) echo "https://$LAB_HOST:$PROXY_OIDC_RP_PORT/" ;;
     oidc-egress) echo "https://$LAB_HOST:$EGRESS_OIDC_RP_PORT/" ;;
@@ -177,7 +179,7 @@ app_url()   {
     mtls)       echo "https://$LAB_HOST:$PROXY_MTLS_PORT/" ;;
   esac
 }
-app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc|oidc-proxy|oidc-egress|oidc-edge) echo "OIDC" ;; esac; }
+app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc*) echo "OIDC" ;; esac; }
 
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {

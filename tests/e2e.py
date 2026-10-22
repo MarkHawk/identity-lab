@@ -17,6 +17,10 @@ oidc-token logs in to the direct OIDC RP and fetches /debug/access-token,
 the raw token, as a request in the same browser session rather than a page
 visit, so the evidence saved for the run never holds it; scripts/test.sh
 then checks that no token reached any log or evidence file.
+oidc-cors logs in to the direct OIDC RP, then has its debug page call the
+API from the browser (Call the API from the browser), a cross-origin fetch;
+the browser console's messages are part of what it checks, since a CORS
+refusal is only explained there.
 mtls opens the reverse proxy's mutual-TLS route, presenting the client
 certificate in /etc/idlab/mtls-client/ if there is one (the partner
 system's, from .state/mtls-client/), and none if there isn't.
@@ -56,6 +60,7 @@ APPS = {
     "oidc-api": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-api-late": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-token": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-cors": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "mtls": (url("PROXY_MTLS_PORT"), None),
 }
 API_LATE_SECONDS = 15
@@ -162,6 +167,8 @@ def flow(page, app):
         return call_api(page, app)
     if app == "oidc-token":
         return fetch_token(page, app, base)
+    if app == "oidc-cors":
+        return call_api_from_browser(page, app)
     return f"{app}:login-ok", page.inner_text("body")
 
 
@@ -207,6 +214,23 @@ def call_api(page, app):
     if page.locator("#api-ok").count():
         return f"{app}:login-ok", page.inner_text("body")
     return f"{app}:api-error", page.inner_text("body")
+
+
+def call_api_from_browser(page, app):
+    """After the login: the debug page's own script calls the API, cross-origin."""
+    console = []
+    page.on("console", lambda msg: console.append(f"{msg.type}: {msg.text}"))
+    page.click("#call-api-browser")
+    page.locator("#api-browser-ok, #api-browser-error").first.wait_for(timeout=10000)
+    page.wait_for_timeout(500)  # let the console catch up with the page
+    # Console messages name URLs and origins, never the token.
+    print(f"[{app}] browser console: {len(console)} message(s)")
+    for line in console:
+        print(f"[{app}]   {line}")
+    text = page.inner_text("body") + "\nBrowser console:\n" + "\n".join(console)
+    if page.locator("#api-browser-ok").count():
+        return f"{app}:login-ok", text
+    return f"{app}:api-error", text
 
 
 def app_error_shown(page):
