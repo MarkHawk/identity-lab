@@ -517,9 +517,14 @@ services:
       <<: *lab-env
       DEMO_PASSWORD: ${DEMO_PASSWORD}
       HOME: /tmp
+      # Playwright presents client certificates from Node, not Chromium:
+      # make Node trust the lab CA too.
+      NODE_EXTRA_CA_CERTS: /etc/idlab/ca.crt
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./test-results:/results
+      # The mutual-TLS client's certificate (scenarios/client-cert-*.sh).
+      - ./.state/mtls-client:/etc/idlab/mtls-client:ro
 
 volumes:
   pgdata:

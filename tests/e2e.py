@@ -17,6 +17,9 @@ oidc-token logs in to the direct OIDC RP and fetches /debug/access-token,
 the raw token, as a request in the same browser session rather than a page
 visit, so the evidence saved for the run never holds it; scripts/test.sh
 then checks that no token reached any log or evidence file.
+mtls opens the reverse proxy's mutual-TLS route, presenting the client
+certificate in /etc/idlab/mtls-client/ if there is one (the partner
+system's, from .state/mtls-client/), and none if there isn't.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
@@ -53,12 +56,28 @@ APPS = {
     "oidc-api": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-api-late": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-token": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "mtls": (url("PROXY_MTLS_PORT"), None),
 }
 API_LATE_SECONDS = 15
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
 RESULTS = os.environ.get("RESULTS_DIR", "/results")
+MTLS_CLIENT_DIR = "/etc/idlab/mtls-client"
+# What the mutual-TLS route answers when it accepts the client certificate.
+MTLS_OK = '"client_certificate":"accepted"'
+
+
+def client_certificates(app):
+    """The partner system's certificate for the mutual-TLS route, if it has one.
+
+    Playwright presents it through its own TLS proxy, which runs in Node:
+    NODE_EXTRA_CA_CERTS (compose.yaml) makes it trust the lab CA.
+    """
+    crt, key = f"{MTLS_CLIENT_DIR}/client.crt", f"{MTLS_CLIENT_DIR}/client.key"
+    if app != "mtls" or not os.path.exists(crt):
+        return []
+    return [{"origin": APPS["mtls"][0], "certPath": crt, "keyPath": key}]
 
 
 def run(app, expect_error=None):
@@ -68,7 +87,7 @@ def run(app, expect_error=None):
         args.append(f"--host-resolver-rules=MAP {LAB_HOST} 127.0.0.1")
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=args)
-        page = browser.new_context().new_page()
+        page = browser.new_context(client_certificates=client_certificates(app)).new_page()
         try:
             outcome = flow(page, app)
         finally:
@@ -85,8 +104,9 @@ def run(app, expect_error=None):
     where, text = outcome
     print(f"[{app}] ended at {where}")
     if expect_error is None:
-        if f"{app}:login-ok" == where and EXPECTED_EMAIL in text:
-            print(f"[{app}] PASS login succeeded for {EXPECTED_EMAIL}")
+        marker = MTLS_OK if app == "mtls" else EXPECTED_EMAIL
+        if f"{app}:login-ok" == where and marker in text:
+            print(f"[{app}] PASS {'client certificate accepted' if app == 'mtls' else 'login succeeded for ' + EXPECTED_EMAIL}")
             return 0
         print(f"[{app}] FAIL expected a successful login; page says:\n{excerpt(text)}")
         return 1
@@ -100,6 +120,8 @@ def run(app, expect_error=None):
 def flow(page, app):
     """Drive the login and report (where-we-ended-up, visible text)."""
     base, kc = APPS[app]
+    if app == "mtls":
+        return mtls(page, app, base)
     try:
         page.goto(base + "/", wait_until="load")
     except PWTimeout:
@@ -141,6 +163,16 @@ def flow(page, app):
     if app == "oidc-token":
         return fetch_token(page, app, base)
     return f"{app}:login-ok", page.inner_text("body")
+
+
+def mtls(page, app, base):
+    """No login: the TLS handshake and nginx's answer are the whole flow."""
+    resp = page.goto(base + "/", wait_until="load")
+    text = page.inner_text("body")
+    print(f"[{app}] HTTP {resp.status} with {'a' if client_certificates(app) else 'no'} client certificate")
+    if resp.status == 200 and MTLS_OK in text:
+        return f"{app}:login-ok", text
+    return f"{app}:error", f"HTTP {resp.status}\n{text}"
 
 
 def fetch_token(page, app, base):

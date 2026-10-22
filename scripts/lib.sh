@@ -133,11 +133,12 @@ REALM=idlab
 # Each scenarios/<name>.sh defines:
 #   SCENARIO_SUMMARY   one line for status output
 #   SCENARIO_RUNBOOK   path of the runbook
-#   SCENARIO_APP       saml|oidc|saml-proxy|oidc-proxy|oidc-egress|oidc-edge|radius  -- which login
+#   SCENARIO_APP       saml|oidc|saml-proxy|oidc-proxy|oidc-egress|oidc-edge|radius|mtls  -- which login
 #                      shows the failure (*-proxy: the app copies behind the reverse proxy;
 #                      oidc-egress: the OIDC RP whose back channel goes through Squid;
 #                      oidc-edge: the OIDC RP behind the reverse proxy on plain HTTP;
-#                      radius: an Access-Request from the NAS, docker compose exec nas nas-auth)
+#                      radius: an Access-Request from the NAS, docker compose exec nas nas-auth;
+#                      mtls: a request to the proxy's mutual-TLS route with the client's certificate)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
@@ -173,6 +174,7 @@ app_url()   {
     oidc-proxy) echo "https://$LAB_HOST:$PROXY_OIDC_RP_PORT/" ;;
     oidc-egress) echo "https://$LAB_HOST:$EGRESS_OIDC_RP_PORT/" ;;
     oidc-edge)  echo "https://$LAB_HOST:$PROXY_EDGE_RP_PORT/" ;;
+    mtls)       echo "https://$LAB_HOST:$PROXY_MTLS_PORT/" ;;
   esac
 }
 app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc|oidc-proxy|oidc-egress|oidc-edge) echo "OIDC" ;; esac; }
@@ -180,6 +182,20 @@ app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc|oidc-proxy|oidc-
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {
   local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
+  if [[ "$SCENARIO_APP" == mtls ]]; then
+    cat <<TXT
+
+    Try it:
+      1. Call the route as the partner system does, with whatever certificate it has now:
+           curl -sS --cacert certs/ca.crt $(mtls_cert_args | sed "s|^$LAB_ROOT/||" | tr '\n' ' ')$(app_url mtls)
+      2. Expect, $SCENARIO_SEEN_AT:
+           $SCENARIO_EXPECT
+         Then see why in the proxy's log:  docker compose logs proxy | grep 8189
+    Runbook: $SCENARIO_RUNBOOK
+    Undo:    scripts/fix.sh $1
+TXT
+    return
+  fi
   if [[ "$SCENARIO_APP" == radius ]]; then
     cat <<TXT
 
@@ -209,6 +225,15 @@ TXT
 # How to confirm recovery (after fix.sh).
 print_confirm() {
   local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
+  if [[ "$SCENARIO_APP" == mtls ]]; then
+    cat <<TXT
+
+    Confirm recovery: curl -sS --cacert certs/ca.crt $(mtls_cert_args | sed "s|^$LAB_ROOT/||" | tr '\n' ' ')$(app_url mtls)
+    should answer {"client_certificate":"accepted",...}. scripts/status.sh should show
+    $1 as healthy.
+TXT
+    return
+  fi
   if [[ "$SCENARIO_APP" == radius ]]; then
     cat <<TXT
 
@@ -385,3 +410,48 @@ egress_env_detect() {
   egress_rp_running || { printf 'unknown\tthe oidc-rp-egress container is not running\n'; return; }
   _conf_detect egress_env_live egress_env_default proxy.env "$1"
 }
+
+# --- Mutual-TLS client ---------------------------------------------------------------
+# The partner system that calls the proxy's mutual-TLS route (:8189) uses the
+# certificate and key in .state/mtls-client/ (also mounted into the tests
+# container); certs/mtls-client.* is the healthy copy. The client-cert-*
+# scenarios remove or replace the client's copy.
+MTLS_CLIENT_DIR="$STATE_DIR/mtls-client"
+
+# curl arguments for the client's certificate, one per line; none if it has none.
+mtls_cert_args() {
+  [[ -f "$MTLS_CLIENT_DIR/client.crt" ]] || return 0
+  printf '%s\n' --cert "$MTLS_CLIENT_DIR/client.crt" --key "$MTLS_CLIENT_DIR/client.key"
+}
+
+# mtls_call [curl args...] -- call the route as the client does; prints the HTTP status.
+mtls_call() {
+  local args=()
+  mapfile -t args < <(mtls_cert_args)
+  curl -sS -o /dev/null -w '%{http_code}' --cacert "$CERTS_DIR/ca.crt" \
+    --resolve "$LAB_HOST:$PROXY_MTLS_PORT:127.0.0.1" "${args[@]}" "$@" "https://$LAB_HOST:$PROXY_MTLS_PORT/"
+}
+
+# mtls_cert_check -- "none", "valid", or "invalid<TAB>reason", for the client's
+# certificate, checked the way nginx does: against the lab CA, as a client certificate.
+mtls_cert_check() {
+  local out
+  [[ -f "$MTLS_CLIENT_DIR/client.crt" ]] || { echo none; return; }
+  if out="$(openssl verify -CAfile "$CERTS_DIR/ca.crt" -purpose sslclient "$MTLS_CLIENT_DIR/client.crt" 2>&1)"; then
+    echo valid
+  else
+    printf 'invalid\t%s\n' "$(grep -o 'error [0-9]*.*' <<<"$out" | head -n1)"
+  fi
+}
+
+mtls_cert_summary() {
+  openssl x509 -in "$MTLS_CLIENT_DIR/client.crt" -noout -subject -enddate | tr '\n' ' ' | sed 's/ $//'
+}
+
+# mtls_client_set <crt> <key> -- give the client this certificate and key.
+mtls_client_set() {
+  mkdir -p "$MTLS_CLIENT_DIR"
+  install -m 644 "$1" "$MTLS_CLIENT_DIR/client.crt"
+  install -m 600 "$2" "$MTLS_CLIENT_DIR/client.key"
+}
+mtls_client_restore() { mtls_client_set "$CERTS_DIR/mtls-client.crt" "$CERTS_DIR/mtls-client.key"; }
