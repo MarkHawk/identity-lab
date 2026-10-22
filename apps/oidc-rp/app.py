@@ -20,7 +20,7 @@ from collections import OrderedDict
 import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.flask_client import OAuth
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, abort, redirect, render_template, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from accesslog import mask
@@ -54,6 +54,9 @@ SERVICE = os.environ.get("OIDC_RP_SERVICE", "oidc-rp")
 # looks like plain HTTP to https, as apps behind a TLS-terminating load
 # balancer usually do (scenarios/redirect-loop.sh).
 PROXY_HOPS = int(os.environ.get("OIDC_RP_PROXY_HOPS", "0"))
+# The API (resource server) this app calls with the user's access token,
+# from the debug page. Only the direct copy sets it (scenarios/api-bearer-*.sh).
+API_URL = os.environ.get("OIDC_RP_API_URL")
 FORCE_HTTPS = os.environ.get("OIDC_RP_FORCE_HTTPS") == "1"
 
 app = Flask(__name__)
@@ -219,7 +222,18 @@ def callback():
     except Exception as exc:  # noqa: BLE001 - show it, but the login itself succeeded
         userinfo = {"error": str(exc)}
     times = {k: fmt_epoch(claims.get(k)) for k in ("iat", "auth_time", "exp")}
+    access_token = token.get("access_token", "")
+    try:
+        access_claims = jwt_part(access_token, 1)
+    except (IndexError, ValueError):
+        access_claims = {}
     key = store_login({
+        # Kept only here, in memory, to call the API. Never logged, put in a
+        # cookie or shown on a page (except /debug/access-token, on request).
+        "access_token": access_token,
+        "access_claims": {k: access_claims.get(k) for k in ("typ", "azp", "aud", "scope", "iss")},
+        "access_times": {k: fmt_epoch(access_claims.get(k)) for k in ("iat", "exp")},
+        "api": None,
         "header": jwt_part(id_token, 0) if id_token else {},
         "claims": claims,
         "times": times,
@@ -240,7 +254,41 @@ def debug():
     login = _logins.get(session.get("login_key", ""))
     if not login:
         return redirect(url_for("index"))
-    return render_template("debug.html", login=login, rp_clock=now_utc())
+    return render_template("debug.html", login=login, rp_clock=now_utc(), api_url=API_URL)
+
+
+@app.post("/api/call")
+def call_api():
+    login = _logins.get(session.get("login_key", ""))
+    if not login or not API_URL:
+        return redirect(url_for("index"))
+    # The access token from login, as it is: this app doesn't refresh it.
+    try:
+        resp = requests.get(API_URL, headers={"Authorization": "Bearer " + login["access_token"]}, timeout=5)
+        result = {
+            "status": resp.status_code,
+            "reason": resp.reason,
+            "www_authenticate": resp.headers.get("WWW-Authenticate"),
+            "body": resp.text[:2000],
+        }
+    except requests.RequestException as exc:
+        result = {"status": None, "reason": f"{type(exc).__name__}: {exc}", "www_authenticate": None, "body": ""}
+    result["at"] = now_utc()
+    login["api"] = result
+    log.info(kv(event="api_call", url=API_URL, status=result["status"] or "-",
+                www_authenticate=result["www_authenticate"] or "-"))
+    return redirect(url_for("debug") + "#api")
+
+
+@app.get("/debug/access-token")
+def raw_access_token():
+    # The raw access token, for checking it offline with token-inspector, as
+    # you would copy it from the browser's developer tools. Plain text, only
+    # on request: no page embeds it, so saved page evidence never holds it.
+    login = _logins.get(session.get("login_key", ""))
+    if not login or not login.get("access_token"):
+        abort(404)
+    return login["access_token"] + "\n", 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
 
 
 @app.post("/logout")

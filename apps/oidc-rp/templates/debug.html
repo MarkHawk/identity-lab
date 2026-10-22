@@ -34,6 +34,36 @@
   <pre>{{ login.userinfo | tojson(indent=2) }}</pre>
 </section>
 <section>
+  <h2>Access token (decoded, not validated)</h2>
+  <p class="muted">What the app sends to APIs. The token itself is not displayed here{% if login.access_token %}; <a href="{{ url_for('raw_access_token') }}">show the raw token</a> to check it with token-inspector{% endif %}.</p>
+  <table>
+    <tr><th>Audience (aud)</th><td><code id="access-aud">{{ login.access_claims.aud }}</code></td></tr>
+    <tr><th>Authorised party (azp)</th><td><code>{{ login.access_claims.azp }}</code></td></tr>
+    <tr><th>Scope</th><td><code>{{ login.access_claims.scope }}</code></td></tr>
+    <tr><th>Issued at (iat)</th><td><code>{{ login.access_times.iat }}</code></td></tr>
+    <tr><th>Expires (exp)</th><td><code id="access-exp">{{ login.access_times.exp }}</code></td></tr>
+  </table>
+</section>
+{% if api_url %}
+<section id="api">
+  <h2>API</h2>
+  <p class="muted">Calls <code>{{ api_url }}</code> with <code>Authorization: Bearer</code> and the access token above.</p>
+  <form method="post" action="{{ url_for('call_api') }}"><button class="btn" id="call-api">Call the API</button></form>
+  {% if login.api %}
+    {% if login.api.status == 200 %}
+      <h3 id="api-ok">API call succeeded: {{ login.api.status }} {{ login.api.reason }}</h3>
+    {% else %}
+      <h3 id="api-error">API call failed: {{ login.api.status or '' }} {{ login.api.reason }}</h3>
+    {% endif %}
+    <table>
+      <tr><th>Called at (RP clock)</th><td><code>{{ login.api.at.strftime('%Y-%m-%dT%H:%M:%SZ') }}</code></td></tr>
+      {% if login.api.www_authenticate %}<tr><th>WWW-Authenticate</th><td><code id="api-www-authenticate">{{ login.api.www_authenticate }}</code></td></tr>{% endif %}
+    </table>
+    <pre>{{ login.api.body }}</pre>
+  {% endif %}
+</section>
+{% endif %}
+<section>
   <h2>Token response (metadata only)</h2>
   <p class="muted">Access and refresh tokens are not displayed.</p>
   <pre>{{ login.token_meta | tojson(indent=2) }}</pre>

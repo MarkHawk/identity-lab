@@ -2,9 +2,11 @@
 # apps, and a FreeRADIUS server with a NAS that authenticates against the directory.
 # Run scripts/setup.sh first; it generates .env and certs/.
 # An nginx reverse proxy publishes Keycloak and a second copy of each app on
-# 8183-8185, and a fourth OIDC RP, which it reaches over plain HTTP, on 8187. A third copy of the OIDC RP (8186) reaches Keycloak only through
-# a Squid egress proxy. Host ports are restricted to 8180-8189. LDAP, RADIUS
-# and Squid publish no host port.
+# 8183-8185. A third copy of the OIDC RP (8186) reaches Keycloak only through
+# a Squid egress proxy. The reverse proxy also publishes a fourth OIDC RP on
+# 8187, which it reaches over plain HTTP. An API (8188) accepts Keycloak
+# access tokens from the direct OIDC RP. Host ports are restricted to
+# 8180-8189. LDAP, RADIUS and Squid publish no host port.
 
 name: identity-lab
 
@@ -19,6 +21,15 @@ x-lab-env: &lab-env
   EGRESS_OIDC_RP_PORT: ${EGRESS_OIDC_RP_PORT:?run scripts/setup.sh}
   PROXY_EDGE_RP_PORT: ${PROXY_EDGE_RP_PORT:?run scripts/setup.sh}
   API_PORT: ${API_PORT:?run scripts/setup.sh}
+
+# Settings shared by every copy of the OIDC RP.
+x-oidc-rp-env: &oidc-rp-env
+  <<: *lab-env
+  PORT: "8182"
+  OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+  OIDC_RP_SECRET_KEY: ${OIDC_RP_SECRET_KEY}
+  OIDC_BACKCHANNEL_BASE: https://keycloak:8180
+  REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
 
 services:
   postgres:
@@ -243,19 +254,42 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
-    environment: &oidc-rp-env
-      <<: *lab-env
-      PORT: "8182"
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-      OIDC_RP_SECRET_KEY: ${OIDC_RP_SECRET_KEY}
-      OIDC_BACKCHANNEL_BASE: https://keycloak:8180
-      REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
+    environment:
+      <<: *oidc-rp-env
+      # Only this copy calls the API.
+      OIDC_RP_API_URL: https://api:8188/v1/whoami
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
       - ./certs/tls.key:/etc/idlab/tls.key:ro
     ports:
       - "${OIDC_RP_PORT}:8182"
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
+  # API (resource server) that accepts Keycloak access tokens, on 8188. The
+  # direct OIDC RP calls it with the user's access token ("Call the API" on
+  # its debug page); it checks the signature against Keycloak's JWKS, the
+  # issuer, the expiry and that the audience includes idlab-api
+  # (scenarios/api-bearer-*.sh).
+  api:
+    build: ./apps/api
+    image: identity-lab/api:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: *lab-env
+      PORT: "8188"
+      API_AUDIENCE: idlab-api
+      REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+      - ./certs/tls.crt:/etc/idlab/tls.crt:ro
+      - ./certs/tls.key:/etc/idlab/tls.key:ro
+    ports:
+      - "${API_PORT}:8188"
     healthcheck: *app-healthcheck
     restart: unless-stopped
 
