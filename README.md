@@ -373,7 +373,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 231 checks cover:
+The 281 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
