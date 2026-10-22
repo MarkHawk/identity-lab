@@ -76,7 +76,7 @@ To capture the browser's side from a user, ask for the **Console** messages and 
 
 ## Diagnosis
 
-1. **Is it CORS at all?** Signs: the failure only happens from a browser page on another origin; the same call from curl, Postman or a back end works; the page's script sees a generic `TypeError: Failed to fetch` (or `Network Error` in axios, status `0` in XMLHttpRequest); the console says *blocked by CORS policy*. If the API's own log has no line for the call, it may be a preflight failure (point 4) or a real network problem.
+1. **Is it CORS at all?** Signs: the failure only happens from a browser page on another origin; the same call from curl, Postman or a back end works; the page's script sees a generic `TypeError: Failed to fetch` (or `Network Error` in axios, status `0` in XMLHttpRequest); the console says *blocked by CORS policy*. If the API's own log has no line for the call, it may be a preflight failure (point 4) or a real network problem. A certificate the browser doesn't trust for the API's address gives the same `Failed to fetch`, with `net::ERR_CERT_AUTHORITY_INVALID` (or another `ERR_CERT_` code) in the console instead of a CORS message: in the lab, open https://LAB_HOST:8188/healthz once and accept the warning.
 2. **Read the console's reason. The wording says what to fix.** Chromium's messages for the real response:
 
    | Console says | Meaning |

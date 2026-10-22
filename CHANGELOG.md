@@ -2,6 +2,22 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
 
+## Phase 3, Part C, round two: 503, mutual TLS and CORS (2026-10-22)
+
+**Added:**
+
+- A mutual-TLS route on the reverse proxy, port 8189 (`PROXY_MTLS_PORT`). nginx accepts only clients with a certificate from the lab CA (`ssl_verify_client on`) and answers itself; its log line carries `ssl_client_verify`, and its error log is at `info`, where nginx says why it refused a certificate. A partner client certificate, `certs/mtls-client.*`, with the client's own copy in `.state/mtls-client/`.
+- CORS in the API, and **Call the API from the browser** on the direct OIDC app's debug page: a cross-origin call from `https://LAB_HOST:8182`. The API answers preflights for any origin, standing in for a gateway, and sets its own `Access-Control-Allow-Origin` on real responses from `.state/api/cors-allow-origin`. `api_request_ok` now also logs the request's `Origin` and that header.
+- Scenario 17, `proxy-maintenance` (503 from maintenance mode left on); scenario 18 in two variants, `client-cert-missing` (nginx 496) and `client-cert-expired` (495); scenario 19, `cors-blocked`. Runbooks 17, 18 and 19.
+- Tests: the API's preflight, the mutual-TLS route with and without a certificate (curl and Chromium, through Playwright's client certificates), the browser's cross-origin API call with its console messages, the four new scenarios, and that no private key appears in any container's log or `test.log`.
+
+**Changed:** port 8189 is now used, so all ten lab ports are taken. The Codespaces dev container forwards it too.
+
+**Why the upgrade steps:**
+
+- `scripts/setup.sh` adds `PROXY_MTLS_PORT=8189` to your existing `.env`, issues the partner client certificate, and writes `.state/mtls-client/`, `.state/api/cors-allow-origin` and the proxy's new `kc-maintenance.conf`. Compose refuses to start until the new `.env` value exists.
+- `scripts/test.sh` (no `--fresh` needed) rebuilds the API, OIDC app and tests images, and recreates the proxy for its new port. Nothing new is stored in Keycloak's database.
+
 ## Log changes (2026-10-22)
 
 **Changed:** the API's `api_token_rejected` and `api_request_ok` lines now carry the token's `iat` next to its `exp`, so a log search can compute the lifetime the IdP gave it (`exp - iat`). `scripts/test.sh` checks for both.

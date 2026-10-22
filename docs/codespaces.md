@@ -26,9 +26,10 @@ A codespace is a Linux machine in the cloud with this repository already checked
 | 8185 | Proxy: OIDC RP | A second copy of the OIDC app, reachable only through the proxy |
 | 8186 | Egress: OIDC RP | A third copy of the OIDC app, whose own calls to Keycloak go through a Squid egress proxy |
 | 8187 | Proxy: edge OIDC RP | A fourth copy of the OIDC app, behind the reverse proxy, which talks plain HTTP to it |
-| 8188 | API | An API that accepts Keycloak access tokens; the OIDC app on 8182 calls it |
+| 8188 | API | An API that accepts Keycloak access tokens; the OIDC app on 8182 calls it, from its server and from your browser |
+| 8189 | Proxy: mutual TLS | A route on the reverse proxy that only answers clients with a certificate; you call it with `curl` in the terminal |
 
-You only need 8183 to 8185 for the reverse proxy scenarios (6 to 10 in [step 5](#5-break-it-and-fix-it)), 8186 for the egress proxy scenarios (11 to 14), 8187 for the redirect loop (15) and 8188 for the API scenarios (16). The egress proxy itself has no port of its own.
+You only need 8183 to 8185 for the reverse proxy scenarios (6 to 10 in [step 5](#5-break-it-and-fix-it)), 8186 for the egress proxy scenarios (11 to 14), 8187 for the redirect loop (15), 8188 for the API scenarios (16) and the CORS scenario (19), and 8189 for the client certificate scenarios (18). Scenario 17 uses 8183 and 8184. The egress proxy itself has no port of its own.
 
 **The demo users.** You'll use two of the six:
 
@@ -58,6 +59,7 @@ A browser tab opens with the VS Code editor and a terminal at the bottom. Creati
     Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP).
     The OIDC RP behind the egress proxy (Squid): :8186.
     The OIDC RP behind the reverse proxy on plain HTTP: :8187. The API (resource server): :8188.
+    Through the reverse proxy, with a client certificate (mutual TLS): :8189.
 ```
 
 At this point the lab is set up but not yet running. You start it in [step 3](#3-check-the-lab).
@@ -77,7 +79,7 @@ The browser tab offers forwarded links of the form `https://<codespace-name>-818
 3. Next to your codespace, click the **...** menu, then **Open in** > **Visual Studio Code**. Allow the browser to open VS Code if it asks.
 4. VS Code opens a window connected to the codespace. The bottom-left corner shows **Codespaces** and the codespace's name.
 5. Open a terminal in that window: **Terminal** > **New Terminal**. Its prompt is a Linux prompt in the repository folder, not your own computer's.
-6. Open the **Ports** tab, next to the terminal. Ports 8180, 8181 and 8182 are listed as Keycloak (IdP), SAML SP and OIDC RP, 8183, 8184 and 8185 as the same three through the proxy, 8186 as Egress: OIDC RP, 8187 as Proxy: edge OIDC RP and 8188 as API. Check that the **Forwarded Address** column shows the same number for each, `localhost:8180` to `localhost:8188`. If any number differs, see [Troubleshooting](#troubleshooting).
+6. Open the **Ports** tab, next to the terminal. Ports 8180, 8181 and 8182 are listed as Keycloak (IdP), SAML SP and OIDC RP, 8183, 8184 and 8185 as the same three through the proxy, 8186 as Egress: OIDC RP, 8187 as Proxy: edge OIDC RP, 8188 as API and 8189 as Proxy: mutual TLS. Check that the **Forwarded Address** column shows the same number for each, `localhost:8180` to `localhost:8189`. If any number differs, see [Troubleshooting](#troubleshooting).
 
 You can close the browser tab from step 1 now. The rest of this guide uses desktop VS Code.
 
@@ -136,6 +138,7 @@ Use the browser on your own computer. Every address is `https://`: an `http://` 
 - for the proxy scenarios: https://localhost:8183, https://localhost:8184 and https://localhost:8185
 - for the egress proxy scenarios: https://localhost:8186
 - for the redirect loop: https://localhost:8187
+- for the API, before **Call the API from the browser** (scenario 19): https://localhost:8188/healthz. Until you accept it, the browser refuses the page's call to the API with a certificate error, which the page also reports as `Failed to fetch`.
 
 Do them before your first login. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. Don't install the lab's CA as trusted on your computer: the README [explains why](../README.md#dont-install-the-lab-ca-as-trusted-on-your-computer).
 
@@ -204,6 +207,10 @@ Running `break.sh` or `fix.sh` twice is safe: the second run does nothing.
 | 15 | `redirect-loop` | https://localhost:8187. https://localhost:8185 still works. | The browser's own error page straight away: `ERR_TOO_MANY_REDIRECTS` (*redirected you too many times*) | [15](../runbooks/15-redirect-loop.md) |
 | 16 | `api-bearer-audience` | https://localhost:8182, **Log in with OIDC** as `alice`, then **Call the API**. The login itself works. | `API call failed: 401 UNAUTHORIZED`, with `error="invalid_token"` and `The access token audience (idlab-api-staging account) does not include idlab-api` | [16](../runbooks/16-api-bearer-401.md) |
 | 16 | `api-bearer-expired` | https://localhost:8182, **Log in with OIDC** as `alice`, wait 15 seconds, then **Call the API**. Straight after login it works. | `API call failed: 401 UNAUTHORIZED`, with `error="invalid_token"` and `The access token expired at <time>` | [16](../runbooks/16-api-bearer-401.md) |
+| 17 | `proxy-maintenance` | https://localhost:8184, **Log in with SAML**. https://localhost:8181 still works. | Where Keycloak's login page should be: `Sign-in is down for planned maintenance` (HTTP 503) | [17](../runbooks/17-service-unavailable.md) |
+| 18 | `client-cert-missing` | In the terminal, the `curl` command that `break.sh` prints under *Try it* (the partner system's call, without a certificate now) | nginx's page: `400 Bad Request`, `No required SSL certificate was sent`. Then `docker compose logs proxy \| grep 8189` | [18](../runbooks/18-client-cert.md) |
+| 18 | `client-cert-expired` | In the terminal, the `curl` command that `break.sh` prints under *Try it* (with the expired certificate) | nginx's page: `400 Bad Request`, `The SSL certificate error` | [18](../runbooks/18-client-cert.md) |
+| 19 | `cors-blocked` | https://localhost:8182, **Log in with OIDC** as `alice`, then **Call the API from the browser**, with the developer console open (F12). **Call the API** still works. | Page: `API call from the browser failed: TypeError: Failed to fetch`. Console: `... has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value 'https://localhost:8182/' that is not equal to the supplied origin.` | [19](../runbooks/19-cors-blocked.md) |
 
 For 11 to 13, the error comes straight after **Log in** instead if the app has restarted since its last login: it hasn't fetched Keycloak's settings through the proxy yet.
 
