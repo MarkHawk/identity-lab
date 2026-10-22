@@ -17,8 +17,11 @@
 # plain HTTP) and (OIDC) through the egress proxy, as a local user (alice)
 # and an LDAP user (dave), with the egress RP's back channel in Squid's log;
 # the direct OIDC RP calling the API with its access token (the API logging
-# the token's iat and exp), and handing out the raw token on
-# /debug/access-token; a RADIUS Access-Request from the NAS
+# the token's iat and exp), and from the browser (a cross-origin call, so
+# CORS applies, after a preflight the API allows), and handing out the raw
+# token on /debug/access-token; the proxy's mutual-TLS route accepting the
+# partner client's certificate (curl and browser) and refusing a request
+# without one; a RADIUS Access-Request from the NAS
 # for dave (accepted) and with a wrong password (rejected); then for every scenario: break (twice), detected
 # as broken, the expected error in the browser (or in the NAS's output, for
 # RADIUS scenarios), the expected log line, a user outside the
@@ -28,8 +31,8 @@
 # from .env, authorisation code, OAuth state or other one-time login value
 # (nonce, code_challenge, Signature, session_code, client_data) appears in
 # any container's log, that the proxy's log has each of those last five
-# masked (so the check had something to see), and no JWT (access or ID token) in any container's log,
-# saved page evidence or test.log. Failed checks don't stop the run; the exit status
+# masked (so the check had something to see), no JWT (access or ID token) in any container's log,
+# saved page evidence or test.log, and no private key in any container's log or test.log. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/; values of secrets from .env
 # are replaced with <redacted> in test.log.
@@ -214,6 +217,41 @@ api_challenge() { # <expected status> <WWW-Authenticate text> [curl args...]
   head -n1 <<<"$out" | grep -q " $want " || { echo "expected HTTP $want"; return 1; }
   grep -iF -- "WWW-Authenticate: $text" <<<"$out" >/dev/null || { echo "expected WWW-Authenticate: $text"; return 1; }
 }
+# A PEM private key (the mTLS client's, or any other), header line only.
+PEM_KEY_RE='-----BEGIN ([A-Z]+ )?PRIVATE KEY-----'
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" no_private_key_anywhere
+no_private_key_anywhere() { # no PEM private key in any service's log or test.log
+  local logs in_logs in_log
+  logs="$(compose logs --no-log-prefix 2>&1)"
+  in_logs="$(grep -cE -- "$PEM_KEY_RE" <<<"$logs" || true)"
+  in_log="$(grep -cE -- "$PEM_KEY_RE" "$LOG" || true)"
+  echo "log lines with a private key: $in_logs; test.log lines: $in_log"
+  (( in_logs == 0 && in_log == 0 ))
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" mtls_status ...
+mtls_status() { # <expected status> [with-cert|no-cert] -- the mutual-TLS route, from the host
+  local want="$1" got
+  if [[ "${2:-with-cert}" == no-cert ]]; then
+    got="$(curl -sS -o /dev/null -w '%{http_code}' --cacert "$CERTS_DIR/ca.crt" \
+      --resolve "$LAB_HOST:$PROXY_MTLS_PORT:127.0.0.1" "https://$LAB_HOST:$PROXY_MTLS_PORT/")" || true
+  else
+    # shellcheck disable=SC2119  # no extra curl arguments here
+    got="$(mtls_call)" || true
+  fi
+  echo "HTTP $got (${2:-with-cert})"
+  [[ "$got" == "$want" ]]
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" api_preflight_ok
+api_preflight_ok() { # the browser's preflight for a GET with a token, from the RP's origin
+  local out
+  out="$(curl -sS -D - -o /dev/null --cacert "$CERTS_DIR/ca.crt" --resolve "$LAB_HOST:$API_PORT:127.0.0.1" \
+    -X OPTIONS -H "Origin: https://$LAB_HOST:$OIDC_RP_PORT" -H "Access-Control-Request-Method: GET" \
+    -H "Access-Control-Request-Headers: authorization" "https://$LAB_HOST:$API_PORT/v1/whoami" | tr -d '\r')"
+  grep -iE '^(HTTP/|access-control-)' <<<"$out"
+  head -n1 <<<"$out" | grep -q ' 204 ' || { echo "expected HTTP 204"; return 1; }
+  grep -qiF "Access-Control-Allow-Origin: https://$LAB_HOST:$OIDC_RP_PORT" <<<"$out" || { echo "expected the RP's origin"; return 1; }
+  grep -qi '^Access-Control-Allow-Headers: Authorization$' <<<"$out" || { echo "expected Authorization allowed"; return 1; }
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
   # Read the logs first: piping into grep -m1 would SIGPIPE compose when the
@@ -288,6 +326,9 @@ check "health: API without a token: 401, bare Bearer challenge" api_challenge 40
 # Deliberately not a token: a fixed, made-up value.
 check "health: API with a malformed token: 401 invalid_token" api_challenge 401 'Bearer realm="idlab-api", error="invalid_token"' \
   -H "Authorization: Bearer not-a-token"
+check "health: API preflight from the OIDC RP's origin: 204, Authorization allowed" api_preflight_ok
+check "health: mutual-TLS route accepts the partner client's certificate (curl)" mtls_status 200
+check "health: mutual-TLS route refuses a request without a client certificate: 400" mtls_status 400 no-cert
 check "health: LDAP bind as keycloak-svc (ldapwhoami over LDAPS)" ldap_bind_ok
 
 # --- Baseline logins --------------------------------------------------------------
@@ -314,7 +355,9 @@ TS='[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'
 check "login: the API logs the token's iat and exp on each call" \
   log_has "$since" api "event=api_request_ok .* iat=$TS exp=$TS"
 check "login: OIDC RP calls the API with its access token (dave, from LDAP)" browser_as dave oidc-api --expect ok
+check "login: OIDC RP's debug page calls the API from the browser, cross-origin (alice)" browser oidc-cors --expect ok
 check "login: OIDC RP hands out the raw access token on /debug/access-token (alice)" browser oidc-token --expect ok
+check "login: mutual-TLS route accepts the partner client's certificate (browser)" browser mtls --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
 
@@ -360,6 +403,7 @@ log "secrets"
 check "secrets: no value from .env, authorisation code, OAuth state or other one-time login value in any container's log" logs_free_of_secrets
 check "secrets: the proxy's log has nonce, code_challenge, Signature, session_code and client_data, masked" proxy_masked_seen
 check "secrets: no JWT in any container's log, saved page evidence or test.log" no_jwt_anywhere
+check "secrets: no private key in any container's log or test.log" no_private_key_anywhere
 
 # --- Summary ----------------------------------------------------------------------
 echo
