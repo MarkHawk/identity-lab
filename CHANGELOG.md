@@ -8,6 +8,8 @@ What each phase added, and why an existing lab needs `scripts/setup.sh` then `sc
 
 **Fixed:** the nginx reverse proxy no longer returns 502 for up to 10 seconds after `docker compose up` recreates Keycloak or an app it fronts: it now restarts with them (`depends_on` with `restart: true`), so it starts with their new addresses.
 
+**Fixed:** image builds no longer fail when Debian or Ubuntu replace a package version: CI started failing on 22 Oct when Ubuntu replaced the pinned `libnss3-tools` in the tests image. apt packages in every Dockerfile now follow the distribution's security updates; base images stay pinned by tag and digest.
+
 ## Phase 3, Part B: Squid egress proxy (2026-10-21)
 
 **Added:** a Squid 7.7 egress (forward) proxy, built from source, on a new internal network; `oidc-rp-egress`, a third copy of the OIDC app on port 8186 whose calls to Keycloak can only go through Squid; scenarios 11 to 14 (`proxy-auth-required`, `proxy-policy-block`, `proxy-tls-interception`, `proxy-bypass`) with runbooks; and a test that no secret from `.env` appears in any container's log.

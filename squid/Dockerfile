@@ -11,8 +11,8 @@
 FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential=12.12 pkg-config=1.8.1-4 xz-utils=5.8.1-1+deb13u2 perl=5.40.1-6+deb13u1 \
-      libssl-dev=3.5.7-1~deb13u3 libltdl-dev=2.5.4-4 libcap-dev=1:2.75-10+deb13u1+b3 \
+      build-essential pkg-config xz-utils perl \
+      libssl-dev libltdl-dev libcap-dev \
  && rm -rf /var/lib/apt/lists/*
 ADD --checksum=sha256:e3bd613b91b1c498ec2992276063342a85cd6edddd5521294e04f44bc055da9b \
     https://github.com/squid-cache/squid/releases/download/SQUID_7_7/squid-7.7.tar.xz /tmp/
@@ -41,8 +41,8 @@ FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e4
 # openssl: hashes the proxy password at start. curl: by-hand checks in the runbooks.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      libssl3t64=3.5.7-1~deb13u3 libltdl7=2.5.4-4 libcap2=1:2.75-10+deb13u1+b3 \
-      openssl=3.5.7-1~deb13u3 curl=8.14.1-2+deb13u7 ca-certificates=20250419+deb13u1 \
+      libssl3t64 libltdl7 libcap2 \
+      openssl curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /usr/local/squid /usr/local/squid
 COPY --from=build /etc/squid /etc/squid

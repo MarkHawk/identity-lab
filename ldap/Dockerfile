@@ -7,7 +7,7 @@ FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e4
 # package's default database is deleted anyway, entrypoint.sh builds its own.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      slapd=2.6.10+dfsg-1 ldap-utils=2.6.10+dfsg-1 \
+      slapd ldap-utils \
  && rm -rf /var/lib/apt/lists/* /etc/ldap/slapd.d /var/lib/ldap \
  # The container runs as LAB_UID with group 0 (like Keycloak). A new named
  # volume copies this directory's group and mode, so slapd can write to it.

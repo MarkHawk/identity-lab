@@ -9,12 +9,12 @@ ARG PYTHON_IMAGE=python:3.13.15-slim-bookworm@sha256:2325bb286ec344af3e5898cc224
 FROM ${PYTHON_IMAGE} AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      gcc=4:12.2.0-3 \
-      pkg-config=1.8.1-1 \
-      zlib1g-dev=1:1.2.13.dfsg-1 \
-      libxml2-dev=2.9.14+dfsg-1.3~deb12u6 \
-      libxslt1-dev=1.1.35-1+deb12u4 \
-      libxmlsec1-dev=1.2.37-2 \
+      gcc \
+      pkg-config \
+      zlib1g-dev \
+      libxml2-dev \
+      libxslt1-dev \
+      libxmlsec1-dev \
  && rm -rf /var/lib/apt/lists/*
 RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
@@ -31,11 +31,11 @@ FROM ${PYTHON_IMAGE}
 # without touching the host clock (see scenarios/clock-skew.sh).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      libxml2=2.9.14+dfsg-1.3~deb12u6 \
-      libxslt1.1=1.1.35-1+deb12u4 \
-      libxmlsec1=1.2.37-2 \
-      libxmlsec1-openssl=1.2.37-2 \
-      libfaketime=0.9.10-2.1 \
+      libxml2 \
+      libxslt1.1 \
+      libxmlsec1 \
+      libxmlsec1-openssl \
+      libfaketime \
  && rm -rf /var/lib/apt/lists/* \
  && ln -s "$(ls -d /usr/lib/*/faketime)" /usr/local/lib/faketime
 COPY --from=build /opt/venv /opt/venv

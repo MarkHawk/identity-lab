@@ -442,18 +442,17 @@ CHANGELOG.md                 what each phase added, and why upgrading needs setu
 - **python3-saml doesn't check certificate dates.** The SP enforces `notBefore`/`notAfter` on its pinned IdP certificates itself, as many commercial SPs do. The runbook says so.
 - **Clock skew without touching the host.** libfaketime is preloaded only in the SP container. It reads its offset from a file on every call, so a scenario can shift the clock without a restart. `FAKETIME_DONT_FAKE_MONOTONIC` is deliberately unset: with libfaketime 0.9.10 it makes Python 3.13's `time.sleep()` fail with `EINVAL`, which crashed gunicorn.
 - **lxml and xmlsec are compiled from source** against Debian's libxml2, avoiding the well-known `lxml & xmlsec libxml2 library version mismatch` failure between their binary wheels.
-- **Everything is pinned:**
-  - images by tag and digest
+- **Pinned where a version can be held:**
+  - images, including every Dockerfile's base image, by tag and digest
   - Python packages to fully resolved lock files
-  - Debian/Ubuntu packages to exact versions
   - GitHub Actions to commit SHAs
 
-  Each version was at least two weeks old when chosen.
+  Each version was at least two weeks old when chosen. Debian and Ubuntu packages installed with apt are not pinned: they follow the distribution's security updates, because the mirrors drop a superseded version and a pinned build then fails.
 - **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and nginx on 8183–8185 inside its own; Keycloak's health endpoint is on the unpublished management port. The OIDC app behind the egress proxy is published on 8186. The directory, the RADIUS server and Squid publish no host port at all.
 
 ## Known limitations
 
-- **Apt pins can break builds.** Debian removes superseded security updates from its mirrors, so a pinned apt version (for example `libxml2 2.9.14+dfsg-1.3~deb12u6` or `slapd 2.6.10+dfsg-1`) will eventually fail to install. The fix is to bump the pin, or to build from `snapshot.debian.org`.
+- **A rebuild can install newer apt packages than the last one.** apt packages aren't pinned (see above), so an image rebuilt without the cache gets the distribution's current security updates, and two machines can build slightly different images from the same commit.
 - **The clock-skew scenario also affects the SAML SP behind the proxy.** Both SAML SPs read the same `.state/saml-sp/` files, the pinned IdP certificate and the libfaketime offset, so while `clock-skew` is broken a SAML login through `:8184` fails too. `scripts/test.sh` doesn't check the proxied SP during that scenario. `expired-signing-cert` changes the shared pinned certificate in the same way.
 - **One rate-limit bucket for every browser.** All browser traffic reaches the proxy from the Docker gateway's address, so `proxy-rate-limit` limits every user together, and a `rate-limit-probe` run shares the bucket with your own logins for a few seconds.
 - **The egress proxy offers Basic authentication only.** Corporate proxies often use NTLM or Kerberos (Negotiate); runbook 11 describes what those look like, but the lab doesn't reproduce them.
