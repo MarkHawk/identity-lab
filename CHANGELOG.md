@@ -2,6 +2,10 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
 
+## Squid restart fix (2026-10-22)
+
+**Fixed:** Squid no longer loops on "FATAL: Squid is already running" after its container restarts: `/tmp`, where it keeps its PID file, is now a tmpfs that starts empty, and `scripts/test.sh` restarts Squid and runs scenario 11 again to prove it.
+
 ## Phase 3, Part B: Squid egress proxy (2026-10-21)
 
 **Added:** a Squid 7.7 egress (forward) proxy, built from source, on a new internal network; `oidc-rp-egress`, a third copy of the OIDC app on port 8186 whose calls to Keycloak can only go through Squid; scenarios 11 to 14 (`proxy-auth-required`, `proxy-policy-block`, `proxy-tls-interception`, `proxy-bypass`) with runbooks; and a test that no secret from `.env` appears in any container's log.

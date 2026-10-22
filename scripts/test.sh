@@ -181,6 +181,10 @@ healthy()      {
   st="$(docker inspect -f '{{.State.Health.Status}}' "$(compose ps -q "$1")")"
   [[ "$st" == healthy ]] || { echo "$1 health is $st"; return 1; }
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" restart_squid
+restart_squid() { # restart the container, then wait for its health check
+  compose restart squid && compose up -d --wait --wait-timeout 120 --no-deps squid
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" http_ok ...
 http_ok()      { kc_curl -o /dev/null --resolve "$LAB_HOST:$2:127.0.0.1" "https://$LAB_HOST:$2$1"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" issuer_ok ...
@@ -250,29 +254,42 @@ check "login: OIDC RP through the egress proxy (dave, from LDAP)" browser_as dav
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
 
-# --- Scenarios --------------------------------------------------------------------
-for name in $(scenario_names); do
+# Break, check and fix one scenario. <name> [label prefixed to each check]
+run_scenario() {
+  local name="$1" label="${2:-}" user since ua_app ua_user
   load_scenario "$name"
   user="${SCENARIO_USER:-alice}"
-  log "scenario: $name"
-  check "$name: break"                         "$LAB_ROOT/scripts/break.sh" "$name"
-  check "$name: detected as broken"            expect_state "$name" broken
-  check "$name: break again is a no-op"        "$LAB_ROOT/scripts/break.sh" "$name"
+  log "scenario: $label$name"
+  check "$label$name: break"                   "$LAB_ROOT/scripts/break.sh" "$name"
+  check "$label$name: detected as broken"      expect_state "$name" broken
+  check "$label$name: break again is a no-op"  "$LAB_ROOT/scripts/break.sh" "$name"
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  check "$name: $user sees \"$SCENARIO_EXPECT\"" login_as "$user" "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
-  check "$name: log shows ${SCENARIO_LOG#* }"  log_has "$since" "${SCENARIO_LOG%% *}" "${SCENARIO_LOG#* }"
+  check "$label$name: $user sees \"$SCENARIO_EXPECT\"" login_as "$user" "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
+  check "$label$name: log shows ${SCENARIO_LOG#* }" log_has "$since" "${SCENARIO_LOG%% *}" "${SCENARIO_LOG#* }"
   if [[ -n "${SCENARIO_UNAFFECTED:-}" ]]; then
     read -r ua_app ua_user <<<"$SCENARIO_UNAFFECTED"
-    check "$name: $ua_user still logs in to $ua_app while broken" login_as "$ua_user" "$ua_app" --expect ok
+    check "$label$name: $ua_user still logs in to $ua_app while broken" login_as "$ua_user" "$ua_app" --expect ok
   fi
   if [[ -n "${SCENARIO_ALSO:-}" ]]; then
-    check "$name: $SCENARIO_ALSO" scenario_also_check
+    check "$label$name: $SCENARIO_ALSO" scenario_also_check
   fi
-  check "$name: fix"                           "$LAB_ROOT/scripts/fix.sh" "$name"
-  check "$name: detected as healthy"           expect_state "$name" healthy
-  check "$name: fix again is a no-op"          "$LAB_ROOT/scripts/fix.sh" "$name"
-  check "$name: login works again ($user)"     login_as "$user" "$SCENARIO_APP" --expect ok
+  check "$label$name: fix"                     "$LAB_ROOT/scripts/fix.sh" "$name"
+  check "$label$name: detected as healthy"     expect_state "$name" healthy
+  check "$label$name: fix again is a no-op"    "$LAB_ROOT/scripts/fix.sh" "$name"
+  check "$label$name: login works again ($user)" login_as "$user" "$SCENARIO_APP" --expect ok
+}
+
+# --- Scenarios --------------------------------------------------------------------
+for name in $(scenario_names); do
+  run_scenario "$name"
 done
+
+# --- Restart ----------------------------------------------------------------------
+# A stale /tmp/squid.pid once made Squid refuse to start after a restart
+# ("Squid is already running"); /tmp is now a tmpfs, emptied on every start.
+log "restart"
+check "restart: squid container restarts and is healthy again" restart_squid
+run_scenario proxy-auth-required "after squid restart: "
 
 # --- Secrets ----------------------------------------------------------------------
 log "secrets"

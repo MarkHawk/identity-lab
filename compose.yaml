@@ -369,6 +369,10 @@ services:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/squid-ca.crt:/etc/idlab/squid-ca.crt:ro
       - ./certs/squid-ca.key:/etc/idlab/squid-ca.key:ro
+    # Squid's pid file and helper state live in /tmp; a tmpfs is empty on
+    # every start, so a restart doesn't find a stale pid file and refuse to run.
+    tmpfs:
+      - /tmp
     networks:
       - default
       - egress
