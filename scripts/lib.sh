@@ -34,7 +34,7 @@ load_env() {
   source "$ENV_FILE"
   set +a
   local v
-  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT PROXY_KC_PORT PROXY_SAML_SP_PORT PROXY_OIDC_RP_PORT EGRESS_OIDC_RP_PORT PROXY_EDGE_RP_PORT API_PORT OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET EGRESS_PROXY_PASSWORD KC_ADMIN_USER KC_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET; do
+  for v in LAB_HOST KC_PORT SAML_SP_PORT OIDC_RP_PORT PROXY_KC_PORT PROXY_SAML_SP_PORT PROXY_OIDC_RP_PORT EGRESS_OIDC_RP_PORT PROXY_EDGE_RP_PORT API_PORT PROXY_MTLS_PORT OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET EGRESS_PROXY_PASSWORD KC_ADMIN_USER KC_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET; do
     [[ -n "${!v:-}" ]] || die "$v is missing from .env -- re-run scripts/setup.sh"
   done
 }
@@ -42,7 +42,7 @@ load_env() {
 compose() { docker compose --project-directory "$LAB_ROOT" "$@"; }
 
 # Issue a certificate signed by the lab CA.
-#   issue_cert <out-prefix> <common-name> <not-before> <not-after> <server|signing> [san]
+#   issue_cert <out-prefix> <common-name> <not-before> <not-after> <server|signing|client> [san]
 # Dates are anything GNU `date -d` understands ("now", "-30 days", ...).
 # Uses `openssl ca` so certificates can be backdated (needed for the
 # expired-signing-cert scenario) on OpenSSL 3.0 as well as newer versions.
@@ -75,6 +75,10 @@ subjectAltName   = ${san:-DNS:$cn}
 [ signing ]
 basicConstraints = critical,CA:FALSE
 keyUsage         = critical,digitalSignature
+[ client ]
+basicConstraints = critical,CA:FALSE
+keyUsage         = critical,digitalSignature
+extendedKeyUsage = clientAuth
 CNF
   ( umask 077; openssl req -new -newkey rsa:2048 -nodes -keyout "$out.key" \
       -out "$tmp/req.csr" -subj "/O=identity-lab/CN=$cn" 2>/dev/null )

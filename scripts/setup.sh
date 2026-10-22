@@ -107,6 +107,16 @@ if [[ ! -f "$CERTS_DIR/squid-ca.key" || ! -f "$CERTS_DIR/squid-ca.crt" ]]; then
   chmod 644 "$CERTS_DIR/squid-ca.crt"
 fi
 
+# --- mTLS client certificate --------------------------------------------------
+# The certificate a partner system presents to the proxy's mutual-TLS route
+# (:8189). certs/ holds the healthy copy; the client uses the one in
+# .state/mtls-client/, which the client-cert-* scenarios remove or replace.
+if [[ ! -f "$CERTS_DIR/mtls-client.crt" ]] \
+   || ! openssl x509 -in "$CERTS_DIR/mtls-client.crt" -noout -checkend $((30*86400)) >/dev/null; then
+  log "issuing the mTLS client certificate"
+  issue_cert "$CERTS_DIR/mtls-client" "partner-client" "-1 hour" "+397 days" client
+fi
+
 # Containers run as the invoking user (LAB_UID), so keys can stay 0600.
 chmod 600 "$CERTS_DIR"/*.key
 
@@ -131,6 +141,14 @@ for f in "$LAB_ROOT"/squid/defaults/*.conf; do
 done
 [[ -f "$STATE_DIR/oidc-rp-egress/proxy.env" ]] \
   || install -m 644 "$LAB_ROOT/squid/defaults/oidc-rp-egress.env" "$STATE_DIR/oidc-rp-egress/proxy.env"
+
+# The mTLS client's certificate, copied once. Not re-copied when present (or
+# deliberately removed by scenarios/client-cert-missing.sh): fix.sh does that.
+if [[ ! -d "$STATE_DIR/mtls-client" ]]; then
+  mkdir -p "$STATE_DIR/mtls-client"
+  install -m 644 "$CERTS_DIR/mtls-client.crt" "$STATE_DIR/mtls-client/client.crt"
+  install -m 600 "$CERTS_DIR/mtls-client.key" "$STATE_DIR/mtls-client/client.key"
+fi
 
 # --- .env ---------------------------------------------------------------------
 # Keep an existing secret, unless rotating.
@@ -167,6 +185,8 @@ EGRESS_OIDC_RP_PORT=8186
 PROXY_EDGE_RP_PORT=8187
 # The API (resource server) that accepts Keycloak access tokens.
 API_PORT=8188
+# The reverse proxy's route that requires a client certificate (mutual TLS).
+PROXY_MTLS_PORT=8189
 
 KC_ADMIN_USER=admin
 KC_ADMIN_PASSWORD=$(keep KC_ADMIN_PASSWORD "$(rand 32)")
@@ -207,6 +227,7 @@ ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182
 echo "    Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP)."
 echo "    The OIDC RP behind the egress proxy (Squid): :8186."
 echo "    The OIDC RP behind the reverse proxy on plain HTTP: :8187. The API (resource server): :8188."
+echo "    Through the reverse proxy, with a client certificate (mutual TLS): :8189."
 echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."
