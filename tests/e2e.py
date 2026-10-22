@@ -7,7 +7,8 @@
 saml-proxy and oidc-proxy are the copies of the apps behind the nginx
 reverse proxy; their whole login, Keycloak included, goes through it.
 oidc-egress is the OIDC RP whose own calls to Keycloak go through the Squid
-egress proxy; the browser reaches it and Keycloak directly.
+egress proxy; the browser reaches it and Keycloak directly. oidc-edge is the
+OIDC RP behind the reverse proxy on plain HTTP.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
@@ -22,6 +23,7 @@ import re
 import sys
 import time
 
+from playwright.sync_api import Error as PWError
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
@@ -39,6 +41,7 @@ APPS = {
     "saml-proxy": (url("PROXY_SAML_SP_PORT"), url("PROXY_KC_PORT")),
     "oidc-proxy": (url("PROXY_OIDC_RP_PORT"), url("PROXY_KC_PORT")),
     "oidc-egress": (url("EGRESS_OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-edge": (url("PROXY_EDGE_RP_PORT"), url("PROXY_KC_PORT")),
 }
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
@@ -85,7 +88,14 @@ def run(app, expect_error=None):
 def flow(page, app):
     """Drive the login and report (where-we-ended-up, visible text)."""
     base, kc = APPS[app]
-    page.goto(base + "/", wait_until="load")
+    try:
+        page.goto(base + "/", wait_until="load")
+    except PWTimeout:
+        raise
+    except PWError as exc:
+        # The browser gave up before showing any page, e.g.
+        # net::ERR_TOO_MANY_REDIRECTS from a redirect loop.
+        return f"{app}:error", str(exc)
     # An error page in front of the app (e.g. a 502 from the reverse proxy).
     if page.locator("#login").count() == 0:
         return f"{app}:error", page.inner_text("body")

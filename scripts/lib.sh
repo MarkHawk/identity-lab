@@ -129,9 +129,10 @@ REALM=idlab
 # Each scenarios/<name>.sh defines:
 #   SCENARIO_SUMMARY   one line for status output
 #   SCENARIO_RUNBOOK   path of the runbook
-#   SCENARIO_APP       saml|oidc|saml-proxy|oidc-proxy|oidc-egress|radius  -- which login
+#   SCENARIO_APP       saml|oidc|saml-proxy|oidc-proxy|oidc-egress|oidc-edge|radius  -- which login
 #                      shows the failure (*-proxy: the app copies behind the reverse proxy;
 #                      oidc-egress: the OIDC RP whose back channel goes through Squid;
+#                      oidc-edge: the OIDC RP behind the reverse proxy on plain HTTP;
 #                      radius: an Access-Request from the NAS, docker compose exec nas nas-auth)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
@@ -167,9 +168,10 @@ app_url()   {
     saml-proxy) echo "https://$LAB_HOST:$PROXY_SAML_SP_PORT/" ;;
     oidc-proxy) echo "https://$LAB_HOST:$PROXY_OIDC_RP_PORT/" ;;
     oidc-egress) echo "https://$LAB_HOST:$EGRESS_OIDC_RP_PORT/" ;;
+    oidc-edge)  echo "https://$LAB_HOST:$PROXY_EDGE_RP_PORT/" ;;
   esac
 }
-app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc|oidc-proxy|oidc-egress) echo "OIDC" ;; esac; }
+app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc|oidc-proxy|oidc-egress|oidc-edge) echo "OIDC" ;; esac; }
 
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {
