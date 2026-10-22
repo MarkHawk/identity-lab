@@ -25,8 +25,10 @@ A codespace is a Linux machine in the cloud with this repository already checked
 | 8184 | Proxy: SAML SP | A second copy of the SAML app, reachable only through the proxy |
 | 8185 | Proxy: OIDC RP | A second copy of the OIDC app, reachable only through the proxy |
 | 8186 | Egress: OIDC RP | A third copy of the OIDC app, whose own calls to Keycloak go through a Squid egress proxy |
+| 8187 | Proxy: edge OIDC RP | A fourth copy of the OIDC app, behind the reverse proxy, which talks plain HTTP to it |
+| 8188 | API | An API that accepts Keycloak access tokens; the OIDC app on 8182 calls it |
 
-You only need 8183 to 8185 for the reverse proxy scenarios (6 to 10 in [step 5](#5-break-it-and-fix-it)), and 8186 for the egress proxy scenarios (11 to 14). The egress proxy itself has no port of its own.
+You only need 8183 to 8185 for the reverse proxy scenarios (6 to 10 in [step 5](#5-break-it-and-fix-it)), 8186 for the egress proxy scenarios (11 to 14), 8187 for the redirect loop (15) and 8188 for the API scenarios (16). The egress proxy itself has no port of its own.
 
 **The demo users.** You'll use two of the six:
 
@@ -55,6 +57,7 @@ A browser tab opens with the VS Code editor and a terminal at the bottom. Creati
  ok  setup complete for https://localhost:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)
     Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP).
     The OIDC RP behind the egress proxy (Squid): :8186.
+    The OIDC RP behind the reverse proxy on plain HTTP: :8187. The API (resource server): :8188.
 ```
 
 At this point the lab is set up but not yet running. You start it in [step 3](#3-check-the-lab).
@@ -63,7 +66,7 @@ At this point the lab is set up but not yet running. You start it in [step 3](#3
 
 You can run every command from the browser tab. To log in to the apps yourself, though, open the codespace in VS Code on your own computer.
 
-**Why:** the lab's addresses are `https://localhost:8180`, `https://localhost:8181` and `https://localhost:8182`, 8183 to 8185 through the proxy, and 8186 for the OIDC app behind the egress proxy. Keycloak's issuer, the SAML entity IDs and the OIDC redirect URIs all use them. Desktop VS Code forwards the codespace's ports to `localhost` on your own computer, on the same port numbers, so those addresses work in your browser.
+**Why:** the lab's addresses are `https://localhost:8180`, `https://localhost:8181` and `https://localhost:8182`, 8183 to 8185 through the proxy, 8186 for the OIDC app behind the egress proxy, 8187 for the edge OIDC app and 8188 for the API. Keycloak's issuer, the SAML entity IDs and the OIDC redirect URIs all use them. Desktop VS Code forwards the codespace's ports to `localhost` on your own computer, on the same port numbers, so those addresses work in your browser.
 
 The browser tab offers forwarded links of the form `https://<codespace-name>-8181.app.github.dev` instead. **These don't work for logins.** Each port gets its own hostname with no port number, so Keycloak sends you back to `localhost` and the login fails.
 
@@ -74,7 +77,7 @@ The browser tab offers forwarded links of the form `https://<codespace-name>-818
 3. Next to your codespace, click the **...** menu, then **Open in** > **Visual Studio Code**. Allow the browser to open VS Code if it asks.
 4. VS Code opens a window connected to the codespace. The bottom-left corner shows **Codespaces** and the codespace's name.
 5. Open a terminal in that window: **Terminal** > **New Terminal**. Its prompt is a Linux prompt in the repository folder, not your own computer's.
-6. Open the **Ports** tab, next to the terminal. Ports 8180, 8181 and 8182 are listed as Keycloak (IdP), SAML SP and OIDC RP, 8183, 8184 and 8185 as the same three through the proxy, and 8186 as Egress: OIDC RP. Check that the **Forwarded Address** column shows the same number for each, `localhost:8180` to `localhost:8186`. If any number differs, see [Troubleshooting](#troubleshooting).
+6. Open the **Ports** tab, next to the terminal. Ports 8180, 8181 and 8182 are listed as Keycloak (IdP), SAML SP and OIDC RP, 8183, 8184 and 8185 as the same three through the proxy, 8186 as Egress: OIDC RP, 8187 as Proxy: edge OIDC RP and 8188 as API. Check that the **Forwarded Address** column shows the same number for each, `localhost:8180` to `localhost:8188`. If any number differs, see [Troubleshooting](#troubleshooting).
 
 You can close the browser tab from step 1 now. The rest of this guide uses desktop VS Code.
 
@@ -132,6 +135,7 @@ Use the browser on your own computer. Every address is `https://`: an `http://` 
 - https://localhost:8182
 - for the proxy scenarios: https://localhost:8183, https://localhost:8184 and https://localhost:8185
 - for the egress proxy scenarios: https://localhost:8186
+- for the redirect loop: https://localhost:8187
 
 Do them before your first login. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. Don't install the lab's CA as trusted on your computer: the README [explains why](../README.md#dont-install-the-lab-ca-as-trusted-on-your-computer).
 
@@ -197,6 +201,9 @@ Running `break.sh` or `fix.sh` twice is safe: the second run does nothing.
 | 12 | `proxy-policy-block` | https://localhost:8186, **Log in with OIDC**, as `alice` | The app's error page after you sign in: `Tunnel connection failed: 403 Forbidden` | [12](../runbooks/12-proxy-policy-block.md) |
 | 13 | `proxy-tls-interception` | https://localhost:8186, **Log in with OIDC**, as `alice` | The app's error page after you sign in: `certificate verify failed: self-signed certificate in certificate chain` | [13](../runbooks/13-proxy-tls-interception.md) |
 | 14 | `proxy-bypass` | https://localhost:8186, **Log in with OIDC** | The app's error page straight away: `Failed to resolve 'keycloak'` | [14](../runbooks/14-proxy-bypass.md) |
+| 15 | `redirect-loop` | https://localhost:8187. https://localhost:8185 still works. | The browser's own error page straight away: `ERR_TOO_MANY_REDIRECTS` (*redirected you too many times*) | [15](../runbooks/15-redirect-loop.md) |
+| 16 | `api-bearer-audience` | https://localhost:8182, **Log in with OIDC** as `alice`, then **Call the API**. The login itself works. | `API call failed: 401 UNAUTHORIZED`, with `error="invalid_token"` and `The access token audience (idlab-api-staging account) does not include idlab-api` | [16](../runbooks/16-api-bearer-401.md) |
+| 16 | `api-bearer-expired` | https://localhost:8182, **Log in with OIDC** as `alice`, wait 15 seconds, then **Call the API**. Straight after login it works. | `API call failed: 401 UNAUTHORIZED`, with `error="invalid_token"` and `The access token expired at <time>` | [16](../runbooks/16-api-bearer-401.md) |
 
 For 11 to 13, the error comes straight after **Log in** instead if the app has restarted since its last login: it hasn't fetched Keycloak's settings through the proxy yet.
 
@@ -215,7 +222,7 @@ Stopping a codespace (or letting it stop itself when idle) stops the core hours,
 
 | Problem | What's happening | What to do |
 |---|---|---|
-| The **Ports** tab shows a different local number, such as `localhost:8190` for port 8181 | Something on your own computer already uses that port, for example a local copy of the lab, so VS Code picked another one. The lab's addresses only work on the same numbers. | Stop whatever uses the port on your computer, then in the Ports tab right-click the port and choose **Change Local Address Port** to set it back to the port's own number (8180 to 8186). Or close and reopen the codespace in VS Code. |
+| The **Ports** tab shows a different local number, such as `localhost:8190` for port 8181 | Something on your own computer already uses that port, for example a local copy of the lab, so VS Code picked another one. The lab's addresses only work on the same numbers. | Stop whatever uses the port on your computer, then in the Ports tab right-click the port and choose **Change Local Address Port** to set it back to the port's own number (8180 to 8188). Or close and reopen the codespace in VS Code. |
 | The terminal shows a PowerShell prompt (`PS C:\...>`) or your own computer's shell, and commands like `scripts/status.sh` aren't found | The terminal belongs to your own computer, not the codespace. This happens in a VS Code window that isn't connected to the codespace. | Check the bottom-left corner of the window shows **Codespaces**. If it doesn't, reopen the codespace as in [step 2](#2-open-it-in-desktop-vs-code). Then open a new terminal in that window with **Terminal** > **New Terminal**. |
 | `docker compose ps` lists nothing, or services aren't `(healthy)`; the browser can't connect | The lab isn't running. It doesn't start on its own when the codespace is created, and may not be running after the codespace has been stopped. | Run `docker compose up -d --wait`, then `scripts/status.sh`. If that fails, `scripts/test.sh --fresh` rebuilds everything from scratch. |
 | A login sends you to an `*.app.github.dev` address, or starts there and fails | You opened the app through the codespace's forwarded link in the browser tab, not through `localhost`. | Open the codespace in desktop VS Code ([step 2](#2-open-it-in-desktop-vs-code)) and use `https://localhost:<port>` in your own browser. |

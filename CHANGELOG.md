@@ -2,6 +2,20 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
 
+## Phase 3, Part C, round one: redirect loop and API bearer 401s (2026-10-22)
+
+**Added:**
+
+- `oidc-rp-edge`, a fourth copy of the OIDC app, published by the reverse proxy on port 8187. TLS ends at the proxy and the app gets plain HTTP, trusts `X-Forwarded-Proto` from one hop, and forces HTTPS.
+- An API (resource server, `apps/api`) on port 8188 that accepts Keycloak access tokens and answers failures with RFC 6750 `WWW-Authenticate` challenges. The direct OIDC app calls it (**Call the API**), and shows the raw token on request at `/debug/access-token`, for token-inspector.
+- Scenario 15, `redirect-loop`, and scenario 16 in two variants, `api-bearer-audience` and `api-bearer-expired`, with runbooks 15 and 16.
+- Tests for the edge app, the API's challenges, and that no JWT appears in any container's log, saved page or `test.log`. The access loggers also mask `access_token=` in query strings.
+
+**Why the upgrade steps:**
+
+- `scripts/setup.sh` adds the ports `PROXY_EDGE_RP_PORT=8187` and `API_PORT=8188` and the `oidc-rp-edge` client secret (`OIDC_EDGE_CLIENT_SECRET`) to your existing `.env`. It reissues the TLS certificate with the name `api`, and writes the proxy's new `edge-location.conf` to `.state/proxy/`. Compose refuses to start until the new `.env` values exist.
+- `scripts/test.sh --fresh`: Keycloak's `oidc-rp-edge` client and the `idlab-api` audience mapper on `oidc-rp` are created at realm import, which only happens when the Keycloak database is new.
+
 ## Restart fixes (2026-10-22)
 
 **Fixed:** Squid no longer loops on "FATAL: Squid is already running" after its container restarts: `/tmp`, where it keeps its PID file, is now a tmpfs that starts empty, and `scripts/test.sh` restarts Squid and runs scenario 11 again to prove it.

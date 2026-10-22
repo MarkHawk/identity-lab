@@ -34,10 +34,12 @@ flowchart LR
         ldap[("OpenLDAP 2.6<br/>dc=idlab,dc=example<br/>ldaps://ldap:1636<br/>internal only")]
         sp["SAML SP<br/>Flask + python3-saml<br/>:8181 HTTPS<br/>libfaketime"]
         rp["OIDC RP<br/>Flask + Authlib<br/>:8182 HTTPS"]
+        api["API (resource server)<br/>Flask + joserfc<br/>:8188 HTTPS"]
         subgraph proxynet["network proxy · 172.30.182.0/24"]
-            proxy["nginx 1.30 reverse proxy<br/>172.30.182.10<br/>:8183 Keycloak · :8184 SAML SP · :8185 OIDC RP<br/>HTTPS to the browser and to each upstream"]
+            proxy["nginx 1.30 reverse proxy<br/>172.30.182.10<br/>:8183 Keycloak · :8184 SAML SP · :8185 OIDC RP · :8187 edge OIDC RP<br/>HTTPS to the browser and to each upstream,<br/>except plain HTTP to oidc-rp-edge"]
             spp["SAML SP copy<br/>saml-sp-proxied<br/>no host port"]
             rpp["OIDC RP copy<br/>oidc-rp-proxied<br/>no host port"]
+            rpx["OIDC RP copy<br/>oidc-rp-edge<br/>no host port, plain HTTP<br/>forces HTTPS"]
         end
         pstate[/".state/proxy/<br/>the settings scenarios change"/]
         subgraph egressnet["internal network egress · 172.30.183.0/24"]
@@ -60,6 +62,9 @@ flowchart LR
     proxy -- "X-Forwarded-Proto, -Host, -Port<br/>(trusted from 172.30.182.10 only)" --> kc
     proxy --> spp
     proxy --> rpp
+    proxy -- "plain HTTP,<br/>X-Forwarded-Proto" --> rpx
+    rp -- "Authorization: Bearer<br/>access token" --> api
+    api -- "JWKS" --> kc
     rpp -- "back channel<br/>https://proxy:8183" --> proxy
     pstate -. "included, nginx -s reload" .-> proxy
     user -- "code + state (redirect)" --> rpe
@@ -81,6 +86,8 @@ flowchart LR
 - **Front channel:** browsers reach everything at `https://$LAB_HOST:818x`. Keycloak issues tokens with the issuer for the port they used: `:8180` directly, `:8183` through the proxy.
 - **Reverse proxy:** nginx publishes Keycloak and a second copy of each app on 8183–8185, so the whole login can go through it, as it would behind a real load balancer or ingress. It verifies each upstream's TLS certificate against the lab CA. It tells Keycloak the scheme and port the browser used in `X-Forwarded-*` headers, which Keycloak trusts only from the proxy's fixed address. The copies behind it have no host port of their own, and the proxied OIDC RP's back channel goes through the proxy too.
 - **Egress proxy:** a third copy of the OIDC RP, `oidc-rp-egress` on `:8186`, sits on an internal network whose only way out is Squid, like an app server that must use a corporate forward proxy. Its back channel (discovery, token, userinfo, JWKS) goes to Squid as `CONNECT keycloak:8180`, set by `HTTPS_PROXY` and `NO_PROXY`, and Squid tunnels it. The browser side of its login doesn't use the proxy: the browser reaches the app on `:8186` and Keycloak directly on `:8180`. Squid publishes no host port.
+- **Edge RP:** a fourth copy of the OIDC RP, `oidc-rp-edge`, sits behind the reverse proxy on `:8187` with TLS ending at the proxy and plain HTTP behind it, as behind most load balancers. It learns that the browser used HTTPS only from `X-Forwarded-Proto` (trusting one proxy hop), and redirects anything that looks like plain HTTP to its `https://` URL.
+- **API:** a resource server on `:8188` that accepts Keycloak access tokens. The direct OIDC RP calls it with the user's access token (**Call the API** on its debug page). It checks the token offline: the signature against Keycloak's JWKS, the issuer, the expiry and that `aud` includes `idlab-api`, which an audience mapper on the `oidc-rp` client adds. A failure gets a 401 with an RFC 6750 `WWW-Authenticate` header saying why.
 - **Back channel:** the OIDC RP talks to Keycloak directly over the compose network at `https://keycloak:8180`, rewriting the token, userinfo and JWKS endpoints from discovery to that address (`OIDC_BACKCHANNEL_BASE`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
 - **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
 - **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin and frank can log in over RADIUS as well as through Keycloak. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
@@ -88,14 +95,14 @@ flowchart LR
 
 ## Quick start
 
-**Prerequisites:** Linux with Docker Engine and Compose v2, plus `bash`, `openssl`, `curl` and `jq`. It uses host ports 8180–8186.
+**Prerequisites:** Linux with Docker Engine and Compose v2, plus `bash`, `openssl`, `curl` and `jq`. It uses host ports 8180–8188.
 
 ```bash
 git clone https://github.com/MarkHawk/identity-lab && cd identity-lab
 
 scripts/setup.sh                 # CA, certificates and random secrets -> .env and certs/ (prints no secrets)
                                  # set LAB_HOST=localhost first if you have no DNS name for this machine
-docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + FreeRADIUS + NAS + the apps + both proxies (first build takes 10 minutes or more: Squid is compiled from source)
+docker compose up -d --wait      # Keycloak + Postgres + OpenLDAP + FreeRADIUS + NAS + the apps + the API + both proxies (first build takes 10 minutes or more: Squid is compiled from source)
 scripts/pin-idp-cert.sh          # "onboard" the SAML SP: trust the IdP's current signing certificate
 scripts/status.sh                # service health and the live state of every scenario
 docker compose exec nas nas-auth dave   # a RADIUS login from the NAS; enter the demo password -> "nas: Access-Accept"
@@ -114,6 +121,8 @@ Use a browser on a machine that resolves `LAB_HOST` to the lab host. **Every URL
 | SAML service provider through the reverse proxy | **https://idlab.home:8184** |
 | OIDC relying party through the reverse proxy | **https://idlab.home:8185** |
 | OIDC relying party whose calls to Keycloak go through the egress proxy | **https://idlab.home:8186** |
+| OIDC relying party behind the reverse proxy, plain HTTP behind it | **https://idlab.home:8187** |
+| API (resource server); called by the OIDC RP on `:8182` | **https://idlab.home:8188** |
 
 If you set a different `LAB_HOST`, use that instead of `idlab.home`.
 
@@ -183,6 +192,10 @@ scripts/fix.sh proxy-rate-limit
 scripts/break.sh proxy-tls-interception # now log in at https://idlab.home:8186: certificate verify failed
 docker compose logs squid | grep TLS_LIB_ERR
 scripts/fix.sh proxy-tls-interception
+
+scripts/break.sh api-bearer-audience    # log in at https://idlab.home:8182, then "Call the API": 401 invalid_token
+docker compose logs api | grep api_token_rejected
+scripts/fix.sh api-bearer-audience
 ```
 
 ## Run it in Codespaces
@@ -208,9 +221,9 @@ No local setup: GitHub Codespaces runs the whole lab in a cloud container you dr
 
    Any scenario from the [table](#scenarios) works the same way, and `scripts/test.sh` checks each one's browser error and log evidence for you.
 
-**Browser logins aren't supported in the codespace's own forwarded URLs.** The Ports tab lists 8180 (Keycloak), 8181 (SAML SP), 8182 (OIDC RP), the reverse proxy's 8183 to 8185 and the egress proxy's OIDC RP on 8186, but Codespaces gives each port its own hostname, `https://<codespace>-8181.app.github.dev` with no port number. The lab's issuer, SAML entity IDs and redirect URIs are all `https://LAB_HOST:<port>` (in a codespace, `https://localhost:8181` and so on), so a login started there is sent back to `localhost` and fails. Making the lab follow per-port hostnames would mean a different URL scheme from the one you'd see locally and in CI, so it doesn't. Use desktop VS Code (below) to log in yourself, or `scripts/test.sh`: it runs real Chromium logins inside the codespace and saves screenshots and page HTML to `test-results/`.
+**Browser logins aren't supported in the codespace's own forwarded URLs.** The Ports tab lists 8180 (Keycloak), 8181 (SAML SP), 8182 (OIDC RP), the reverse proxy's 8183 to 8185, the egress proxy's OIDC RP on 8186, the edge OIDC RP on 8187 and the API on 8188, but Codespaces gives each port its own hostname, `https://<codespace>-8181.app.github.dev` with no port number. The lab's issuer, SAML entity IDs and redirect URIs are all `https://LAB_HOST:<port>` (in a codespace, `https://localhost:8181` and so on), so a login started there is sent back to `localhost` and fails. Making the lab follow per-port hostnames would mean a different URL scheme from the one you'd see locally and in CI, so it doesn't. Use desktop VS Code (below) to log in yourself, or `scripts/test.sh`: it runs real Chromium logins inside the codespace and saves screenshots and page HTML to `test-results/`.
 
-**Clicking through the apps yourself: open the codespace in desktop VS Code.** With the GitHub Codespaces extension installed, use [github.com/codespaces](https://github.com/codespaces) > **...** > **Open in** > **Visual Studio Code**. VS Code forwards ports 8180 to 8186 to your own `localhost` on the same numbers, so `https://localhost:8181/` and the other [lab URLs](#open-the-apps-https-only), with `localhost` in place of `idlab.home`, work in your own browser. [docs/codespaces.md](docs/codespaces.md) is a step-by-step guide for first-time Codespaces users.
+**Clicking through the apps yourself: open the codespace in desktop VS Code.** With the GitHub Codespaces extension installed, use [github.com/codespaces](https://github.com/codespaces) > **...** > **Open in** > **Visual Studio Code**. VS Code forwards ports 8180 to 8188 to your own `localhost` on the same numbers, so `https://localhost:8181/` and the other [lab URLs](#open-the-apps-https-only), with `localhost` in place of `idlab.home`, work in your own browser. [docs/codespaces.md](docs/codespaces.md) is a step-by-step guide for first-time Codespaces users.
 
 **Codespaces uses your own GitHub allowance.** Personal accounts get a free monthly quota of core hours and storage; a 2-core machine uses two core hours for every hour it runs. Stop the codespace when you're done (it also stops itself when idle), and delete it from [github.com/codespaces](https://github.com/codespaces) to free its storage. See GitHub's [Codespaces billing documentation](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-codespaces/about-billing-for-github-codespaces) for the current quotas.
 
@@ -281,14 +294,19 @@ Then try the other scenarios the same way, using `scripts/break.sh` with no argu
 | 12 | `proxy-policy-block` | OIDC through the egress proxy | A filtering rule on Squid (`dstdomain keycloak`) refuses the IdP. | App: `Tunnel connection failed: 403 Forbidden`, after the password. Squid log: `TCP_DENIED/403 ... CONNECT keycloak:8180` | [12-proxy-policy-block](runbooks/12-proxy-policy-block.md) |
 | 13 | `proxy-tls-interception` | OIDC through the egress proxy | Squid turns on TLS inspection and re-signs Keycloak's certificate with its own inspection CA, which the app doesn't trust. | App: `certificate verify failed: self-signed certificate in certificate chain`. Squid log: `SQUID_TLS_ERR_ACCEPT+TLS_LIB_ERR=A000418` (*tlsv1 alert unknown ca*) | [13-proxy-tls-interception](runbooks/13-proxy-tls-interception.md) |
 | 14 | `proxy-bypass` | OIDC through the egress proxy | The app's `NO_PROXY` gains `keycloak`, so its IdP calls skip the proxy; its network has no other route. | App: `Failed to resolve 'keycloak'`, straight after **Log in**. Squid logs nothing. | [14-proxy-bypass](runbooks/14-proxy-bypass.md) |
+| 15 | `redirect-loop` | OIDC behind the reverse proxy on plain HTTP | A `proxy_set_header X-Request-ID` added to the edge app's location makes nginx stop sending the server's `X-Forwarded-Proto` there. The app, which forces HTTPS, sees plain HTTP and redirects to the URL the browser is already on. | Browser: `ERR_TOO_MANY_REDIRECTS` (*redirected you too many times*), before any login. App log: `event=force_https ... x_forwarded_proto=-` | [15-redirect-loop](runbooks/15-redirect-loop.md) |
+| 16 | `api-bearer-audience` | OIDC RP calling the API | The `oidc-rp` client's audience mapper names `idlab-api-staging`, so its access tokens are for another API. The login still works. | After **Call the API**: `401`, `WWW-Authenticate: Bearer ... error="invalid_token", error_description="The access token audience (idlab-api-staging account) does not include idlab-api"` | [16-api-bearer-401](runbooks/16-api-bearer-401.md) |
+| 16 | `api-bearer-expired` | OIDC RP calling the API | The `oidc-rp` client's access token lifespan drops to 10 seconds; the app never refreshes the token it got at login. | **Call the API** more than 10 s after login: `401`, `error="invalid_token", error_description="The access token expired at <time>"`. Straight after login it works. | [16-api-bearer-401](runbooks/16-api-bearer-401.md) |
 
 Every scenario is:
 
 - **reproducible:** driven by scripts, with no manual clicking
 - **reversible:** `fix.sh` restores a working state
-- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store, the NAS's secret, the proxies' settings as their containers see them, the issuer Keycloak reports through the reverse proxy, and the egress app's proxy variables as its process has them), so running either twice is a no-op
+- **idempotent:** `break` and `fix` read the *live* state first (Keycloak Admin API and its LDAP connection test, container clocks, SP trust store, the NAS's secret, the proxies' settings as their containers see them, the issuer Keycloak reports through the reverse proxy, what the edge app answers through it, and the egress app's proxy variables as its process has them), so running either twice is a no-op
 
-The proxy scenarios change one setting file each in `.state/proxy/` (healthy defaults in `proxy/defaults/`) and reload nginx with `nginx -t && nginx -s reload`, as an admin would. If nginx rejects a change, the previous file is put back. `proxy-gateway-timeout` changes the app behind the proxy instead, through `.state/oidc-rp-proxied/callback-delay`; the proxy keeps its timeout.
+The proxy scenarios change one setting file each in `.state/proxy/` (healthy defaults in `proxy/defaults/`) and reload nginx with `nginx -t && nginx -s reload`, as an admin would. If nginx rejects a change, the previous file is put back. `proxy-gateway-timeout` changes the app behind the proxy instead, through `.state/oidc-rp-proxied/callback-delay`; the proxy keeps its timeout. `redirect-loop` works like the other proxy scenarios, on `.state/proxy/edge-location.conf`, but is detected by what the app answers through the proxy: a redirect to the URL that was asked for.
+
+The API scenarios change Keycloak, not the API, through the Admin REST API like `redirect-uri-mismatch`: the `audience idlab-api` mapper on the `oidc-rp` client, or that client's access token lifespan. Tokens issued before a change keep their old values until they expire, so test with a new login.
 
 The egress proxy scenarios 11 to 13 work the same way on Squid: one include file each in `.state/squid/` (healthy defaults in `squid/defaults/`), applied with `squid -k parse && squid -k reconfigure`. `proxy-bypass` changes the app instead: its `HTTPS_PROXY` and `NO_PROXY` are in `.state/oidc-rp-egress/proxy.env`, and as with any environment variable the container is recreated to pick them up. For 11 to 13 the app fails after the password, at the token request, because it already has Keycloak's discovery document; if it has restarted since its last login, the same error appears straight after **Log in**.
 
@@ -312,8 +330,11 @@ Other tools of mine that help diagnose these scenarios:
 | `proxy-policy-block` | [12-proxy-policy-block](runbooks/12-proxy-policy-block.md) | App: `Tunnel connection failed: 403 Forbidden` | Splunk support planned |
 | `proxy-tls-interception` | [13-proxy-tls-interception](runbooks/13-proxy-tls-interception.md) | App: `certificate verify failed: self-signed certificate in certificate chain` | Splunk support planned |
 | `proxy-bypass` | [14-proxy-bypass](runbooks/14-proxy-bypass.md) | App: `Failed to resolve 'keycloak'` | Splunk support planned |
+| `redirect-loop` | [15-redirect-loop](runbooks/15-redirect-loop.md) | Browser: `ERR_TOO_MANY_REDIRECTS` | None of these: `curl -I` and `nginx -T` (see the runbook) |
+| `api-bearer-audience` | [16-api-bearer-401](runbooks/16-api-bearer-401.md) | API: `401`, `error="invalid_token"`, audience | [token-inspector](https://github.com/MarkHawk/token-inspector) |
+| `api-bearer-expired` | [16-api-bearer-401](runbooks/16-api-bearer-401.md) | API: `401`, `error="invalid_token"`, expired | [token-inspector](https://github.com/MarkHawk/token-inspector) (with `--skew` set to the API's; see the runbook) |
 
-- **[token-inspector](https://github.com/MarkHawk/token-inspector)** decodes a SAML response or JWT offline and explains the likely cause, such as an expired or rotated signing certificate (01) or clock skew (02).
+- **[token-inspector](https://github.com/MarkHawk/token-inspector)** decodes a SAML response or JWT offline and explains the likely cause, such as an expired or rotated signing certificate (01), clock skew (02), or an access token issued for another API or past its expiry (16).
 - **[rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe)** shows whether a 429 comes from the client retrying too early, or from the API's limit or headers being wrong (08).
 - **[identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk)** is a Splunk app that shows when each failure started, who is affected and the likely cause, with a link to the runbook (01 to 10).
 
@@ -330,11 +351,13 @@ The 175 checks cover:
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
 - that Keycloak ignores X-Forwarded headers sent by anyone but the proxy (a direct request with forged headers still gets the `:8180` issuer)
-- a real Chromium login to each app, directly and through the reverse proxy, and to the OIDC app behind the egress proxy (with its back channel in Squid's log), as a local user (alice) and as an LDAP user (dave)
+- that the API answers a call with no token with a bare `WWW-Authenticate: Bearer` challenge, and a malformed token with `error="invalid_token"`
+- a real Chromium login to each app, directly and through the reverse proxy (including the edge OIDC app it reaches over plain HTTP), and to the OIDC app behind the egress proxy (with its back channel in Squid's log), as a local user (alice) and as an LDAP user (dave)
+- the direct OIDC app calling the API with its access token, and handing out the raw token on `/debug/access-token`
 - a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
 - for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
-- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't; for `radius-shared-secret-mismatch`, that dave still logs in to the OIDC app while RADIUS is broken; for every proxy scenario, that alice still logs in to the same app directly, bypassing the proxy; for `proxy-auth-required`, that the `egress-svc` account gets through Squid; for `proxy-tls-interception`, that the certificate presented for Keycloak is issued by the inspection CA
-- last, that no password or secret from `.env` appears in any container's log
+- for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't; for `radius-shared-secret-mismatch`, that dave still logs in to the OIDC app while RADIUS is broken; for every proxy scenario, that alice still logs in to the same app directly, bypassing the proxy; for `proxy-auth-required`, that the `egress-svc` account gets through Squid; for `proxy-tls-interception`, that the certificate presented for Keycloak is issued by the inspection CA; for `redirect-loop`, that alice still logs in to the OIDC app through the proxy's other route; for `api-bearer-audience`, that the login itself still works; for `api-bearer-expired`, that a call straight after login still works
+- last, that no password or secret from `.env`, authorisation code or OAuth state appears in any container's log, and no JWT (access or ID token) in any container's log, saved page or `test.log`
 
 `scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log.
 
@@ -379,14 +402,15 @@ curl -sS --cacert certs/ca.crt https://localhost:8181/healthz    # {"status":"ok
 
 ```
 .devcontainer/               GitHub Codespaces / dev container: docker-in-docker, runs setup.sh on creation
-compose.yaml                 Keycloak, Postgres, OpenLDAP, FreeRADIUS, NAS, saml-sp, oidc-rp, the reverse proxy
-                             and the apps behind it, Squid and the OIDC RP behind it, tests (profile "test")
+compose.yaml                 Keycloak, Postgres, OpenLDAP, FreeRADIUS, NAS, saml-sp, oidc-rp, the API, the reverse
+                             proxy and the apps behind it, Squid and the OIDC RP behind it, tests (profile "test")
 keycloak/idlab-realm.json    realm, clients, demo users and LDAP federation; secrets injected via placeholders
 ldap/                        OpenLDAP image: cn=config and directory seed LDIF, first-boot entrypoint
 radius/                      FreeRADIUS image: minimal config, clients.conf, LDAP module, the one virtual server
 nas/                         NAS image: first-boot secret seeding and nas-auth (one Access-Request)
 apps/saml-sp/                Flask + python3-saml service provider
-apps/oidc-rp/                Flask + Authlib relying party
+apps/oidc-rp/                Flask + Authlib relying party (also the edge copy, with plain HTTP and forced HTTPS)
+apps/api/                    Flask + joserfc API (resource server) that accepts Keycloak access tokens
 proxy/                       nginx.conf for the reverse proxy, and defaults/ with the healthy value of each
                              setting the proxy scenarios change
 squid/                       Squid image built from source, squid.conf, and defaults/ with the healthy value of
@@ -425,6 +449,10 @@ CHANGELOG.md                 what each phase added, and why upgrading needs setu
 - **The inspection CA is separate from the lab CA** (`certs/squid-ca.*`, created by `setup.sh`), and nothing trusts it. Squid runs as `LAB_UID` so it can read its key.
 - **The egress proxy's password is hashed inside its container.** `EGRESS_PROXY_PASSWORD` reaches Squid's entrypoint in the environment, is hashed with `openssl passwd -stdin` into the file `basic_ncsa_auth` reads, and is unset before Squid starts, as the directory does with its passwords. Squid logs the username of an authenticated request, never the password, and `scripts/test.sh` checks that no secret from `.env` appears in any container's log.
 - **The OIDC RP reports back-channel failures itself.** A failed call to Keycloak (refused by a proxy, DNS, TLS) is shown on the app's error page as `backchannel_failed` with the client library's own message, including at `/login`, where it used to be a bare 500. Authlib keeps the discovery document and Keycloak's keys for the life of the process, so the first failing call is the token request unless the app has just restarted; the runbooks explain both.
+- **The edge app gets plain HTTP, and redirects to its configured URL.** The other app copies terminate TLS themselves, so they always see HTTPS and can't loop. `oidc-rp-edge` is the common production layout instead: TLS ends at the proxy, the app trusts `X-Forwarded-Proto` from one hop (Werkzeug's `ProxyFix`) and forces HTTPS. Its redirect goes to its configured public URL, not one built from the `Host` header (which the client controls), and is a 302, because browsers cache a 301 and would keep looping after the fix.
+- **The API checks tokens offline and never logs them.** It validates each access token against Keycloak's JWKS (fetched again when an unknown `kid` appears) with no clock-skew allowance, so expiry is exact. Each rejection is one log line with the claims that decided it (`aud`, `azp`, `exp`, `sub`), never the token. The direct OIDC app keeps the access token in its in-process store, not in a cookie, and doesn't refresh it, on purpose: that's what `api-bearer-expired` exposes.
+- **`/debug/access-token` exists for token-inspector,** as a stand-in for copying the token from the browser's developer tools. It returns the raw token as plain text with `Cache-Control: no-store`, only when asked for. No page embeds it, so the page HTML that `scripts/test.sh` saves never holds it. The test fetches it with `fetch()` inside the page, without opening it, then checks that no JWT appears in any container's log, saved page or `test.log`.
+- **The API's audience comes from a mapper on the client, not a client scope.** The realm import defines no client scopes, so Keycloak creates its built-in ones. Defining one would mean listing all of them, or losing `profile`, `email` and the rest. A mapper on `oidc-rp` (in the console, its *dedicated* scope) does the same job.
 - **Scenario state is detected, not remembered.** No flag files. `status.sh` reports what the lab is actually doing, so it also catches drift caused by someone editing Keycloak by hand.
 - **Why the SAML SP pins the IdP certificate.** The first design had the SP refresh IdP metadata and Keycloak sign with an expired certificate. Building it showed that Keycloak 26.7 won't do that:
   - It refuses to import an expired certificate (`400 "Certificate is not valid"`).
@@ -448,7 +476,7 @@ CHANGELOG.md                 what each phase added, and why upgrading needs setu
   - GitHub Actions to commit SHAs
 
   Each version was at least two weeks old when chosen. Debian and Ubuntu packages installed with apt are not pinned: they follow the distribution's security updates, because the mirrors drop a superseded version and a pinned build then fails.
-- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and nginx on 8183–8185 inside its own; Keycloak's health endpoint is on the unpublished management port. The OIDC app behind the egress proxy is published on 8186. The directory, the RADIUS server and Squid publish no host port at all.
+- **Ports 8180–8189 only.** Keycloak also listens on 8180 *inside* its container, and nginx on 8183–8185 inside its own; Keycloak's health endpoint is on the unpublished management port. The OIDC app behind the egress proxy is published on 8186, the edge OIDC app on 8187 (by nginx; the app itself has no host port), and the API on 8188. 8189 is free. The directory, the RADIUS server and Squid publish no host port at all.
 
 ## Known limitations
 
@@ -457,6 +485,7 @@ CHANGELOG.md                 what each phase added, and why upgrading needs setu
 - **One rate-limit bucket for every browser.** All browser traffic reaches the proxy from the Docker gateway's address, so `proxy-rate-limit` limits every user together, and a `rate-limit-probe` run shares the bucket with your own logins for a few seconds.
 - **The egress proxy offers Basic authentication only.** Corporate proxies often use NTLM or Kerberos (Negotiate); runbook 11 describes what those look like, but the lab doesn't reproduce them.
 - **Squid's first build is slow.** It's compiled from source: about 8 minutes on 4 cores, more on a 2-core codespace. Later builds use the cache.
+- **The OIDC app never refreshes its access token.** That's deliberate, for `api-bearer-expired`: after Keycloak's default 5 minutes, **Call the API** fails as expired even on a healthy lab until you log in again.
 - **Single-worker apps.** Each app runs one gunicorn worker with an in-memory store for decoded logins. That's fine for a lab, not for production.
 - **Tested platform.** The lab has only been tested on x86_64 Linux.
 - **Codespaces: no browser logins at the forwarded URLs.** In a codespace, use `scripts/test.sh`, or forward the ports to your own `localhost` (see [Run it in Codespaces](#run-it-in-codespaces)).
