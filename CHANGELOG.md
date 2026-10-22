@@ -2,9 +2,11 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
 
-## Squid restart fix (2026-10-22)
+## Restart fixes (2026-10-22)
 
 **Fixed:** Squid no longer loops on "FATAL: Squid is already running" after its container restarts: `/tmp`, where it keeps its PID file, is now a tmpfs that starts empty, and `scripts/test.sh` restarts Squid and runs scenario 11 again to prove it.
+
+**Fixed:** the nginx reverse proxy no longer returns 502 for up to 10 seconds after `docker compose up` recreates Keycloak or an app it fronts: it now restarts with them (`depends_on` with `restart: true`), so it starts with their new addresses.
 
 ## Phase 3, Part B: Squid egress proxy (2026-10-21)
 
