@@ -5,7 +5,8 @@
 # 8183-8185. A third copy of the OIDC RP (8186) reaches Keycloak only through
 # a Squid egress proxy. The reverse proxy also publishes a fourth OIDC RP on
 # 8187, which it reaches over plain HTTP. An API (8188) accepts Keycloak
-# access tokens from the direct OIDC RP. Host ports are restricted to
+# access tokens from the direct OIDC RP. On 8189 the reverse proxy answers
+# only clients with a certificate (mutual TLS). Host ports are restricted to
 # 8180-8189. LDAP, RADIUS and Squid publish no host port.
 
 name: identity-lab
@@ -21,6 +22,7 @@ x-lab-env: &lab-env
   EGRESS_OIDC_RP_PORT: ${EGRESS_OIDC_RP_PORT:?run scripts/setup.sh}
   PROXY_EDGE_RP_PORT: ${PROXY_EDGE_RP_PORT:?run scripts/setup.sh}
   API_PORT: ${API_PORT:?run scripts/setup.sh}
+  PROXY_MTLS_PORT: ${PROXY_MTLS_PORT:?run scripts/setup.sh}
 
 # Settings shared by every copy of the OIDC RP.
 x-oidc-rp-env: &oidc-rp-env
@@ -426,6 +428,7 @@ services:
       - "${PROXY_SAML_SP_PORT}:8184"
       - "${PROXY_OIDC_RP_PORT}:8185"
       - "${PROXY_EDGE_RP_PORT}:8187"
+      - "${PROXY_MTLS_PORT}:8189"
     healthcheck:
       # nginx itself, over verified TLS; never reaches an upstream.
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "--cacert", "/etc/idlab/ca.crt", "https://localhost:8183/nginx-healthz"]
