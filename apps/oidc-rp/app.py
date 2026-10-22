@@ -57,6 +57,10 @@ PROXY_HOPS = int(os.environ.get("OIDC_RP_PROXY_HOPS", "0"))
 # The API (resource server) this app calls with the user's access token,
 # from the debug page. Only the direct copy sets it (scenarios/api-bearer-*.sh).
 API_URL = os.environ.get("OIDC_RP_API_URL")
+# The same API as the browser reaches it (its public URL), for "Call the API
+# from the browser" on the debug page: a cross-origin call, so CORS applies
+# (scenarios/cors-blocked.sh). Only the direct copy sets it.
+API_BROWSER_URL = os.environ.get("OIDC_RP_API_BROWSER_URL")
 FORCE_HTTPS = os.environ.get("OIDC_RP_FORCE_HTTPS") == "1"
 
 app = Flask(__name__)
@@ -254,7 +258,8 @@ def debug():
     login = _logins.get(session.get("login_key", ""))
     if not login:
         return redirect(url_for("index"))
-    return render_template("debug.html", login=login, rp_clock=now_utc(), api_url=API_URL)
+    return render_template("debug.html", login=login, rp_clock=now_utc(), api_url=API_URL,
+                           api_browser_url=API_BROWSER_URL)
 
 
 @app.post("/api/call")

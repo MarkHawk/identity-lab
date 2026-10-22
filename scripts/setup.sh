@@ -150,6 +150,11 @@ if [[ ! -d "$STATE_DIR/mtls-client" ]]; then
   install -m 600 "$CERTS_DIR/mtls-client.key" "$STATE_DIR/mtls-client/client.key"
 fi
 
+# The origin the API allows in its CORS responses: the direct OIDC RP's,
+# whose debug page calls it from the browser (see scenarios/cors-blocked.sh).
+mkdir -p "$STATE_DIR/api"
+[[ -f "$STATE_DIR/api/cors-allow-origin" ]] || echo "https://$LAB_HOST:8182" >"$STATE_DIR/api/cors-allow-origin"
+
 # --- .env ---------------------------------------------------------------------
 # Keep an existing secret, unless rotating.
 keep() {

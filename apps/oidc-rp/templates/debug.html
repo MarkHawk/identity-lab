@@ -63,6 +63,51 @@
   {% endif %}
 </section>
 {% endif %}
+{% if api_browser_url %}
+<section id="api-browser">
+  <h2>API, called from the browser</h2>
+  <p class="muted">This page's script fetches the access token from <code>{{ url_for('raw_access_token') }}</code> and calls <code>{{ api_browser_url }}</code> itself, from this page's origin. That is a cross-origin call, so the browser only lets the script read the answer if the API's CORS headers allow this origin. The token is never put on the page.</p>
+  <button class="btn" id="call-api-browser" type="button">Call the API from the browser</button>
+  <div id="api-browser-result"></div>
+</section>
+<script>
+(() => {
+  const apiUrl = {{ api_browser_url | tojson }};
+  const out = document.getElementById("api-browser-result");
+  const show = (id, heading, detail) => {
+    const h = document.createElement("h3");
+    h.id = id;
+    h.textContent = heading;
+    const pre = document.createElement("pre");
+    pre.textContent = detail;
+    out.replaceChildren(h, pre);
+  };
+  document.getElementById("call-api-browser").addEventListener("click", async () => {
+    out.replaceChildren();
+    let token;
+    try {
+      const t = await fetch({{ url_for('raw_access_token') | tojson }}, {credentials: "same-origin"});
+      if (!t.ok) throw new Error(`HTTP ${t.status}`);
+      token = (await t.text()).trim();
+    } catch (e) {
+      show("api-browser-error", "Could not get the access token from this app", String(e));
+      return;
+    }
+    try {
+      const r = await fetch(apiUrl, {headers: {Authorization: "Bearer " + token}});
+      const body = await r.text();
+      show(r.ok ? "api-browser-ok" : "api-browser-error",
+           `API call from the browser ${r.ok ? "succeeded" : "failed"}: ${r.status}`, body);
+    } catch (e) {
+      // A CORS refusal: the browser gives the script no status and no body,
+      // only a generic error. The reason is in the developer console.
+      show("api-browser-error", "API call from the browser failed: " + e,
+           "The browser gave this page no response. Its developer console (F12) says why.");
+    }
+  });
+})();
+</script>
+{% endif %}
 <section>
   <h2>Token response (metadata only)</h2>
   <p class="muted">Access and refresh tokens are not displayed.</p>

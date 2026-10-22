@@ -8,6 +8,13 @@ else gets a 401 with an RFC 6750 WWW-Authenticate challenge saying why.
 
 Every rejection is logged as a single key=value line with the claims that
 decided it. The token itself is never logged, nor echoed in any response.
+
+Browsers call it from another origin (the OIDC RP's debug page), so it
+speaks CORS in two parts, the way an API behind a gateway often does. The
+preflight (OPTIONS) is answered permissively for any origin, standing in
+for a gateway that handles preflights itself. Real responses carry the
+app's own Access-Control-Allow-Origin, from CORS_ORIGIN_FILE
+(scenarios/cors-blocked.sh). The browser enforces CORS on both.
 """
 
 import base64
@@ -38,6 +45,9 @@ JWKS_URL = os.environ.get("API_JWKS_URL", "https://keycloak:8180/realms/idlab/pr
 REALM = "idlab-api"
 # Seconds of clock difference allowed when checking exp.
 LEEWAY = int(os.environ.get("API_LEEWAY", "0"))
+# The Access-Control-Allow-Origin value for real (non-preflight) responses,
+# one origin, re-read on every request. No file or an empty one: no header.
+CORS_ORIGIN_FILE = os.environ.get("API_CORS_ORIGIN_FILE")
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s api %(message)s")
@@ -58,6 +68,51 @@ def iso(value):
 def audiences(claims):
     aud = claims.get("aud", [])
     return [aud] if isinstance(aud, str) else list(aud)
+
+
+def cors_allow_origin():
+    """The app's configured Access-Control-Allow-Origin, or None."""
+    if not CORS_ORIGIN_FILE:
+        return None
+    try:
+        with open(CORS_ORIGIN_FILE) as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
+
+
+def is_preflight():
+    return request.method == "OPTIONS" and "Access-Control-Request-Method" in request.headers
+
+
+@app.before_request
+def preflight():
+    # The gateway's part: allow whatever origin asks, for GET with an
+    # Authorization header. A browser sends this before a cross-origin call
+    # that carries a token, and only sends the call if this allows it.
+    if not is_preflight():
+        return None
+    origin = request.headers.get("Origin", "-")
+    log.info(kv(event="api_cors_preflight", origin=origin,
+                method=request.headers.get("Access-Control-Request-Method"),
+                headers=request.headers.get("Access-Control-Request-Headers", "-")))
+    return "", 204, {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET",
+        "Access-Control-Allow-Headers": "Authorization",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    }
+
+
+@app.after_request
+def cors_headers(resp):
+    # The app's part, on every real response (401s included, so a browser
+    # page can read why it was refused).
+    allow = cors_allow_origin()
+    if allow and not is_preflight():
+        resp.headers["Access-Control-Allow-Origin"] = allow
+    return resp
 
 
 class Rejected(Exception):
@@ -155,8 +210,12 @@ def healthz():
 @app.get("/v1/whoami")
 def whoami():
     claims = validate(bearer_token())
+    # origin and cors_allow_origin: for a call from a browser page, what the
+    # browser will compare. The API can't see whether the browser then
+    # hands the response to the page.
     log.info(kv(event="api_request_ok", sub=claims.get("sub"), azp=claims.get("azp"),
-                iat=iso(claims.get("iat")), exp=iso(claims.get("exp"))))
+                iat=iso(claims.get("iat")), exp=iso(claims.get("exp")),
+                origin=request.headers.get("Origin", "-"), cors_allow_origin=cors_allow_origin() or "-"))
     return {
         "sub": claims.get("sub"),
         "preferred_username": claims.get("preferred_username"),

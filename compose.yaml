@@ -258,8 +258,9 @@ services:
         condition: service_healthy
     environment:
       <<: *oidc-rp-env
-      # Only this copy calls the API.
+      # Only this copy calls the API: itself, and from the browser.
       OIDC_RP_API_URL: https://api:8188/v1/whoami
+      OIDC_RP_API_BROWSER_URL: https://${LAB_HOST}:${API_PORT}/v1/whoami
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
@@ -273,7 +274,9 @@ services:
   # direct OIDC RP calls it with the user's access token ("Call the API" on
   # its debug page); it checks the signature against Keycloak's JWKS, the
   # issuer, the expiry and that the audience includes idlab-api
-  # (scenarios/api-bearer-*.sh).
+  # (scenarios/api-bearer-*.sh). The RP's debug page also calls it from the
+  # browser, cross-origin, which its CORS headers must allow
+  # (scenarios/cors-blocked.sh).
   api:
     build: ./apps/api
     image: identity-lab/api:local
@@ -286,10 +289,14 @@ services:
       PORT: "8188"
       API_AUDIENCE: idlab-api
       REQUESTS_CA_BUNDLE: /etc/idlab/ca.crt
+      # The app's Access-Control-Allow-Origin, re-read on every request
+      # (scenarios/cors-blocked.sh).
+      API_CORS_ORIGIN_FILE: /var/lib/idlab/state/cors-allow-origin
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./certs/tls.crt:/etc/idlab/tls.crt:ro
       - ./certs/tls.key:/etc/idlab/tls.key:ro
+      - ./.state/api:/var/lib/idlab/state:ro
     ports:
       - "${API_PORT}:8188"
     healthcheck: *app-healthcheck
