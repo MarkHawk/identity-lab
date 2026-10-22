@@ -55,6 +55,11 @@ def iso(value):
         return "-"
 
 
+def audiences(claims):
+    aud = claims.get("aud", [])
+    return [aud] if isinstance(aud, str) else list(aud)
+
+
 class Rejected(Exception):
     """A request the API refuses: 401 with a WWW-Authenticate challenge."""
 
@@ -113,8 +118,7 @@ def validate(token):
     exp = claims.get("exp")
     if not isinstance(exp, (int, float)) or exp + LEEWAY < time.time():
         raise Rejected("invalid_token", f"The access token expired at {iso(exp)}", claims)
-    aud = claims.get("aud", [])
-    aud = [aud] if isinstance(aud, str) else list(aud)
+    aud = audiences(claims)
     if AUDIENCE not in aud:
         raise Rejected(
             "invalid_token",
@@ -134,7 +138,7 @@ def rejected(exc):
     c = exc.claims
     log.warning(kv(
         event="api_token_rejected", error=exc.reason, error_description=exc.description or "-",
-        sub=c.get("sub", "-"), azp=c.get("azp", "-"), aud=c.get("aud", "-"), iss=c.get("iss", "-"),
+        sub=c.get("sub", "-"), azp=c.get("azp", "-"), aud=" ".join(audiences(c)) or "-", iss=c.get("iss", "-"),
         exp=iso(c.get("exp")) if c else "-",
     ))
     body = {"error": exc.reason}

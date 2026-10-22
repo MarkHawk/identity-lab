@@ -8,7 +8,11 @@ saml-proxy and oidc-proxy are the copies of the apps behind the nginx
 reverse proxy; their whole login, Keycloak included, goes through it.
 oidc-egress is the OIDC RP whose own calls to Keycloak go through the Squid
 egress proxy; the browser reaches it and Keycloak directly. oidc-edge is the
-OIDC RP behind the reverse proxy on plain HTTP.
+OIDC RP behind the reverse proxy on plain HTTP. oidc-api logs in to the
+direct OIDC RP, then has it call the API with the access token (Call the
+API); oidc-api-late waits API_LATE_SECONDS after logging in before it calls,
+longer than a shortened access token lifespan (scenarios/api-bearer-expired.sh)
+and far shorter than the normal one, so it passes on a healthy lab.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
@@ -42,7 +46,10 @@ APPS = {
     "oidc-proxy": (url("PROXY_OIDC_RP_PORT"), url("PROXY_KC_PORT")),
     "oidc-egress": (url("EGRESS_OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-edge": (url("PROXY_EDGE_RP_PORT"), url("PROXY_KC_PORT")),
+    "oidc-api": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-api-late": (url("OIDC_RP_PORT"), url("KC_PORT")),
 }
+API_LATE_SECONDS = 15
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
@@ -122,9 +129,23 @@ def flow(page, app):
         page.wait_for_load_state("load")
     except PWTimeout:
         return f"stuck:{page.url}", page.inner_text("body")
-    if page.locator("#login-ok").count():
+    if not page.locator("#login-ok").count():
+        return f"{app}:error", page.inner_text("body")
+    if app.startswith("oidc-api"):
+        return call_api(page, app)
+    return f"{app}:login-ok", page.inner_text("body")
+
+
+def call_api(page, app):
+    """After the login: have the RP call the API with its access token."""
+    if app == "oidc-api-late":
+        page.wait_for_timeout(API_LATE_SECONDS * 1000)
+    page.click("#call-api")
+    page.wait_for_load_state("load")
+    page.locator("#api-ok, #api-error").first.wait_for(timeout=10000)
+    if page.locator("#api-ok").count():
         return f"{app}:login-ok", page.inner_text("body")
-    return f"{app}:error", page.inner_text("body")
+    return f"{app}:api-error", page.inner_text("body")
 
 
 def app_error_shown(page):
