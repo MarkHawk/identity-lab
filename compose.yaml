@@ -2,7 +2,7 @@
 # apps, and a FreeRADIUS server with a NAS that authenticates against the directory.
 # Run scripts/setup.sh first; it generates .env and certs/.
 # An nginx reverse proxy publishes Keycloak and a second copy of each app on
-# 8183-8185. A third copy of the OIDC RP (8186) reaches Keycloak only through
+# 8183-8185, and a fourth OIDC RP, which it reaches over plain HTTP, on 8187. A third copy of the OIDC RP (8186) reaches Keycloak only through
 # a Squid egress proxy. Host ports are restricted to 8180-8189. LDAP, RADIUS
 # and Squid publish no host port.
 
@@ -166,6 +166,7 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       OIDC_PROXIED_CLIENT_SECRET: ${OIDC_PROXIED_CLIENT_SECRET:?run scripts/setup.sh}
       OIDC_EGRESS_CLIENT_SECRET: ${OIDC_EGRESS_CLIENT_SECRET:?run scripts/setup.sh}
+      OIDC_EDGE_CLIENT_SECRET: ${OIDC_EDGE_CLIENT_SECRET:?run scripts/setup.sh}
       SP_SIGNING_CERT: ${SP_SIGNING_CERT}
       LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD}
     volumes:
@@ -307,6 +308,45 @@ services:
     healthcheck: *app-healthcheck
     restart: unless-stopped
 
+  # Fourth copy of the OIDC RP, behind the proxy on 8187. TLS ends at the
+  # proxy, which talks plain HTTP to it, like an app behind a load balancer;
+  # the app takes the scheme from X-Forwarded-Proto and redirects anything
+  # that looks like plain HTTP to https (scenarios/redirect-loop.sh).
+  oidc-rp-edge:
+    build: ./apps/oidc-rp
+    image: identity-lab/oidc-rp:local
+    user: "${LAB_UID}:${LAB_UID}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: *oidc-rp-env
+      KC_PORT: ${PROXY_KC_PORT}
+      OIDC_RP_PORT: ${PROXY_EDGE_RP_PORT}
+      OIDC_CLIENT_ID: oidc-rp-edge
+      OIDC_RP_SERVICE: oidc-rp-edge
+      OIDC_CLIENT_SECRET: ${OIDC_EDGE_CLIENT_SECRET}
+      OIDC_BACKCHANNEL_BASE: https://proxy:8183
+      OIDC_RP_TLS: "off"
+      OIDC_RP_PROXY_HOPS: "1"
+      OIDC_RP_FORCE_HTTPS: "1"
+    volumes:
+      - ./certs/ca.crt:/etc/idlab/ca.crt:ro
+    networks:
+      - proxy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, urllib.request;
+          urllib.request.urlopen('http://localhost:' + os.environ['PORT'] + '/healthz', timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   # nginx reverse proxy (proxy/nginx.conf). The settings the proxy-* scenarios
   # change are in .state/proxy/ (healthy defaults in proxy/defaults/, copied
   # by setup.sh); scenarios rewrite them and reload nginx. Fixed address,
@@ -329,6 +369,9 @@ services:
       oidc-rp-proxied:
         condition: service_healthy
         restart: true
+      oidc-rp-edge:
+        condition: service_healthy
+        restart: true
     # nginx with its logs passed through proxy/mask.awk (see proxy/run.sh).
     command: ["sh", "/etc/nginx/run.sh"]
     environment:
@@ -348,6 +391,7 @@ services:
       - "${PROXY_KC_PORT}:8183"
       - "${PROXY_SAML_SP_PORT}:8184"
       - "${PROXY_OIDC_RP_PORT}:8185"
+      - "${PROXY_EDGE_RP_PORT}:8187"
     healthcheck:
       # nginx itself, over verified TLS; never reaches an upstream.
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "--cacert", "/etc/idlab/ca.crt", "https://localhost:8183/nginx-healthz"]

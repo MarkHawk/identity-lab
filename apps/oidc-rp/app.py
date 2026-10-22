@@ -21,6 +21,7 @@ import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, redirect, render_template, request, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from accesslog import mask
 
@@ -47,6 +48,13 @@ BACKCHANNEL_ENDPOINTS = ("token_endpoint", "userinfo_endpoint", "jwks_uri")
 DELAY_FILE = os.environ.get("OIDC_RP_DELAY_FILE")
 # Compose service name, for the log hint on the error page.
 SERVICE = os.environ.get("OIDC_RP_SERVICE", "oidc-rp")
+# Only oidc-rp-edge sets these: TLS ends at the reverse proxy, which talks
+# plain HTTP to the app. The app takes the scheme from X-Forwarded-Proto set
+# by that many proxies in front of it, and redirects any request that still
+# looks like plain HTTP to https, as apps behind a TLS-terminating load
+# balancer usually do (scenarios/redirect-loop.sh).
+PROXY_HOPS = int(os.environ.get("OIDC_RP_PROXY_HOPS", "0"))
+FORCE_HTTPS = os.environ.get("OIDC_RP_FORCE_HTTPS") == "1"
 
 app = Flask(__name__)
 app.secret_key = os.environ["OIDC_RP_SECRET_KEY"]
@@ -55,6 +63,9 @@ app.config.update(
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_SAMESITE="Lax",
 )
+
+if PROXY_HOPS:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=PROXY_HOPS, x_proto=PROXY_HOPS)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s oidc-rp %(message)s")
 log = logging.getLogger("oidc-rp")
@@ -139,6 +150,22 @@ def login_error(exc):
     # log; the error page still shows them to the user who hit the error.
     log.warning(kv(event="oidc_login_failed", reason=exc.reason, error=mask(exc.message), detail=mask(exc.detail or "")))
     return render_template("error.html", error=exc, rp_clock=now_utc(), service=SERVICE), exc.status
+
+
+@app.before_request
+def force_https():
+    if not FORCE_HTTPS or request.is_secure or request.path == "/healthz":
+        return None
+    # The path only: the query string can carry an authorisation code.
+    log.info(kv(
+        event="force_https", path=request.path, scheme=request.scheme,
+        x_forwarded_proto=request.headers.get("X-Forwarded-Proto", "-"),
+    ))
+    # To the app's own public URL, not one built from the Host header, which
+    # the client controls. 302, not 301: browsers cache a 301, and would keep
+    # looping after the fix.
+    query = request.query_string.decode()
+    return redirect(RP_BASE + request.path + ("?" + query if query else ""), code=302)
 
 
 @app.get("/healthz")
