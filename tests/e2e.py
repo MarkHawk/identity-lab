@@ -13,6 +13,10 @@ direct OIDC RP, then has it call the API with the access token (Call the
 API); oidc-api-late waits API_LATE_SECONDS after logging in before it calls,
 longer than a shortened access token lifespan (scenarios/api-bearer-expired.sh)
 and far shorter than the normal one, so it passes on a healthy lab.
+oidc-token logs in to the direct OIDC RP and fetches /debug/access-token,
+the raw token, as a request in the same browser session rather than a page
+visit, so the evidence saved for the run never holds it; scripts/test.sh
+then checks that no token reached any log or evidence file.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
@@ -48,6 +52,7 @@ APPS = {
     "oidc-edge": (url("PROXY_EDGE_RP_PORT"), url("PROXY_KC_PORT")),
     "oidc-api": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-api-late": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-token": (url("OIDC_RP_PORT"), url("KC_PORT")),
 }
 API_LATE_SECONDS = 15
 USER = os.environ.get("E2E_USER", "alice")
@@ -133,7 +138,31 @@ def flow(page, app):
         return f"{app}:error", page.inner_text("body")
     if app.startswith("oidc-api"):
         return call_api(page, app)
+    if app == "oidc-token":
+        return fetch_token(page, app, base)
     return f"{app}:login-ok", page.inner_text("body")
+
+
+def fetch_token(page, app, base):
+    """Fetch the raw access token with the session's cookies; never print it."""
+    # fetch() in the page: the browser's own TLS trust and cookies, and the
+    # page itself stays on the debug page. (Playwright's request context
+    # doesn't trust the lab CA, and its errors print the request's cookies.)
+    resp = page.evaluate(
+        """async (url) => {
+            const r = await fetch(url, {credentials: "same-origin"});
+            return {status: r.status, cacheControl: r.headers.get("cache-control"), body: await r.text()};
+        }""",
+        base + "/debug/access-token",
+    )
+    token = resp["body"].strip()
+    is_jwt = re.fullmatch(r"eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+", token) is not None
+    no_store = resp["cacheControl"] == "no-store"
+    del token, resp["body"]
+    print(f"[{app}] /debug/access-token: HTTP {resp['status']}, a JWT: {is_jwt}, Cache-Control no-store: {no_store}")
+    if resp["status"] == 200 and is_jwt and no_store:
+        return f"{app}:login-ok", page.inner_text("body")
+    return f"{app}:token-error", f"HTTP {resp['status']}"
 
 
 def call_api(page, app):

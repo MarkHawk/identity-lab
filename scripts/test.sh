@@ -10,17 +10,23 @@
 # Checks: service health and an LDAP bind as Keycloak's service account;
 # Keycloak's issuer directly and through the reverse proxy, and that it ignores
 # X-Forwarded-* headers that don't come from the proxy; that the OIDC RP
-# behind the Squid egress proxy has no route to Keycloak without it; a
-# scripted browser login to each app, directly, through the reverse proxy
-# and (OIDC) through the egress proxy, as a local user (alice) and an LDAP
-# user (dave), with the egress RP's back channel in Squid's log; a RADIUS Access-Request from the NAS for dave (accepted) and with a
-# wrong password (rejected); then for every scenario: break (twice), detected
+# behind the Squid egress proxy has no route to Keycloak without it; that
+# the API answers a call with no token or a malformed one with a 401 and the
+# right WWW-Authenticate challenge; a scripted browser login to each app,
+# directly, through the reverse proxy (also to the OIDC RP it reaches over
+# plain HTTP) and (OIDC) through the egress proxy, as a local user (alice)
+# and an LDAP user (dave), with the egress RP's back channel in Squid's log;
+# the direct OIDC RP calling the API with its access token, and handing out
+# the raw token on /debug/access-token; a RADIUS Access-Request from the NAS
+# for dave (accepted) and with a wrong password (rejected); then for every scenario: break (twice), detected
 # as broken, the expected error in the browser (or in the NAS's output, for
 # RADIUS scenarios), the expected log line, a user outside the
 # blast radius still logging in (where a scenario names one), any extra check
 # the scenario defines (scenario_also_check), fix (twice),
 # detected healthy, and a successful login again; last, that no secret
-# from .env, authorisation code or OAuth state value appears in any container's log. Failed checks don't stop the run; the exit status
+# from .env, authorisation code or OAuth state value appears in any
+# container's log, and no JWT (access or ID token) in any container's log,
+# saved page evidence or test.log. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/; values of secrets from .env
 # are replaced with <redacted> in test.log.
@@ -166,6 +172,28 @@ logs_free_of_secrets() { # no secret from .env, authorisation code or state valu
   echo "log lines with an authorisation code: $codes; with an OAuth state value: $states"
   (( n == 0 && codes == 0 && states == 0 ))
 }
+# A JWT: header and payload are base64url JSON, so both start with eyJ.
+JWT_RE='eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" no_jwt_anywhere
+no_jwt_anywhere() { # no access or ID token in any service's log, page evidence or test.log
+  local logs in_logs files
+  logs="$(compose logs --no-log-prefix 2>&1)"
+  in_logs="$(grep -cE -- "$JWT_RE" <<<"$logs" || true)"
+  # Page HTML saved by e2e.py (screenshots can't hold a copyable token), and this log so far.
+  files="$(grep -lE -- "$JWT_RE" "$RESULTS"/*.html "$LOG" 2>/dev/null || true)"
+  echo "log lines with a JWT: $in_logs; evidence files with a JWT: $(grep -c . <<<"$files" || true) of $(find "$RESULTS" -name '*.html' | wc -l) pages and test.log"
+  [[ -n "$files" ]] && printf '  %s\n' "$files"
+  (( in_logs == 0 )) && [[ -z "$files" ]]
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" api_challenge ...
+api_challenge() { # <expected status> <WWW-Authenticate text> [curl args...]
+  local want="$1" text="$2" out; shift 2
+  out="$(curl -sS -i --cacert "$CERTS_DIR/ca.crt" --resolve "$LAB_HOST:$API_PORT:127.0.0.1" "$@" \
+    "https://$LAB_HOST:$API_PORT/v1/whoami" | tr -d '\r')"
+  grep -iE '^(HTTP/|www-authenticate:)' <<<"$out"
+  head -n1 <<<"$out" | grep -q " $want " || { echo "expected HTTP $want"; return 1; }
+  grep -iF -- "WWW-Authenticate: $text" <<<"$out" >/dev/null || { echo "expected WWW-Authenticate: $text"; return 1; }
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_has ...
 log_has()      { # <since> <service> <pattern>
   # Read the logs first: piping into grep -m1 would SIGPIPE compose when the
@@ -220,7 +248,7 @@ compose up -d --wait --wait-timeout 300 >>"$LOG" 2>&1 \
 
 # --- Health -----------------------------------------------------------------------
 log "health"
-for svc in postgres ldap keycloak saml-sp oidc-rp radius nas proxy saml-sp-proxied oidc-rp-proxied squid oidc-rp-egress; do
+for svc in postgres ldap keycloak saml-sp oidc-rp radius nas proxy saml-sp-proxied oidc-rp-proxied squid oidc-rp-egress oidc-rp-edge api; do
   check "health: $svc container healthy" healthy "$svc"
 done
 check "health: Keycloak issuer is https://$LAB_HOST:$KC_PORT/realms/$REALM" issuer_ok "$KC_PORT"
@@ -234,6 +262,12 @@ check "health: SAML SP /healthz through the proxy" http_ok /healthz "$PROXY_SAML
 check "health: OIDC RP /healthz through the proxy" http_ok /healthz "$PROXY_OIDC_RP_PORT"
 check "health: OIDC RP behind the egress proxy /healthz over verified TLS" http_ok /healthz "$EGRESS_OIDC_RP_PORT"
 check "health: OIDC RP behind the egress proxy has no route to Keycloak without it" egress_no_direct_route
+check "health: edge OIDC RP /healthz through the proxy (plain HTTP behind it)" http_ok /healthz "$PROXY_EDGE_RP_PORT"
+check "health: API /healthz over verified TLS" http_ok /healthz "$API_PORT"
+check "health: API without a token: 401, bare Bearer challenge" api_challenge 401 'Bearer realm="idlab-api"'
+# Deliberately not a token: a fixed, made-up value.
+check "health: API with a malformed token: 401 invalid_token" api_challenge 401 'Bearer realm="idlab-api", error="invalid_token"' \
+  -H "Authorization: Bearer not-a-token"
 check "health: LDAP bind as keycloak-svc (ldapwhoami over LDAPS)" ldap_bind_ok
 
 # --- Baseline logins --------------------------------------------------------------
@@ -251,6 +285,11 @@ check "login: OIDC RP through the egress proxy (alice)" browser oidc-egress --ex
 check "login: OIDC RP through the egress proxy: back channel tunnelled by Squid" \
   log_has "$since" squid 'TCP_TUNNEL/200 [0-9]+ CONNECT keycloak:8180'
 check "login: OIDC RP through the egress proxy (dave, from LDAP)" browser_as dave oidc-egress --expect ok
+check "login: edge OIDC RP through the proxy, plain HTTP behind it (alice)" browser oidc-edge --expect ok
+check "login: edge OIDC RP through the proxy, plain HTTP behind it (dave, from LDAP)" browser_as dave oidc-edge --expect ok
+check "login: OIDC RP calls the API with its access token (alice)" browser oidc-api --expect ok
+check "login: OIDC RP calls the API with its access token (dave, from LDAP)" browser_as dave oidc-api --expect ok
+check "login: OIDC RP hands out the raw access token on /debug/access-token (alice)" browser oidc-token --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
 
@@ -294,6 +333,7 @@ run_scenario proxy-auth-required "after squid restart: "
 # --- Secrets ----------------------------------------------------------------------
 log "secrets"
 check "secrets: no value from .env, authorisation code or OAuth state in any container's log" logs_free_of_secrets
+check "secrets: no JWT in any container's log, saved page evidence or test.log" no_jwt_anywhere
 
 # --- Summary ----------------------------------------------------------------------
 echo
