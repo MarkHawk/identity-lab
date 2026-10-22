@@ -19,11 +19,11 @@ nginx
 The proxy's error log says exactly what happened:
 
 ```
-2026/10/20 17:50:45 [error] 3115#3115: *670 upstream sent too big header while reading response header from upstream, client: 172.30.182.1, server: , request: "GET /realms/idlab/protocol/saml?SAMLRequest=…&RelayState=…&Signature=…&SigAlg=… HTTP/1.1", upstream: "https://172.30.182.2:8180/realms/idlab/protocol/saml?SAMLRequest=…&RelayState=…&Signature=…
-2026/10/20 17:50:47 [error] 3115#3115: *675 upstream sent too big header while reading response header from upstream, client: 172.30.182.1, server: , request: "GET /realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp-proxied&redirect_uri=https%3A%2F%2Fidlab.home%3A8185%2Fauth%2Fcallback&scope=openid+email+profile&state=…&nonce=…&code_challenge=…&code_challenge_method=S256 HTTP/1.1", upstream: "https://172.30.182.2:8180/realms/idlab/protocol/openid-connect/auth?...", host: "idlab.home:8183", referrer: "https://idlab.home:8185/"
+2026/10/20 17:50:45 [error] 3115#3115: *670 upstream sent too big header while reading response header from upstream, client: 172.30.182.1, server: , request: "GET /realms/idlab/protocol/saml?SAMLRequest=***&RelayState=…&Signature=***&SigAlg=… HTTP/1.1", upstream: "https://172.30.182.2:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=…&Signature=***
+2026/10/20 17:50:47 [error] 3115#3115: *675 upstream sent too big header while reading response header from upstream, client: 172.30.182.1, server: , request: "GET /realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp-proxied&redirect_uri=https%3A%2F%2Fidlab.home%3A8185%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256 HTTP/1.1", upstream: "https://172.30.182.2:8180/realms/idlab/protocol/openid-connect/auth?...", host: "idlab.home:8183", referrer: "https://idlab.home:8185/"
 ```
 
-(Signatures, state and similar values are shortened to `…`.) In the access log the request did reach Keycloak and came back fast, but nginx turned it into a 502:
+(The proxy masks one-time login values such as the SAML message, its signature, the state, nonce and PKCE challenge as `***`; other long values are shortened here to `…`.) In the access log the request did reach Keycloak and came back fast, but nginx turned it into a 502:
 
 ```
 172.30.182.1 "GET /realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp-proxied&... HTTP/1.1" 502 552 host=idlab.home:8183 upstream=172.30.182.2:8180 upstream_status=502 request_time=0.013 upstream_time=0.013

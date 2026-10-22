@@ -346,7 +346,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 229 checks cover:
+The 231 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -357,7 +357,7 @@ The 229 checks cover:
 - a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
 - for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
 - for `ldap-bind-failure`, also that alice (a local user) still logs in while LDAP users can't; for `radius-shared-secret-mismatch`, that dave still logs in to the OIDC app while RADIUS is broken; for every proxy scenario, that alice still logs in to the same app directly, bypassing the proxy; for `proxy-auth-required`, that the `egress-svc` account gets through Squid; for `proxy-tls-interception`, that the certificate presented for Keycloak is issued by the inspection CA; for `redirect-loop`, that alice still logs in to the OIDC app through the proxy's other route; for `api-bearer-audience`, that the login itself still works; for `api-bearer-expired`, that a call straight after login still works
-- last, that no password or secret from `.env`, authorisation code or OAuth state appears in any container's log, and no JWT (access or ID token) in any container's log, saved page or `test.log`
+- last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, and no JWT (access or ID token) in any container's log, saved page or `test.log`
 
 `scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log.
 

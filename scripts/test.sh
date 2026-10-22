@@ -25,8 +25,10 @@
 # blast radius still logging in (where a scenario names one), any extra check
 # the scenario defines (scenario_also_check), fix (twice),
 # detected healthy, and a successful login again; last, that no secret
-# from .env, authorisation code or OAuth state value appears in any
-# container's log, and no JWT (access or ID token) in any container's log,
+# from .env, authorisation code, OAuth state or other one-time login value
+# (nonce, code_challenge, Signature, session_code, client_data) appears in
+# any container's log, that the proxy's log has each of those last five
+# masked (so the check had something to see), and no JWT (access or ID token) in any container's log,
 # saved page evidence or test.log. Failed checks don't stop the run; the exit status
 # is the number of failed checks (capped at 100). Evidence (screenshots,
 # page HTML, full output) goes to test-results/; values of secrets from .env
@@ -160,18 +162,35 @@ AUTH_CODE_RE='[?&]code=[^*&[:space:]"]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 # An unmasked OAuth state value: in a query string, or as the OIDC app's
 # detail=state=... (not session_state, which the access logs mask anyway).
 STATE_RE="(^|[?&= ])state=[^*&[:space:]\"']"
+# Other one-time login values the proxy's logs mask (proxy/mask.awk), unmasked.
+# client_data is base64 JSON holding the state, so STATE_RE can't see it.
+ONE_TIME_NAMES=(nonce code_challenge Signature session_code client_data)
+ONE_TIME_RE="[?&]($(IFS='|'; echo "${ONE_TIME_NAMES[*]}"))=[^*&[:space:]\"]"
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" logs_free_of_secrets
 logs_free_of_secrets() { # no secret from .env, authorisation code or state value in any service's log
-  local logs v n=0 codes
+  local logs v n=0 codes states others
   logs="$(compose logs --no-log-prefix 2>&1)"
   for v in "${SECRETS[@]}"; do
     if grep -qF -- "$v" <<<"$logs"; then n=$((n + 1)); fi
   done
   codes="$(grep -cE -- "$AUTH_CODE_RE" <<<"$logs" || true)"
   states="$(grep -cE -- "$STATE_RE" <<<"$logs" || true)"
+  others="$(grep -cE -- "$ONE_TIME_RE" <<<"$logs" || true)"
   echo "checked ${#SECRETS[@]} secret values against $(wc -l <<<"$logs") log lines: $n found"
   echo "log lines with an authorisation code: $codes; with an OAuth state value: $states"
-  (( n == 0 && codes == 0 && states == 0 ))
+  echo "log lines with an unmasked ${ONE_TIME_NAMES[*]}: $others"
+  grep -E -m3 -- "$ONE_TIME_RE" <<<"$logs" | cut -c1-200 | sed 's/^/  /' || true
+  (( n == 0 && codes == 0 && states == 0 && others == 0 ))
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" proxy_masked_seen
+proxy_masked_seen() { # the logins put each of ONE_TIME_NAMES in the proxy's log, masked
+  local logs name missing=()
+  logs="$(compose logs --no-log-prefix proxy 2>&1)"
+  for name in "${ONE_TIME_NAMES[@]}"; do
+    grep -qF -- "$name=***" <<<"$logs" || missing+=("$name")
+  done
+  echo "masked in the proxy's log: ${#ONE_TIME_NAMES[@]} names, missing: ${missing[*]:-none}"
+  (( ${#missing[@]} == 0 ))
 }
 # A JWT: header and payload are base64url JSON, so both start with eyJ.
 JWT_RE='eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'
@@ -338,7 +357,8 @@ run_scenario proxy-auth-required "after squid restart: "
 
 # --- Secrets ----------------------------------------------------------------------
 log "secrets"
-check "secrets: no value from .env, authorisation code or OAuth state in any container's log" logs_free_of_secrets
+check "secrets: no value from .env, authorisation code, OAuth state or other one-time login value in any container's log" logs_free_of_secrets
+check "secrets: the proxy's log has nonce, code_challenge, Signature, session_code and client_data, masked" proxy_masked_seen
 check "secrets: no JWT in any container's log, saved page evidence or test.log" no_jwt_anywhere
 
 # --- Summary ----------------------------------------------------------------------

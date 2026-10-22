@@ -21,16 +21,16 @@ The browser is left on Keycloak's `/realms/idlab/login-actions/authenticate` URL
 The proxy's error log names the limit and by how much the request was over it:
 
 ```
-2026/10/20 17:42:32 [error] 2290#2290: *457 limiting requests, excess: 0.977 by zone "kc_login", client: 172.30.182.1, server: , request: "POST /realms/idlab/login-actions/authenticate?session_code=…&execution=…&client_id=oidc-rp-proxied&tab_id=…&client_data=… HTTP/1.1", host: "idlab.home:8183"
+2026/10/20 17:42:32 [error] 2290#2290: *457 limiting requests, excess: 0.977 by zone "kc_login", client: 172.30.182.1, server: , request: "POST /realms/idlab/login-actions/authenticate?session_code=***&execution=…&client_id=oidc-rp-proxied&tab_id=…&client_data=*** HTTP/1.1", host: "idlab.home:8183"
 ```
 
 and the access log shows that **Keycloak never saw the request** (`upstream=-`, answered in 0 ms):
 
 ```
-172.30.182.1 "POST /realms/idlab/login-actions/authenticate?session_code=…&execution=…&client_id=oidc-rp-proxied&tab_id=…&client_data=… HTTP/1.1" 429 564 host=idlab.home:8183 upstream=- upstream_status=- request_time=0.000 upstream_time=-
+172.30.182.1 "POST /realms/idlab/login-actions/authenticate?session_code=***&execution=…&client_id=oidc-rp-proxied&tab_id=…&client_data=*** HTTP/1.1" 429 564 host=idlab.home:8183 upstream=- upstream_status=- request_time=0.000 upstream_time=-
 ```
 
-(Session codes and similar values are shortened to `…`.) Because Keycloak never received these requests, its own log and its admin console's events show nothing wrong.
+(The proxy masks the session code and `client_data`, which holds the OAuth state, as `***`; other long values are shortened here to `…`.) Because Keycloak never received these requests, its own log and its admin console's events show nothing wrong.
 
 The response itself, as a client sees it:
 

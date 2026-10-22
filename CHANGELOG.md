@@ -6,7 +6,9 @@ What each phase added, and why an existing lab needs `scripts/setup.sh` then `sc
 
 **Changed:** the API's `api_token_rejected` and `api_request_ok` lines now carry the token's `iat` next to its `exp`, so a log search can compute the lifetime the IdP gave it (`exp - iat`). `scripts/test.sh` checks for both.
 
-**Why the upgrade steps:** none needed beyond the usual. `scripts/test.sh` rebuilds the API's image and recreates its container.
+**Changed:** the reverse proxy's access and error logs now also mask `nonce`, `code_challenge`, `Signature` (on SAML redirect-binding messages), and Keycloak's `session_code` and `client_data` as `***`, as they already did `code` and `state`. `client_data` is base64 JSON that holds the OAuth state. `scripts/test.sh` fails if an unmasked value of any of them appears in any container's log, and checks that the proxy's log holds each of them masked.
+
+**Why the upgrade steps:** `scripts/test.sh` rebuilds the API's image and recreates its container. The proxy reads `proxy/mask.awk` from a bind mount only when it starts, so run `docker compose up -d --force-recreate proxy` (or `scripts/test.sh --fresh`). A plain restart isn't enough: it keeps the container's log, whose older lines were written unmasked and fail the new check.
 
 ## Phase 3, Part C, round one: redirect loop and API bearer 401s (2026-10-22)
 
