@@ -16,8 +16,9 @@
 # directly, through the reverse proxy (also to the OIDC RP it reaches over
 # plain HTTP) and (OIDC) through the egress proxy, as a local user (alice)
 # and an LDAP user (dave), with the egress RP's back channel in Squid's log;
-# the direct OIDC RP calling the API with its access token, and handing out
-# the raw token on /debug/access-token; a RADIUS Access-Request from the NAS
+# the direct OIDC RP calling the API with its access token (the API logging
+# the token's iat and exp), and handing out the raw token on
+# /debug/access-token; a RADIUS Access-Request from the NAS
 # for dave (accepted) and with a wrong password (rejected); then for every scenario: break (twice), detected
 # as broken, the expected error in the browser (or in the NAS's output, for
 # RADIUS scenarios), the expected log line, a user outside the
@@ -287,7 +288,12 @@ check "login: OIDC RP through the egress proxy: back channel tunnelled by Squid"
 check "login: OIDC RP through the egress proxy (dave, from LDAP)" browser_as dave oidc-egress --expect ok
 check "login: edge OIDC RP through the proxy, plain HTTP behind it (alice)" browser oidc-edge --expect ok
 check "login: edge OIDC RP through the proxy, plain HTTP behind it (dave, from LDAP)" browser_as dave oidc-edge --expect ok
+since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 check "login: OIDC RP calls the API with its access token (alice)" browser oidc-api --expect ok
+# iat and exp on the API's line: a log search computes the token's lifetime from them.
+TS='[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'
+check "login: the API logs the token's iat and exp on each call" \
+  log_has "$since" api "event=api_request_ok .* iat=$TS exp=$TS"
 check "login: OIDC RP calls the API with its access token (dave, from LDAP)" browser_as dave oidc-api --expect ok
 check "login: OIDC RP hands out the raw access token on /debug/access-token (alice)" browser oidc-token --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"

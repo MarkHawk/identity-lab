@@ -31,8 +31,8 @@ and keeps failing until you log in again, because this app never refreshes its t
 The API's log, one line per rejected call, with the claims that decided it (never the token):
 
 ```
-2026-10-22 08:51:43,568 WARNING api event=api_token_rejected error=invalid_token error_description='The access token audience (idlab-api-staging account) does not include idlab-api' sub=e52e5f3f-8b98-4f7d-935e-3fa7bbacb59f azp=oidc-rp aud='idlab-api-staging account' iss=https://idlab.home:8180/realms/idlab exp=2026-10-22T08:56:43Z
-2026-10-22 08:52:31,575 WARNING api event=api_token_rejected error=invalid_token error_description='The access token expired at 2026-10-22T08:52:26Z' sub=e52e5f3f-8b98-4f7d-935e-3fa7bbacb59f azp=oidc-rp aud='idlab-api account' iss=https://idlab.home:8180/realms/idlab exp=2026-10-22T08:52:26Z
+2026-10-22 08:51:43,568 WARNING api event=api_token_rejected error=invalid_token error_description='The access token audience (idlab-api-staging account) does not include idlab-api' sub=e52e5f3f-8b98-4f7d-935e-3fa7bbacb59f azp=oidc-rp aud='idlab-api-staging account' iss=https://idlab.home:8180/realms/idlab iat=2026-10-22T08:51:43Z exp=2026-10-22T08:56:43Z
+2026-10-22 08:52:31,575 WARNING api event=api_token_rejected error=invalid_token error_description='The access token expired at 2026-10-22T08:52:26Z' sub=e52e5f3f-8b98-4f7d-935e-3fa7bbacb59f azp=oidc-rp aud='idlab-api account' iss=https://idlab.home:8180/realms/idlab iat=2026-10-22T08:52:16Z exp=2026-10-22T08:52:26Z
 ```
 
 and the app's log, for each call:
@@ -165,7 +165,7 @@ Two things to know when reading this:
 2. **Is the token genuine and current?** Signature, `iss` and `exp`. A bad signature with an unknown `kid` means the API has stale keys after Keycloak rotated them. A different `iss` (scheme, host, port or realm) means the token came through another route to the IdP (runbook 09) or from another realm or environment.
 3. **Is it meant for this API?** `aud` must contain the API's identifier, exactly. In Keycloak, access tokens get an audience from an **audience mapper** (on the client, or in a client scope assigned to it) or from client roles of the API's client. Without one, Keycloak access tokens often carry only `account`. `azp` names the client the token was issued to. That's the client to look at, not the API.
 4. **Why it isn't the login.** The ID token and the access token are separate. The login only checks the ID token, whose `aud` is the client ID, so it keeps working. Only the calls that send the access token fail.
-5. **Expired: a short lifetime, an app that doesn't refresh, or a clock.** Look at `exp - iat` (the lifetime the IdP gave it), the time of the failing call (in the API's log), and whether a call straight after login works. Here the lifetime is 10 seconds, the app never refreshes, and a call within 10 seconds of login works. The same app with the normal 5-minute tokens fails the same way, five minutes after login: that's the bug the shorter lifespan exposed.
+5. **Expired: a short lifetime, an app that doesn't refresh, or a clock.** Look at `exp - iat` (the lifetime the IdP gave it; the API logs both, on every line), the time of the failing call (in the API's log), and whether a call straight after login works. Here the lifetime is 10 seconds, the app never refreshes, and a call within 10 seconds of login works. The same app with the normal 5-minute tokens fails the same way, five minutes after login: that's the bug the shorter lifespan exposed.
 
 **Root cause, in one sentence for the customer:**
 - *Audience:* the IdP's settings for this app were changed to issue access tokens for a different API (`idlab-api-staging`), so the API rejects them as not meant for it; logins still work because they don't use the access token.

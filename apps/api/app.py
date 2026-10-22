@@ -139,7 +139,7 @@ def rejected(exc):
     log.warning(kv(
         event="api_token_rejected", error=exc.reason, error_description=exc.description or "-",
         sub=c.get("sub", "-"), azp=c.get("azp", "-"), aud=" ".join(audiences(c)) or "-", iss=c.get("iss", "-"),
-        exp=iso(c.get("exp")) if c else "-",
+        iat=iso(c.get("iat")) if c else "-", exp=iso(c.get("exp")) if c else "-",
     ))
     body = {"error": exc.reason}
     if exc.description:
@@ -155,7 +155,8 @@ def healthz():
 @app.get("/v1/whoami")
 def whoami():
     claims = validate(bearer_token())
-    log.info(kv(event="api_request_ok", sub=claims.get("sub"), azp=claims.get("azp"), exp=iso(claims.get("exp"))))
+    log.info(kv(event="api_request_ok", sub=claims.get("sub"), azp=claims.get("azp"),
+                iat=iso(claims.get("iat")), exp=iso(claims.get("exp"))))
     return {
         "sub": claims.get("sub"),
         "preferred_username": claims.get("preferred_username"),

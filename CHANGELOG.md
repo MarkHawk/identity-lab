@@ -2,6 +2,12 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
 
+## Log changes (2026-10-22)
+
+**Changed:** the API's `api_token_rejected` and `api_request_ok` lines now carry the token's `iat` next to its `exp`, so a log search can compute the lifetime the IdP gave it (`exp - iat`). `scripts/test.sh` checks for both.
+
+**Why the upgrade steps:** none needed beyond the usual. `scripts/test.sh` rebuilds the API's image and recreates its container.
+
 ## Phase 3, Part C, round one: redirect loop and API bearer 401s (2026-10-22)
 
 **Added:**
