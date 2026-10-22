@@ -55,7 +55,8 @@ fi
 
 # --- TLS certificate shared by the services and the proxy -------------------
 # DNS:proxy: oidc-rp-proxied reaches Keycloak through https://proxy:8183.
-SAN="DNS:$LAB_HOST,DNS:keycloak,DNS:saml-sp,DNS:oidc-rp,DNS:proxy,IP:127.0.0.1"
+# DNS:api: the OIDC RP calls the API (resource server) at https://api:8188.
+SAN="DNS:$LAB_HOST,DNS:keycloak,DNS:saml-sp,DNS:oidc-rp,DNS:proxy,DNS:api,IP:127.0.0.1"
 [[ "$LAB_HOST" != "localhost" ]] && SAN="$SAN,DNS:localhost"
 needs_tls=0
 if [[ ! -f "$CERTS_DIR/tls.crt" ]]; then
@@ -68,6 +69,9 @@ elif ! openssl x509 -in "$CERTS_DIR/tls.crt" -noout -ext subjectAltName 2>/dev/n
 elif ! openssl x509 -in "$CERTS_DIR/tls.crt" -noout -ext subjectAltName 2>/dev/null \
        | grep -q "DNS:proxy\b"; then
   needs_tls=1   # issued before the reverse proxy existed
+elif ! openssl x509 -in "$CERTS_DIR/tls.crt" -noout -ext subjectAltName 2>/dev/null \
+       | grep -q "DNS:api\b"; then
+  needs_tls=1   # issued before the API existed
 fi
 if (( needs_tls )); then
   log "issuing TLS certificate for $LAB_HOST"
@@ -159,6 +163,10 @@ PROXY_SAML_SP_PORT=8184
 PROXY_OIDC_RP_PORT=8185
 # The OIDC RP whose calls to Keycloak go through the Squid egress proxy.
 EGRESS_OIDC_RP_PORT=8186
+# A fourth OIDC RP, through the reverse proxy, which talks plain HTTP to it.
+PROXY_EDGE_RP_PORT=8187
+# The API (resource server) that accepts Keycloak access tokens.
+API_PORT=8188
 
 KC_ADMIN_USER=admin
 KC_ADMIN_PASSWORD=$(keep KC_ADMIN_PASSWORD "$(rand 32)")
@@ -169,6 +177,8 @@ OIDC_CLIENT_SECRET=$(keep OIDC_CLIENT_SECRET "$(rand 40)")
 OIDC_PROXIED_CLIENT_SECRET=$(keep OIDC_PROXIED_CLIENT_SECRET "$(rand 40)")
 # Client secret of oidc-rp-egress, the OIDC RP behind the egress proxy.
 OIDC_EGRESS_CLIENT_SECRET=$(keep OIDC_EGRESS_CLIENT_SECRET "$(rand 40)")
+# Client secret of oidc-rp-edge, the OIDC RP behind the proxy on plain HTTP.
+OIDC_EDGE_CLIENT_SECRET=$(keep OIDC_EDGE_CLIENT_SECRET "$(rand 40)")
 SAML_SP_SECRET_KEY=$(keep SAML_SP_SECRET_KEY "$(rand 48)")
 OIDC_RP_SECRET_KEY=$(keep OIDC_RP_SECRET_KEY "$(rand 48)")
 LDAP_ADMIN_PASSWORD=$(keep LDAP_ADMIN_PASSWORD "$(rand 32)")
@@ -186,7 +196,7 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
   warn "demo user passwords, OIDC client secrets and LDAP passwords are only applied when the"
   warn "databases are created, and the RADIUS secret when the NAS volume is created."
@@ -196,6 +206,7 @@ fi
 ok "setup complete for https://$LAB_HOST:8180 (Keycloak), :8181 (SAML SP), :8182 (OIDC RP)"
 echo "    Through the reverse proxy: :8183 (Keycloak), :8184 (SAML SP), :8185 (OIDC RP)."
 echo "    The OIDC RP behind the egress proxy (Squid): :8186."
+echo "    The OIDC RP behind the reverse proxy on plain HTTP: :8187. The API (resource server): :8188."
 echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."

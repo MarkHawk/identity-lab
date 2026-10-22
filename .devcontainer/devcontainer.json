@@ -35,7 +35,9 @@
 
   // 8183-8185: the same three through the nginx reverse proxy.
   // 8186: the OIDC RP whose back channel goes through the Squid egress proxy.
-  "forwardPorts": [8180, 8181, 8182, 8183, 8184, 8185, 8186],
+  // 8187: the OIDC RP behind the reverse proxy on plain HTTP (scenario 15).
+  // 8188: the API (resource server) the OIDC RP calls (scenario 16).
+  "forwardPorts": [8180, 8181, 8182, 8183, 8184, 8185, 8186, 8187, 8188],
   "portsAttributes": {
     // The services and the proxy terminate TLS themselves with the lab's own CA.
     "8180": { "label": "Keycloak (IdP)", "protocol": "https", "onAutoForward": "silent" },
@@ -44,6 +46,8 @@
     "8183": { "label": "Proxy: Keycloak", "protocol": "https", "onAutoForward": "silent" },
     "8184": { "label": "Proxy: SAML SP", "protocol": "https", "onAutoForward": "silent" },
     "8185": { "label": "Proxy: OIDC RP", "protocol": "https", "onAutoForward": "silent" },
-    "8186": { "label": "Egress: OIDC RP", "protocol": "https", "onAutoForward": "silent" }
+    "8186": { "label": "Egress: OIDC RP", "protocol": "https", "onAutoForward": "silent" },
+    "8187": { "label": "Proxy: edge OIDC RP", "protocol": "https", "onAutoForward": "silent" },
+    "8188": { "label": "API", "protocol": "https", "onAutoForward": "silent" }
   }
 }

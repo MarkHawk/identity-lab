@@ -17,6 +17,8 @@ x-lab-env: &lab-env
   PROXY_SAML_SP_PORT: ${PROXY_SAML_SP_PORT}
   PROXY_OIDC_RP_PORT: ${PROXY_OIDC_RP_PORT}
   EGRESS_OIDC_RP_PORT: ${EGRESS_OIDC_RP_PORT:?run scripts/setup.sh}
+  PROXY_EDGE_RP_PORT: ${PROXY_EDGE_RP_PORT:?run scripts/setup.sh}
+  API_PORT: ${API_PORT:?run scripts/setup.sh}
 
 services:
   postgres:
