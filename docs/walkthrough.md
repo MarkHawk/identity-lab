@@ -5,6 +5,7 @@ This walkthrough follows support tickets from the first message to the fix, usin
 - **Chapters 1 and 2:** nobody can sign in with SAML. An expired IdP signing certificate, followed through token-inspector, Splunk and runbook 01. Then a side ticket about 429s.
 - **Chapter 3:** logins fail for everyone after a network change. An egress proxy that now wants credentials, followed through the app's error, Squid's log, Splunk and runbook 11. Then two side tickets: TLS interception, and a proxy that logs nothing because it is bypassed.
 - **Chapter 4:** users can sign in, but the API refuses every call with 401. Access tokens issued for the wrong API, followed through the API's `WWW-Authenticate` header, token-inspector, Splunk's API panels and runbook 16. Then two side tickets: tokens that expire after 10 seconds (and how to tell that from clock skew), and a CORS mismatch the API logs as a 200.
+- **Chapter 5:** three short tickets at the reverse proxy. A redirect loop from one added header line, a maintenance page left on while every health check stays green (and how a 503 differs from a 502 or 504), and a partner's mutual-TLS calls refused with 400, first for a missing client certificate, then for an expired one. Runbooks 15, 17 and 18.
 
 | Step | Tool | Question it answers |
 |---|---|---|
@@ -15,8 +16,9 @@ This walkthrough follows support tickets from the first message to the fix, usin
 | Side ticket | [rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe) | Is a 429 the client's fault or the API's? |
 | Chapter 3 | identity-lab, identity-support-splunk, [runbooks 11](../runbooks/11-proxy-auth-required.md), [13](../runbooks/13-proxy-tls-interception.md) and [14](../runbooks/14-proxy-bypass.md) | Is it the IdP, the app, or the proxy between them? |
 | Chapter 4 | identity-lab, token-inspector, identity-support-splunk, [runbooks 16](../runbooks/16-api-bearer-401.md) and [19](../runbooks/19-cors-blocked.md) | The login works, so why does the API say no? |
+| Chapter 5 | identity-lab, identity-support-splunk, [runbooks 15](../runbooks/15-redirect-loop.md), [17](../runbooks/17-service-unavailable.md) and [18](../runbooks/18-client-cert.md) | What is the proxy's answer telling me? |
 
-**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, and 20 for chapter 4. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
+**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, 20 for chapter 4 and 15 for chapter 5. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
 
 **Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`), each set up as its own README describes. Times in the examples are UTC.
 
@@ -808,7 +810,269 @@ scripts/status.sh
 
 ---
 
+## Chapter 5: trouble at the front door
+
+The reverse proxy is the front door: every browser and partner system that reaches the IdP or an app through it on 8183 to 8189 goes past it first. That makes it the first suspect in a lot of tickets, and often the right one, but rarely for the reason the ticket gives. This chapter is three short tickets from one afternoon. Each one is solved by reading the proxy's answer and one or two fields of its access log, before anyone logs in to the IdP.
+
+The lab's nginx writes one access log line per request, with `upstream=` (where it sent the request, or `-` if nowhere) and `upstream_status=` (what came back). On the mutual-TLS route it adds what it made of the client's certificate. Those fields do most of the work below.
+
+### 5.1 "Too many redirects, and clearing cookies didn't help"
+
+> "Since this morning's proxy change, our app just says it redirected too many times. We cleared cookies and tried another browser. Nothing helps."
+
+```bash
+scripts/break.sh redirect-loop
+```
+
+```
+==> breaking redirect-loop: the proxy stops sending X-Forwarded-Proto to an app that forces HTTPS
+ ok  redirect-loop is broken: GET https://idlab.home:8187/ redirects to itself (edge-location.conf: proxy_set_header X-Request-ID $request_id)
+```
+
+Open `https://idlab.home:8187/` and the app never appears. Chrome gives up with its own page:
+
+```
+This page isn't working
+idlab.home redirected you too many times.
+Try deleting your cookies.
+ERR_TOO_MANY_REDIRECTS
+```
+
+There's no login to try, so there's nothing for the user to have done wrong. Browsers suggest cookies because a loop between two pages usually is a cookie problem. `curl` shows this one is different:
+
+```bash
+curl -sS -I --cacert certs/ca.crt https://idlab.home:8187/
+curl -sS -o /dev/null -L --max-redirs 5 -w '%{http_code} after %{num_redirects} redirects\n' --cacert certs/ca.crt https://idlab.home:8187/
+```
+
+```
+HTTP/1.1 302 FOUND
+Server: nginx
+Location: https://idlab.home:8187/
+
+curl: (47) Maximum (5) redirects followed
+302 after 5 redirects
+```
+
+The page redirects to itself: the `Location` is the URL that was asked for. No cookie is involved, which is why clearing them didn't help. The app says why it redirects, once per request:
+
+```bash
+docker compose logs oidc-rp-edge | grep force_https
+```
+
+```
+2026-10-23 07:37:06,921 INFO oidc-rp event=force_https path=/ scheme=http x_forwarded_proto=-
+```
+
+TLS ends at the proxy, so the app always receives plain HTTP. It only knows the browser used HTTPS because the proxy tells it in `X-Forwarded-Proto`, and now that header arrives empty (`-`). So the app "upgrades" the browser to HTTPS, the URL it's already on, and the browser follows until it gives up. The proxy's log agrees: every request reached the app (`upstream=` has an address), and the app answered 302 each time:
+
+```
+172.30.182.1 "GET / HTTP/1.1" 302 235 host=idlab.home:8187 upstream=172.30.182.3:8182 upstream_status=302 request_time=0.002 upstream_time=0.001
+```
+
+The proxy change was one line, a request ID for tracing, added to the app's `location`:
+
+```nginx
+proxy_set_header X-Request-ID $request_id;
+```
+
+That line is harmless in itself. The trap is an nginx rule: a `location` with any `proxy_set_header` of its own inherits none from the `server` block. The server's `X-Forwarded-Proto`, `X-Forwarded-For` and `Host` lines silently stopped applying to this app.
+
+In Splunk, **When did it start?** counts loops, not redirects. The browser gave up once and the `curl -L` once, so the count is 2:
+
+| first_seen | last_seen | cause | count | affected | apps | routes | runbook |
+|---|---|---|---|---|---|---|---|
+| 2026-10-23 07:37:00 | 2026-10-23 07:37:06 | Redirect loop (too many redirects): the app forces HTTPS but gets no X-Forwarded-Proto from the reverse proxy, so it sends every request back to the HTTPS URL the browser is already on. Usually a proxy_set_header added to the proxy's location, which drops the headers it inherited | 2 | not in log | oidc-rp-edge | / | 15-redirect-loop |
+
+The **App stuck in a redirect loop** alert fires on a single loop, because a loop is never one user's problem. Its search, for this run, gives 2 loops of 27 redirects on `/` (21 from the browser, 6 from curl). The single `curl -I` isn't counted: one redirect is someone typing `http://`, not a loop.
+
+[Runbook 15](../runbooks/15-redirect-loop.md) shows both fixes: take the line out, or keep it and repeat every header the location needs. It also covers what to do if users still loop after the fix (a cached 301). Put the lab back:
+
+```bash
+scripts/fix.sh redirect-loop
+```
+
+The proxy's next lines show `upstream_status=200`.
+
+### 5.2 "SSO is down, but every health check is green"
+
+> "Nobody can sign in. Monitoring says the IdP and the proxy are both healthy. Last night's IdP upgrade went fine."
+
+```bash
+scripts/break.sh proxy-maintenance
+```
+
+```
+==> breaking proxy-maintenance: the proxy is left in maintenance mode: 503 for Keycloak, which is healthy
+ ok  proxy-maintenance is broken: kc-maintenance.conf: return 503 with a maintenance page (maintenance mode is on)
+```
+
+Sign in at `https://idlab.home:8184/` (the SAML SP behind the proxy). Where Keycloak's login form should be, the user gets:
+
+```
+Planned maintenance
+Sign-in is down for planned maintenance
+We are upgrading the sign-in service. Please try again later.
+```
+
+The upgrade did go fine. Somebody put the proxy into maintenance mode for it and didn't take it out afterwards. Ask the proxy and Keycloak directly, and both stories hold:
+
+```bash
+curl -sS -o /dev/null -D - --cacert certs/ca.crt https://idlab.home:8183/realms/idlab/.well-known/openid-configuration
+curl -sS -o /dev/null -w 'nginx-healthz: %{http_code}\n' --cacert certs/ca.crt https://idlab.home:8183/nginx-healthz
+curl -sS -o /dev/null -w 'keycloak direct :8180: %{http_code}\n' --cacert certs/ca.crt https://idlab.home:8180/realms/idlab/.well-known/openid-configuration
+```
+
+```
+HTTP/1.1 503 Service Temporarily Unavailable
+Server: nginx
+Content-Type: text/html
+Retry-After: 3600
+
+nginx-healthz: 200
+keycloak direct :8180: 200
+```
+
+The proxy's health check is green, and Keycloak on its own port is green. Only the route users take is red, and nothing monitors that route. That's how monitoring and users can disagree.
+
+The three 5xx errors a reverse proxy gives out mean quite different things, and the proxy's access log tells them apart in one field. Here are the 503, and for comparison a 502 and a 504 from the same lab (scenarios `proxy-bad-gateway` and `proxy-gateway-timeout`, broken briefly for the purpose):
+
+```
+172.30.182.1 "GET /realms/idlab/.well-known/openid-configuration HTTP/1.1" 503 205 host=idlab.home:8183 upstream=- upstream_status=- request_time=0.000 upstream_time=-
+172.30.182.1 "GET / HTTP/1.1" 502 552 host=idlab.home:8185 upstream=172.30.182.4:8182 upstream_status=502 request_time=0.003 upstream_time=0.003
+172.30.182.1 "GET /auth/callback?state=***&session_state=***&iss=https%3A%2F%2Fidlab.home%3A8183%2Frealms%2Fidlab&code=*** HTTP/1.1" 504 562 host=idlab.home:8185 upstream=172.30.182.4:8182 upstream_status=504 request_time=5.002 upstream_time=5.002
+```
+
+- **503 with `upstream=-`**: the proxy answered by itself, in no time, and never contacted Keycloak. Maintenance mode, or a rate limit set to answer 503. Keycloak is probably fine. Look at the proxy's configuration.
+- **502 with an upstream address**: the proxy reached the app, but what came back wasn't a valid HTTP answer (here, plain HTTP sent to an HTTPS port). Look at `proxy_pass` ([runbook 06](../runbooks/06-proxy-bad-gateway.md)).
+- **504 with an upstream address and `request_time=5.002`**: the proxy waited its full read timeout of 5 seconds and gave up. Look at what the app is waiting for ([runbook 07](../runbooks/07-proxy-gateway-timeout.md)).
+
+`Retry-After: 3600` fits the first case too. It's something a person put there, not something a failing server sends. (The lab masks the SAML and OIDC parameters in the proxy's log as `***`, and so should yours: an authorisation code or a SAML request has no place in a ticket.)
+
+In Splunk, the **Reverse proxy: responses over time** chart has the 503s in their own colour, and **Reverse proxy: refusals by likely cause** keeps them separate from the 502 and the 504:
+
+| first_seen | last_seen | cause | count | routes | runbook |
+|---|---|---|---|---|---|
+| 2026-10-23 07:37:31 | 2026-10-23 07:37:37 | Reverse proxy answered 503 itself, without passing the request on (no upstream): maintenance mode or a return 503 left on, while the IdP behind it is probably fine. If the error log says limiting requests at the same moment, it is the rate limit instead (runbook 08) | 2 | idlab.home:8183 | 17-service-unavailable |
+| 2026-10-23 07:37:58 | 2026-10-23 07:37:58 | Reverse proxy got no valid answer from the app behind it (502): check proxy_pass (http:// versus https://, port) and that the app is where the proxy expects | 1 | idlab.home:8185 | 06-proxy-bad-gateway |
+| 2026-10-23 07:38:08 | 2026-10-23 07:38:08 | Reverse proxy gave up waiting for the app behind it (504): the app, or something it calls, is slower than the proxy's read timeout | 1 | idlab.home:8185 | 07-proxy-gateway-timeout |
+
+The README's [screenshot of the reverse proxy panels](https://github.com/MarkHawk/identity-support-splunk/blob/main/docs/screenshots/proxy.png) shows the same layout with real identity-lab data. The 503 has no alert, by design: maintenance pages are meant to happen. It shows in the dashboard instead, and in **When did it start?** with `proxy` as the app.
+
+[Runbook 17](../runbooks/17-service-unavailable.md) covers turning it off safely (ask whoever turned it on whether the work is really finished) and making maintenance mode expire on its own. Put the lab back:
+
+```bash
+scripts/fix.sh proxy-maintenance
+```
+
+```
+==> fixing proxy-maintenance
+ ok  proxy-maintenance is healthy: kc-maintenance.conf: (no directives)
+```
+
+Users can retry straight away. Browsers don't cache a 503.
+
+### 5.3 "The partner's calls fail with 400 Bad Request"
+
+> "Our partner integration calls your mutual-TLS endpoint, and since their redeploy every call gets 400 Bad Request. TLS works, they say, so it can't be the certificate."
+
+The mutual-TLS route on 8189 is for partner systems: nginx asks the client for a certificate during the TLS handshake, checks it against the lab CA, and only then answers. The partner's redeploy left its certificate and key behind:
+
+```bash
+scripts/break.sh client-cert-missing
+```
+
+```
+==> breaking client-cert-missing: the mTLS client lost its certificate and connects without one (nginx 496)
+ ok  client-cert-missing is broken: the client has no certificate in .state/mtls-client
+```
+
+The partner is right that TLS works:
+
+```bash
+curl -sS -v --cacert certs/ca.crt https://idlab.home:8189/ 2>&1 | grep -E 'Request CERT|SSL connection using|^< HTTP|<title>'
+```
+
+```
+* TLSv1.3 (IN), TLS handshake, Request CERT (13):
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / X25519MLKEM768 / RSASSA-PSS
+< HTTP/1.1 400 Bad Request
+<head><title>400 No required SSL certificate was sent</title></head>
+```
+
+The server asked for a certificate (`Request CERT`), the client didn't send one, and nginx finished the handshake anyway. It refuses the request afterwards, with a 400 and an error page that says why. So "TLS works" and "it's the certificate" are both true. A browser shows the same page:
+
+```
+400 Bad Request
+No required SSL certificate was sent
+nginx
+```
+
+A week later, the same partner, the same 400. This time they're sure they send their certificate. They do, but it expired yesterday:
+
+```bash
+scripts/fix.sh client-cert-missing
+scripts/break.sh client-cert-expired
+```
+
+```
+==> breaking client-cert-expired: the mTLS client's certificate has expired (nginx 495)
+ ok  client-cert-expired is broken: the client certificate does not verify: error 10 at 0 depth lookup: certificate has expired (subject=CN=partner-client notAfter=Oct 22 07:38:33 2026 GMT)
+```
+
+The user gets `400 Bad Request` again, with *The SSL certificate error* on the page. Two different causes give the user the same status code, which is why "we get a 400" isn't enough to go on. The proxy's error log names each one, in nginx's words:
+
+```bash
+docker compose logs proxy | grep -E 'no required SSL certificate|certificate verify error'
+```
+
+```
+2026/10/23 07:38:22 [info] 5656#5656: *998 client sent no required SSL certificate while reading client request headers, client: 172.30.182.1, server: , request: "GET / HTTP/1.1", host: "idlab.home:8189"
+2026/10/23 07:38:35 [info] 5656#5656: *1005 client SSL certificate verify error: (10:certificate has expired) while reading client request headers, client: 172.30.182.1, server: , request: "GET / HTTP/1.1", host: "idlab.home:8189"
+```
+
+and the access log has the same in fields you can search on:
+
+```
+172.30.182.1 "GET / HTTP/1.1" 400 230 host=idlab.home:8189 client_dn="-" client_not_after="-" ssl_client_verify=NONE
+172.30.182.1 "GET / HTTP/1.1" 400 610 host=idlab.home:8189 client_dn="CN=partner-client" client_not_after="Oct 22 07:38:33 2026 GMT" ssl_client_verify=FAILED:certificate has expired
+```
+
+Note that these lines are logged at `info`. An error log left at the default `error` level hides both, and the whole incident is a row of anonymous 400s.
+
+Splunk's **Reverse proxy: client certificates on mutual-TLS routes** is the table to check, and not only when something has broken:
+
+| client | not_after | days_left | result | count | first_seen | last_seen | routes |
+|---|---|---|---|---|---|---|---|
+| CN=partner-client | Nov 23 18:32:36 2027 GMT | 396 | accepted | 2 | 2026-10-23 07:38:32 | 2026-10-23 07:38:44 | idlab.home:8189 |
+| CN=partner-client | Oct 22 07:38:33 2026 GMT | -2 | refused: certificate has expired | 2 | 2026-10-23 07:38:35 | 2026-10-23 07:38:35 | idlab.home:8189 |
+| no certificate sent | - | | refused: no certificate | 2 | 2026-10-23 07:38:16 | 2026-10-23 07:38:22 | idlab.home:8189 |
+
+Each certificate a client presents gets its own row with its expiry date, so the *accepted* row is the early warning. `days_left` of 396 is plenty. A known partner's certificate under 30 days is the moment to email them, not the day it fails. (The expired certificate ran out just over a day before this run, and the panel rounds down, so it shows -2.)
+
+**When did it start?** has both causes, and here *affected* is a certificate, not a user, because a partner system is the client:
+
+| first_seen | last_seen | cause | count | affected | apps | routes | runbook |
+|---|---|---|---|---|---|---|---|
+| 2026-10-23 07:38:16 | 2026-10-23 07:38:22 | Client sent no certificate to a mutual-TLS route (400, ssl_client_verify=NONE): its certificate and key are missing from its deployment or configuration, or a TLS-inspecting proxy in between drops it | 2 | not in log | proxy | idlab.home:8189 | 18-client-cert |
+| 2026-10-23 07:38:35 | 2026-10-23 07:38:35 | Client certificate on a mutual-TLS route has expired (400, ssl_client_verify=FAILED:certificate has expired): renew it; client_not_after has the date | 2 | client certificate (CN=partner-client) | proxy | idlab.home:8189 | 18-client-cert |
+
+[Runbook 18](../runbooks/18-client-cert.md) covers both fixes: restore the certificate to the client's deployment, or have the partner get a new one from the CA you trust. It also explains why `ssl_verify_client optional_no_ca` and accepting expired certificates aren't fixes. Put the lab back:
+
+```bash
+scripts/fix.sh client-cert-expired
+scripts/status.sh
+```
+
+```
+==> fixing client-cert-expired
+ ok  client-cert-expired is healthy: the client certificate verifies (subject=CN=partner-client notAfter=Nov 23 18:32:36 2027 GMT)
+```
+
+---
+
 ## Coming next
 
 - **Directory and RADIUS outages** (scenarios 04 and 05), with packet-level evidence from a planned RADIUS and LDAP pcap analyser.
+- **The remaining scenarios** (02, 03, 09, 10 and 12) have runbooks but no chapter yet.
 - **An AI triage assistant** that reads a ticket and suggests the likely cause and runbook, using these runbooks as its knowledge base.
