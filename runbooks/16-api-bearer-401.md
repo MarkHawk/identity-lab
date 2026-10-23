@@ -135,27 +135,35 @@ Verdict: 1 problem to fix (1 FAIL, 0 WARN, 6 PASS, 4 SKIP)
 
 Signature, issuer and expiry are fine, so the token is genuine and current. Only `aud` is wrong, and `azp: oidc-rp` says which client it was issued to: that's the client whose settings to look at. (`account` is Keycloak's own: it adds it for the user's account-console roles, and it's harmless.)
 
-**Expired token**, checked 5 seconds after `exp`:
+**Expired token**, checked 5 seconds after `exp` with the API's skew allowance (`--skew 0 --now 2026-10-23T07:32:41Z`):
 
 ```
+Checked at: 2026-10-23 07:32:41 UTC, clock skew allowance 0 s
+
 == Claims ==
-  exp                 2026-10-22 08:53:59 UTC (5 s ago)
-  iat                 2026-10-22 08:53:49 UTC (15 s ago)
+  exp                 2026-10-23 07:32:36 UTC (5 s ago)
+  iat                 2026-10-23 07:32:26 UTC (15 s ago)
 
 == Checks ==
-  WARN  Expiry (exp)            Expired 5 s ago, but that is inside the 60 s skew allowance.
-                                Next: A receiver with a stricter allowance will reject it. Check
-                                      both clocks use NTP.
-                                Runbook: identity-lab 02-clock-skew
-  PASS  Audience (aud)          Matches 'idlab-api'.
+  FAIL  Expiry (exp)            Expired 5 s ago (exp 2026-10-23 07:32:36 UTC). It was issued with a
+                                lifetime of only 10 s (iat 2026-10-23 07:32:26 UTC). That lifetime,
+                                not clock skew, is the most likely reason: the token runs out almost
+                                as soon as it is used.
+                                Next: Check the token lifespan set for this client in the IdP (a
+                                      value meant as minutes entered as seconds is a common slip),
+                                      and that the application refreshes its token before it
+                                      expires.
+                                Runbook: identity-lab 16-api-bearer-401
 
-Verdict: no failures, 1 warning to review (0 FAIL, 1 WARN, 6 PASS, 4 SKIP)
+== Likely cause ==
+  The token was issued with a lifetime of only 10 s and expired 5 s ago, so it runs out before the
+  application has finished using it, which can look like clock skew.
 ```
 
 Two things to know when reading this:
 
-1. **Match token-inspector's skew allowance to the API's.** token-inspector allows 60 seconds by default. This API allows none, so the same token the API rejected only gets a WARN. Add `--skew 0` (or whatever the API allows) and the expiry check fails as it did at the API.
-2. **The likely cause it gives is clock skew, and here that's wrong.** With `--skew 0`, or checked a few minutes later, it says *"The clocks on the IdP and the receiving server most likely disagree"* and points at runbook 02. From the token alone, a token that expired a little before it was used looks the same either way. Tell them apart with two facts:
+1. **Match token-inspector's skew allowance to the API's.** token-inspector allows 60 seconds by default. This API allows none, so without `--skew 0` the same token the API rejected only gets a WARN ("Expired 5 s ago, but that is inside the 60 s skew allowance"), with the same likely cause. Set `--skew` to whatever the API allows, and the expiry check fails as it did at the API.
+2. **It names the short lifetime, not clock skew.** token-inspector 0.2.0 reports *Short token lifetime* for a JWT issued to live 120 s or less that has just expired, and points here rather than at runbook 02. Confirm it with two facts before you tell the customer:
    - **The token's lifetime:** `exp - iat` is **10 seconds** here. Keycloak's default is 300 (5 minutes), and most IdPs issue 5 to 60 minutes. A lifetime that short is a setting, not a clock.
    - **The clocks:** compare the IdP's and the API's clocks with UTC (`docker compose exec keycloak date -u` and `docker compose exec api date -u` agree here). With clock skew, the token would fail even straight after login. Here a call straight after login works.
 
