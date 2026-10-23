@@ -2,6 +2,12 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
 
+## Scenario 14 keeps its evidence (2026-10-23)
+
+**Changed:** `scripts/break.sh proxy-bypass` and `scripts/fix.sh proxy-bypass` recreate `oidc-rp-egress`, which used to drop the broken container's logs, failed logins included. They now save them first to `.state/oidc-rp-egress/logs/<UTC time>/logs/oidc-rp-egress.log` (`docker logs --timestamps`, newest 5 kept). That's the layout identity-support-splunk's `hec_send.py replay` reads. `scripts/test.sh` checks that the fix's saved log has the `backchannel_failed` line. Runbook 14 and the walkthrough's side ticket say so.
+
+**Why the upgrade steps:** none. The scripts create the folder the next time they recreate the container.
+
 ## Phase 3, Part C, round two: 503, mutual TLS and CORS (2026-10-22)
 
 **Added:**

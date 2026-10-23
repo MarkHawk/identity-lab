@@ -5,7 +5,7 @@
 | **Protocol** | The client-side proxy settings `HTTPS_PROXY` and `NO_PROXY`, which decide per request whether an app server's HTTPS call goes through the egress proxy or straight to the destination. Here, the OIDC RP's back channel to Keycloak: discovery, token, userinfo and JWKS. |
 | **Blast radius** | The one app (or host, or image) whose settings changed, for every destination that now matches `NO_PROXY`. Here, every login on the OIDC RP at `https://LAB_HOST:8186`. The proxy, Keycloak and the other apps are untouched. |
 | **Typical trigger** | A `NO_PROXY` list copied from another environment or a base image ("internal names never go through the proxy"); the IdP moving from an external to an internal name, or the other way round; a deployment template that sets `NO_PROXY` for all apps; or a typo that makes the list match more, or less, than intended. |
-| **Lab** | `scripts/break.sh proxy-bypass` · `scripts/fix.sh proxy-bypass` (adds `keycloak,.idlab.example` to `NO_PROXY` in `.state/oidc-rp-egress/proxy.env` and recreates the `oidc-rp-egress` container, as a redeploy would; Squid isn't touched) |
+| **Lab** | `scripts/break.sh proxy-bypass` · `scripts/fix.sh proxy-bypass` (adds `keycloak,.idlab.example` to `NO_PROXY` in `.state/oidc-rp-egress/proxy.env` and recreates the `oidc-rp-egress` container, as a redeploy would; Squid isn't touched). Both save the old container's logs first, to `.state/oidc-rp-egress/logs/<UTC time>/logs/oidc-rp-egress.log`, newest 5 kept |
 
 ## Symptom
 
@@ -95,8 +95,10 @@ bypass proxy: False | proxies: {'https': 'http://squid:3128', 'no': 'localhost,1
    ```bash
    scripts/fix.sh proxy-bypass
    ```
-   By hand, put back `.state/oidc-rp-egress/proxy.env` from `squid/defaults/oidc-rp-egress.env` (`NO_PROXY=localhost,127.0.0.1`), then recreate the app so its process picks the change up:
+   Recreating the container throws away its logs, and with them the failed logins. `fix.sh` saves them first and prints where.
+   By hand, save them yourself, put back `.state/oidc-rp-egress/proxy.env` from `squid/defaults/oidc-rp-egress.env` (`NO_PROXY=localhost,127.0.0.1`), then recreate the app so its process picks the change up:
    ```bash
+   docker compose logs --no-log-prefix --timestamps oidc-rp-egress > oidc-rp-egress-before-fix.log
    docker compose up -d --no-deps --wait oidc-rp-egress
    ```
    Environment variables are read when a process starts. Editing the file, or exporting a variable in a shell, changes nothing for the app until it restarts.

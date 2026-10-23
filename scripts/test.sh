@@ -159,6 +159,14 @@ print("reached Keycloak without the proxy")' 2>&1)"; then
   echo "$out"
   grep -qF "Failed to resolve 'keycloak'" <<<"$out" || { echo "expected: Failed to resolve 'keycloak'"; return 1; }
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" egress_saved_log_has ...
+egress_saved_log_has() { # <pattern> -- in the newest log fix.sh saved before recreating oidc-rp-egress
+  local f
+  f="$(find "$EGRESS_LOGS_DIR" -path '*/logs/oidc-rp-egress.log' 2>/dev/null | sort | tail -n 1)"
+  [[ -n "$f" ]] || { echo "no saved log in $EGRESS_LOGS_DIR"; return 1; }
+  echo "$f"
+  grep -E -m1 -- "$1" "$f" || { echo "no line matching /$1/ in $f"; return 1; }
+}
 # An unmasked code= query value, or a Keycloak authorisation code anywhere
 # (<uuid>.<session id>.<uuid>). The apps' and the proxy's logs mask them.
 AUTH_CODE_RE='[?&]code=[^*&[:space:]"]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9_-]+\.[0-9a-f]{8}-'
@@ -390,6 +398,10 @@ run_scenario() {
 for name in $(scenario_names); do
   run_scenario "$name"
 done
+# Fixing proxy-bypass recreates the RP, which drops the broken container's logs;
+# fix.sh saves them first. Nothing else recreates the RP, so the newest save is the fix's.
+check "proxy-bypass: fix saved the broken container's log, with backchannel_failed" \
+  egress_saved_log_has 'event=oidc_login_failed reason=backchannel_failed'
 
 # --- Restart ----------------------------------------------------------------------
 # A stale /tmp/squid.pid once made Squid refuse to start after a restart

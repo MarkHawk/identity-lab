@@ -414,6 +414,21 @@ In Splunk, the CONNECTs chart has no new bars at all after the redeploy. It goes
 
 Collect the app's logs before anyone fixes it. Changing `NO_PROXY` means recreating the container, and `docker compose logs` only shows the current container's output, so the failed logins disappear with the old container. The same applies to any redeploy on a real platform that doesn't ship its logs elsewhere.
 
+In the lab, `scripts/fix.sh proxy-bypass` saves them for you before it recreates the container, and prints the path:
+
+```
+ ok  saved the oidc-rp-egress container's logs before recreating it: .state/oidc-rp-egress/logs/20261022T095301Z/logs/oidc-rp-egress.log
+```
+
+The folder is laid out as identity-support-splunk's replay mode expects, so the failed logins can still reach Splunk after the fix, with their original times:
+
+```bash
+cd ../identity-support-splunk
+python3 sender/hec_send.py --cacert splunk-ca.pem --tls-server-name SplunkServerDefaultCert replay ../identity-lab/.state/oidc-rp-egress/logs/20261022T095301Z
+```
+
+The sender's `docker` mode can't find them: it reads only the containers that are running now. `scripts/break.sh` saves the healthy container's logs the same way, and only the newest 5 saves are kept.
+
 [Runbook 14](../runbooks/14-proxy-bypass.md) covers how `NO_PROXY` matching works in different clients, and how to stop a copied list catching the IdP. Put the lab back:
 
 ```bash

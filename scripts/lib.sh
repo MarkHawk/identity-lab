@@ -397,12 +397,36 @@ egress_rp_running() { [[ -n "$(compose ps -q --status running oidc-rp-egress 2>/
 egress_env_live()    { compose exec -T oidc-rp-egress sh -c 'printf "HTTPS_PROXY=%s\nNO_PROXY=%s\n" "${HTTPS_PROXY-}" "${NO_PROXY-}"'; }
 egress_env_default() { _proxy_directives <"$EGRESS_ENV_DEFAULT"; }
 
-# egress_env_set -- replace the RP's proxy settings with stdin and recreate it.
+# Recreating the container drops its logs, and with them the failed logins, so
+# egress_env_set saves them first: one folder per save, newest 5 kept, each laid
+# out as identity-support-splunk's `hec_send.py replay <folder>` expects
+# (logs/<service>.log, `docker logs --timestamps` lines).
+EGRESS_LOGS_DIR="$STATE_DIR/oidc-rp-egress/logs"
+EGRESS_LOGS_KEEP=5
+
+# egress_logs_save -- save the running container's logs; prints the file's path.
+egress_logs_save() {
+  local id dir old
+  id="$(compose ps -q oidc-rp-egress 2>/dev/null)"
+  [[ -n "$id" ]] || return 0
+  dir="$EGRESS_LOGS_DIR/$(date -u +%Y%m%dT%H%M%SZ)/logs"
+  mkdir -p "$dir"
+  # Both streams, in time order, as the sender's docker mode reads them.
+  docker logs --timestamps "$id" 2>&1 | sort -s -k1,1 >"$dir/oidc-rp-egress.log"
+  while read -r old; do rm -rf "$old"; done \
+    < <(find "$EGRESS_LOGS_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r | tail -n +$((EGRESS_LOGS_KEEP + 1)))
+  echo "$dir/oidc-rp-egress.log"
+}
+
+# egress_env_set -- replace the RP's proxy settings with stdin and recreate it,
+# after saving the old container's logs.
 egress_env_set() {
-  local tmp out
+  local tmp out saved
   tmp="$(mktemp "${EGRESS_ENV_FILE%/*}/.proxy.env.XXXXXX")"
   cat >"$tmp"; chmod 644 "$tmp"
   mv "$tmp" "$EGRESS_ENV_FILE"
+  saved="$(egress_logs_save)"
+  [[ -z "$saved" ]] || ok "saved the oidc-rp-egress container's logs before recreating it: ${saved#"$LAB_ROOT"/}"
   out="$(compose up -d --no-deps --wait --wait-timeout 90 oidc-rp-egress 2>&1)" \
     || { echo "$out" >&2; die "oidc-rp-egress did not come back healthy"; }
 }
