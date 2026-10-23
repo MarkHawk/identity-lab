@@ -4,6 +4,7 @@ This walkthrough follows support tickets from the first message to the fix, usin
 
 - **Chapters 1 and 2:** nobody can sign in with SAML. An expired IdP signing certificate, followed through token-inspector, Splunk and runbook 01. Then a side ticket about 429s.
 - **Chapter 3:** logins fail for everyone after a network change. An egress proxy that now wants credentials, followed through the app's error, Squid's log, Splunk and runbook 11. Then two side tickets: TLS interception, and a proxy that logs nothing because it is bypassed.
+- **Chapter 4:** users can sign in, but the API refuses every call with 401. Access tokens issued for the wrong API, followed through the API's `WWW-Authenticate` header, token-inspector, Splunk's API panels and runbook 16. Then two side tickets: tokens that expire after 10 seconds (and how to tell that from clock skew), and a CORS mismatch the API logs as a 200.
 
 | Step | Tool | Question it answers |
 |---|---|---|
@@ -13,8 +14,9 @@ This walkthrough follows support tickets from the first message to the fix, usin
 | Fix | [runbook 01](../runbooks/01-expired-signing-cert.md) | What do I change, and how do I stop it happening again? |
 | Side ticket | [rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe) | Is a 429 the client's fault or the API's? |
 | Chapter 3 | identity-lab, identity-support-splunk, [runbooks 11](../runbooks/11-proxy-auth-required.md), [13](../runbooks/13-proxy-tls-interception.md) and [14](../runbooks/14-proxy-bypass.md) | Is it the IdP, the app, or the proxy between them? |
+| Chapter 4 | identity-lab, token-inspector, identity-support-splunk, [runbooks 16](../runbooks/16-api-bearer-401.md) and [19](../runbooks/19-cors-blocked.md) | The login works, so why does the API say no? |
 
-**Time:** about 20 minutes for chapters 1 and 2 with the lab running, and another 20 for chapter 3. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
+**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, and 20 for chapter 4. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
 
 **Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`), each set up as its own README describes. Times in the examples are UTC.
 
@@ -414,6 +416,393 @@ Collect the app's logs before anyone fixes it. Changing `NO_PROXY` means recreat
 
 ```bash
 scripts/fix.sh proxy-bypass
+scripts/status.sh
+```
+
+---
+
+## Chapter 4: the app signs in, but the API says 401
+
+> "Since this morning our users can sign in to the app, but the dashboard won't load any data. It says 401. The identity team tidied up some client scopes yesterday, but they say they didn't touch our app."
+
+Two clues again. The login works, so the IdP, the app's client and the user's password are all fine. And something changed at the IdP, even if it wasn't aimed at this app. In the lab the app is the direct OIDC RP on 8182. After login, its **Call the API** button sends the user's access token to the lab's API (`api`, on 8188), which checks the token itself, as most APIs do.
+
+### 4.1 Reproduce it
+
+```bash
+scripts/status.sh
+scripts/break.sh api-bearer-audience
+```
+
+The tidy-up brought the app's client scope in line with staging, and the audience mapper in it now names the staging API:
+
+```
+==> breaking api-bearer-audience: oidc-rp's access tokens name another API in their audience
+ ok  api-bearer-audience is broken: oidc-rp access tokens get aud idlab-api-staging, the API expects idlab-api
+```
+
+### 4.2 See it as the user does
+
+Open a new private window, go to `https://idlab.home:8182/`, click **Log in with OIDC** and sign in as `alice`. You land on **OIDC login succeeded**. Under **API**, click **Call the API**:
+
+```
+API call failed: 401 UNAUTHORIZED
+Called at (RP clock)   2026-10-23T07:30:52Z
+WWW-Authenticate       Bearer realm="idlab-api", error="invalid_token", error_description="The access token audience (idlab-api-staging account) does not include idlab-api"
+{"error":"invalid_token","error_description":"The access token audience (idlab-api-staging account) does not include idlab-api"}
+```
+
+The same debug page shows why the login still works. The **ID token** is the one the app checks at login, and its audience is the app itself:
+
+```
+Audience (aud)   oidc-rp
+```
+
+The **access token**, decoded further down the page, is the one the app sends to the API:
+
+```
+Audience (aud)            ['idlab-api-staging', 'account']
+Authorised party (azp)    oidc-rp
+```
+
+Two tokens from one login, checked by two different parties. The app is happy with the first, and the API refuses the second. To the user it looks like "the data is broken". To the app team it looks like "the API is down". Neither is true.
+
+### 4.3 Look where support looks first
+
+Real APIs vary in how much they tell you, so start with the raw answer. In the lab, the debug page's **show the raw token** link (`/debug/access-token`) gives you the access token. For a real customer it's the `Authorization` header of a failing call in a HAR file. Either way it is a live credential until it expires: keep it in a file only you can read, and keep it off the command line.
+
+```bash
+umask 077
+mkdir -p ~/ticket-1235 && cd ~/ticket-1235
+# Save the token as access-token.txt. It starts eyJhbGciOiJSUzI1NiIs... (that's just the JWT header).
+printf 'Authorization: Bearer %s\n' "$(cat access-token.txt)" > auth-header.txt
+curl -sS -i --cacert ~/identity-lab/certs/ca.crt -H @auth-header.txt https://idlab.home:8188/v1/whoami
+```
+
+```
+HTTP/1.1 401 UNAUTHORIZED
+Server: gunicorn
+Date: Fri, 23 Oct 2026 07:31:29 GMT
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 129
+WWW-Authenticate: Bearer realm="idlab-api", error="invalid_token", error_description="The access token audience (idlab-api-staging account) does not include idlab-api"
+Cache-Control: no-store
+Access-Control-Allow-Origin: https://idlab.home:8182
+
+{"error":"invalid_token","error_description":"The access token audience (idlab-api-staging account) does not include idlab-api"}
+```
+
+Read the `WWW-Authenticate` header before anything else. `error="invalid_token"` means a token arrived and the API didn't accept it: expired, badly signed, or meant for someone else. Here the API even says which. Compare a call with no token at all:
+
+```bash
+curl -sS -i --cacert ~/identity-lab/certs/ca.crt https://idlab.home:8188/v1/whoami
+```
+
+```
+HTTP/1.1 401 UNAUTHORIZED
+WWW-Authenticate: Bearer realm="idlab-api"
+```
+
+The same 401, but no `error`. That one means no token reached the API, which points at a gateway stripping the `Authorization` header, or an app that doesn't send it. And a 403 with `error="insufficient_scope"` would mean a good token without the right scope. The status code alone can't tell these apart. The header can.
+
+The API's log has one line per refused call, with the claims that decided it (never the token):
+
+```bash
+docker compose logs api | grep api_token_rejected
+```
+
+```
+2026-10-23 07:30:52,756 WARNING api event=api_token_rejected error=invalid_token error_description='The access token audience (idlab-api-staging account) does not include idlab-api' sub=1e7d717f-82d0-49ab-bb06-c34330a53287 azp=oidc-rp aud='idlab-api-staging account' iss=https://idlab.home:8180/realms/idlab iat=2026-10-23T07:30:52Z exp=2026-10-23T07:35:52Z
+```
+
+and the app logs the call and the answer:
+
+```
+2026-10-23 07:30:52,570 INFO oidc-rp event=oidc_login_ok sub=1e7d717f-82d0-49ab-bb06-c34330a53287 email=alice@idlab.example iss=https://idlab.home:8180/realms/idlab elapsed=0.26s
+2026-10-23 07:30:52,757 INFO oidc-rp event=api_call url=https://api:8188/v1/whoami status=401 www_authenticate='Bearer realm="idlab-api", error="invalid_token", error_description="The access token audience (idlab-api-staging account) does not include idlab-api"'
+```
+
+`oidc_login_ok`, then a 401 from the API a fifth of a second later. Keycloak logs nothing at all: as far as it knows, it issued a token and the login succeeded.
+
+### 4.4 Diagnose the token with token-inspector
+
+Many APIs answer a bare 401 without an `error_description`, so the token is often the only evidence. token-inspector checks it offline, against Keycloak's public keys and what the API expects:
+
+```bash
+curl -sS --cacert ~/identity-lab/certs/ca.crt https://idlab.home:8180/realms/idlab/protocol/openid-connect/certs > ~/ticket-1235/jwks.json
+cd ../token-inspector
+token-inspector ~/ticket-1235/access-token.txt --token-type access \
+  --jwks ~/ticket-1235/jwks.json \
+  --expect-issuer https://idlab.home:8180/realms/idlab --expect-audience idlab-api \
+  --redact --now 2026-10-23T07:31:30Z
+```
+
+`--token-type access` stops it applying ID token checks such as the nonce. `--expect-audience` and `--expect-issuer` are what the API is configured to accept. `--redact` masks the user's details so the report can go back into the ticket. token-inspector's `scripts/capture_from_lab.sh --oidc` captures the same tokens from the lab, if you'd rather not copy one by hand. Trimmed to the parts that matter:
+
+```
+Checked at: 2026-10-23 07:31:30 UTC, clock skew allowance 60 s
+Redacted:   emails, names, NameID and sub are masked
+
+== Claims ==
+  exp                 2026-10-23 07:36:22 UTC (in 5 min)
+  iat                 2026-10-23 07:31:22 UTC (8 s ago)
+  iss                 https://idlab.home:8180/realms/idlab
+  aud                 ["idlab-api-staging", "account"]
+  sub                 1***
+  typ                 Bearer
+  azp                 oidc-rp
+
+== Checks ==
+  PASS  Signature               Valid RS256 signature, verified with key
+                                'Gpp7QBDJqhnyUdSIPHkYXGGpvOqoT5PbP6EFqQp_Mso' from JWKS jwks.json.
+  PASS  Expiry (exp)            Valid for another 5 min (exp 2026-10-23 07:36:22 UTC).
+  PASS  Issued at (iat)         Issued 2026-10-23 07:31:22 UTC (8 s ago).
+  PASS  Issuer (iss)            Matches 'https://idlab.home:8180/realms/idlab'.
+  FAIL  Audience (aud)          The audience is 'idlab-api-staging', 'account', but 'idlab-api' was
+                                expected.
+                                Next: The token was issued for a different client or API. Check the
+                                      client ID the relying party is configured with, and for access
+                                      tokens the audience (resource) requested from the IdP.
+
+== Likely cause ==
+  The token was issued to a different client or API than the one checking it, so its aud or azp does
+  not name this relying party.
+  First:     Check that the client ID the application logs in with is the one it validates tokens
+             against, and that the token was not taken from another application.
+  Runbook:   identity-lab 16-api-bearer-401
+             https://github.com/MarkHawk/identity-lab/blob/main/runbooks/16-api-bearer-401.md
+  Explains:  Audience (aud)
+
+Verdict: 1 problem to fix (1 FAIL, 0 WARN, 6 PASS, 4 SKIP)
+```
+
+Signature, issuer and expiry pass, so the token is genuine and current. Only the audience is wrong. `azp: oidc-rp` names the client the token was issued to, and that's the client whose settings to look at, not the API's. (`account` is Keycloak's own audience for the user's account console. It's always there and harmless.)
+
+### 4.5 Scope it with Splunk
+
+Send the lab's logs to Splunk as in [2.2](#22-scope-it-with-splunk-when-did-it-start-and-who-is-affected), then open **Identity Support > Support overview** and scroll to the API panels. The README's [screenshot of them](https://github.com/MarkHawk/identity-support-splunk/blob/main/docs/screenshots/api.png) shows real identity-lab data.
+
+**API (bearer tokens): calls over time by result** counts every call the API answered, accepted or refused by reason. For this run, in 10-second buckets (empty ones left out):
+
+| _time | accepted | no_token | wrong_audience |
+|---|---|---|---|
+| 07:30:50 | 0 | 0 | 1 |
+| 07:31:20 | 0 | 0 | 1 |
+| 07:31:30 | 0 | 1 | 0 |
+| 07:31:40 | 1 | 0 | 0 |
+
+The two *wrong_audience* calls are the browser's and the curl replay from 4.3. The *no_token* call is the curl without a token. The *accepted* call at 07:31:40 is after the fix in 4.6.
+
+**API (bearer tokens): rejections by reason** has the evidence in one row per reason:
+
+| first_seen | last_seen | reason | status | count | clients | audiences |
+|---|---|---|---|---|---|---|
+| 2026-10-23 07:30:52 | 2026-10-23 07:31:29 | wrong_audience | 401 | 2 | oidc-rp | idlab-api-staging account |
+| 2026-10-23 07:31:37 | 2026-10-23 07:31:37 | no_token | 401 | 1 | | |
+
+*clients* is the `azp` of every refused token, and *audiences* what they carried. If a second client's tokens started failing too, it would show up here, and you'd know the change wasn't limited to one app.
+
+**When did it start?** gives the cause in words, with the runbook:
+
+| first_seen | last_seen | cause | count | affected | apps | runbook |
+|---|---|---|---|---|---|---|
+| 2026-10-23 07:30:52 | 2026-10-23 07:31:29 | API refuses the access token as not meant for it: its audience (aud) does not name the API. The IdP issues the client's tokens for another API: check the audience mapper on the client named in azp | 2 | 1 user | api | 16-api-bearer-401 |
+
+This time *affected* is a number, not "not in log". The API validated the token before refusing it, so it knows the token's subject. **Who is affected?** lists each one by `sub` (here `1e7d717f-82d0-49ab-bb06-c34330a53287`), which the IdP's admin console turns into a user (**Users**, search by ID).
+
+### 4.6 Fix it
+
+[Runbook 16](../runbooks/16-api-bearer-401.md) covers how to find the setting by hand (**Clients > oidc-rp > Client scopes > oidc-rp-dedicated**, the mapper **audience idlab-api**). In the lab:
+
+```bash
+scripts/fix.sh api-bearer-audience
+```
+
+```
+==> fixing api-bearer-audience
+ ok  api-bearer-audience is healthy: oidc-rp access tokens get aud idlab-api
+```
+
+Tokens issued before the fix keep their old audience until they expire. This app keeps the token it got at login and never asks for a new one, so users have to sign in again (the next side ticket is about that habit).
+
+Don't fix it by making the API accept the staging audience as well. The audience check is what stops a token issued for one API being replayed against another. The lasting fix is in how client settings move between environments: promote them with per-environment values for audiences and URLs, not as copied exports.
+
+### 4.7 Confirm recovery
+
+Sign in again in a new private window and click **Call the API**. You get **API call succeeded: 200 OK**, and the API logs:
+
+```
+2026-10-23 07:31:47,188 INFO api event=api_request_ok sub=1e7d717f-82d0-49ab-bb06-c34330a53287 azp=oidc-rp iat=2026-10-23T07:31:47Z exp=2026-10-23T07:36:47Z origin=- cors_allow_origin=https://idlab.home:8182
+```
+
+`scripts/status.sh` shows every scenario healthy. In Splunk, *accepted* is back from 07:31:40, and the *wrong_audience* row's *last_seen* stays at 07:31:29.
+
+### 4.8 Tell the customer
+
+> Sign-ins work, but every call to the API is refused because the identity provider has been issuing your app's access tokens for a different API (`idlab-api-staging` instead of `idlab-api`). Yesterday's client scope change copied that setting from staging. The API checks that each token is meant for it, so it correctly refuses them. Sign-ins aren't affected because they use a different token. We've restored the audience. Users need to sign in again to get a corrected token. The first refused call was at 07:30:52 UTC. To stop a repeat, move client settings between environments with per-environment values, and after any client change, test a full sign-in followed by an API call, not just the sign-in.
+
+---
+
+## Side ticket: "it works for a few seconds after login, then fails"
+
+Same app, a different week. "The API works right after I sign in, then every call fails with 401 until I sign in again." The IdP team has been hardening token settings.
+
+```bash
+scripts/break.sh api-bearer-expired
+```
+
+```
+==> breaking api-bearer-expired: oidc-rp's access tokens expire after 10 seconds; the app never refreshes them
+ ok  api-bearer-expired is broken: oidc-rp access.token.lifespan=10s, shorter than the RP keeps using its token
+```
+
+Sign in and click **Call the API** at once, and it works. Wait 15 seconds and click again:
+
+```
+2026-10-23 07:31:58,519 INFO oidc-rp event=api_call url=https://api:8188/v1/whoami status=200 www_authenticate=-
+2026-10-23 07:32:16,489 INFO oidc-rp event=api_call url=https://api:8188/v1/whoami status=401 www_authenticate='Bearer realm="idlab-api", error="invalid_token", error_description="The access token expired at 2026-10-23T07:32:11Z"'
+```
+
+The first line is the click straight after login. The second is from another login, 15 seconds after it. "Expired" has two common causes that look alike from the outside. Either the token really didn't last long, or the clocks of the IdP and the API disagree ([runbook 02](../runbooks/02-clock-skew.md)). token-inspector, on a token captured from a fresh login and checked 5 seconds after its `exp`:
+
+```bash
+token-inspector ~/ticket-1236/access-token.txt --token-type access \
+  --jwks ~/ticket-1236/jwks.json \
+  --expect-issuer https://idlab.home:8180/realms/idlab --expect-audience idlab-api \
+  --redact --now 2026-10-23T07:32:41Z --skew 0
+```
+
+```
+Checked at: 2026-10-23 07:32:41 UTC, clock skew allowance 0 s
+
+== Claims ==
+  exp                 2026-10-23 07:32:36 UTC (5 s ago)
+  iat                 2026-10-23 07:32:26 UTC (15 s ago)
+
+== Checks ==
+  FAIL  Expiry (exp)            Expired 5 s ago (exp 2026-10-23 07:32:36 UTC). It was issued with a
+                                lifetime of only 10 s (iat 2026-10-23 07:32:26 UTC). That lifetime,
+                                not clock skew, is the most likely reason: the token runs out almost
+                                as soon as it is used.
+                                Next: Check the token lifespan set for this client in the IdP (a
+                                      value meant as minutes entered as seconds is a common slip),
+                                      and that the application refreshes its token before it
+                                      expires.
+                                Runbook: identity-lab 16-api-bearer-401
+
+== Likely cause ==
+  The token was issued with a lifetime of only 10 s and expired 5 s ago, so it runs out before the
+  application has finished using it, which can look like clock skew.
+```
+
+`--skew 0` matches this API, which allows no clock skew. Without it, token-inspector's default allowance of 60 seconds turns the same failure into a WARN ("Expired 5 s ago, but that is inside the 60 s skew allowance"), with the same likely cause. Always set the skew to the one the receiving side uses, or your report and theirs won't agree.
+
+Two facts separate a short lifetime from clock skew, and both are quick to check:
+
+- **The lifetime** is `exp - iat`: 10 seconds here. Keycloak's default is 300, and most IdPs issue 5 to 60 minutes. A lifetime that short is a setting, not a clock.
+- **The clocks** agree:
+  ```bash
+  docker compose exec keycloak date -u +%FT%TZ
+  docker compose exec api date -u +%FT%TZ
+  ```
+  ```
+  2026-10-23T07:32:39Z
+  2026-10-23T07:32:40Z
+  ```
+  With real clock skew, a call straight after login would fail as well. Here it works.
+
+Splunk shows the lifetime without any token at all, because the API logs `iat` and `exp` on every line. The rejections panel:
+
+| first_seen | last_seen | reason | status | count | clients | audiences | lifetime |
+|---|---|---|---|---|---|---|---|
+| 2026-10-23 07:32:16 | 2026-10-23 07:32:16 | expired | 401 | 1 | oidc-rp | idlab-api account | 10 s |
+
+and **When did it start?** adds it to the cause: "API refuses the access token as expired: the app keeps the token from login instead of refreshing it, or the IdP's access token lifespan for the client is very short. Token lifetime (exp - iat): 10 s, very short: check the client's access token lifespan in the IdP".
+
+The shortened lifespan is only half of it. The app keeps the token it got at login and never refreshes it, so with the normal 5-minute lifespan it fails the same way five minutes after login. The hardening just made an old bug visible. [Runbook 16](../runbooks/16-api-bearer-401.md) covers both fixes: put the lifespan back, and make the app refresh its token before `exp`. Making access tokens last for hours isn't one of them. Put the lab back:
+
+```bash
+scripts/fix.sh api-bearer-expired
+```
+
+---
+
+## Side ticket: "the API logged a 200, so it isn't us"
+
+A front-end team has moved the dashboard's API calls into the browser: the page's own script now calls the API. "The page says *Failed to fetch*." The API team has looked: "Every one of those calls is a 200 in our logs. It isn't the API."
+
+```bash
+scripts/break.sh cors-blocked
+```
+
+```
+==> breaking cors-blocked: the API's Access-Control-Allow-Origin has a trailing slash: browsers block its answers
+ ok  cors-blocked is broken: the API sends Access-Control-Allow-Origin: https://idlab.home:8182/ for origin https://idlab.home:8182
+```
+
+Sign in on 8182 and click **Call the API from the browser**. The page knows almost nothing:
+
+```
+API call from the browser failed: TypeError: Failed to fetch
+The browser gave this page no response. Its developer console (F12) says why.
+```
+
+The browser's console does:
+
+```
+Access to fetch at 'https://idlab.home:8188/v1/whoami' from origin 'https://idlab.home:8182' has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value 'https://idlab.home:8182/' that is not equal to the supplied origin. Have the server send the header with a valid value.
+Failed to load resource: net::ERR_FAILED
+```
+
+The API team is right about their logs:
+
+```bash
+docker compose logs api | grep -E 'cors_preflight|api_request_ok'
+```
+
+```
+2026-10-23 07:33:05,068 INFO api event=api_cors_preflight origin=https://idlab.home:8182 method=GET headers=authorization
+2026-10-23 07:33:05,073 INFO api event=api_request_ok sub=1e7d717f-82d0-49ab-bb06-c34330a53287 azp=oidc-rp iat=2026-10-23T07:33:04Z exp=2026-10-23T07:38:04Z origin=https://idlab.home:8182 cors_allow_origin=https://idlab.home:8182/
+```
+
+The browser asked first (the preflight, an `OPTIONS` request), was told yes, sent the real call with the token, and the API validated it and answered 200. Then the browser threw the answer away, because CORS is enforced by the browser, on the response, after the server has done its work. A 200 in the API's log only proves the API is happy. Whether the page could read the answer is decided afterwards, in the browser.
+
+The last field on the second line is the cause: `cors_allow_origin=https://idlab.home:8182/`. An origin is scheme, host and port, with no path, and the browser compares the header with the page's origin as an exact string. `curl` shows the difference between the two answers:
+
+```bash
+curl -sS -o /dev/null -D - --cacert certs/ca.crt -X OPTIONS -H 'Origin: https://idlab.home:8182' \
+  -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization' \
+  https://idlab.home:8188/v1/whoami
+curl -sS -o /dev/null -D - --cacert certs/ca.crt -H 'Origin: https://idlab.home:8182' https://idlab.home:8188/healthz
+```
+
+```
+HTTP/1.1 204 NO CONTENT
+Access-Control-Allow-Origin: https://idlab.home:8182
+Access-Control-Allow-Methods: GET
+Access-Control-Allow-Headers: Authorization
+Access-Control-Max-Age: 600
+
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://idlab.home:8182/
+```
+
+The preflight is answered by one layer (as a gateway often does) and gets it right. The real response's header is set somewhere else, and someone pasted the origin from the browser's address bar, trailing slash and all. And the app's own server-side call to the API (**Call the API**) still works throughout, because CORS is a browser rule and a server isn't bound by it. So "it works from our server" doesn't rule CORS out either.
+
+In Splunk this call isn't a rejection at all, which is why the API team sees nothing wrong. The calls-over-time chart has it as *cors_origin_mismatch*, an accepted call whose header didn't match the calling page's origin:
+
+| _time | accepted | cors_origin_mismatch |
+|---|---|---|
+| 07:33:00 | 0 | 1 |
+| 07:33:10 | 1 | 0 |
+
+and **When did it start?** names the cause: "Browser blocks the API's answer (CORS), though the API logged a success: its Access-Control-Allow-Origin (cors_allow_origin) is not exactly the calling page's origin, for example a trailing slash, http versus https, a port, or a new front-end origin not on the allow-list", with runbook 19. The *accepted* call at 07:33:10 is the server-side **Call the API**, made while the browser's calls were still being blocked.
+
+[Runbook 19](../runbooks/19-cors-blocked.md) covers fixing it in the layer that sets the header on real responses, and why `*` or echoing back any `Origin` isn't the fix. Put the lab back:
+
+```bash
+scripts/fix.sh cors-blocked
 scripts/status.sh
 ```
 
