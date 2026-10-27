@@ -364,6 +364,7 @@ Other tools of mine that help diagnose these scenarios:
 - **[token-inspector](https://github.com/MarkHawk/token-inspector)** decodes a SAML response or JWT offline and explains the likely cause, such as an expired or rotated signing certificate (01), clock skew (02), or an access token issued for another API or past its expiry (16).
 - **[rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe)** shows whether a 429 comes from the client retrying too early, or from the API's limit or headers being wrong (08).
 - **[identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk)** is a Splunk app that shows when each failure started, who is affected and the likely cause, with a link to the runbook (01 to 10).
+- **[triage-assistant](https://github.com/MarkHawk/triage-assistant)** reads a ticket (and optionally the lab's logs), finds the matching runbook, and drafts a diagnosis and customer reply, or asks clarifying questions when the ticket doesn't say enough (01 to 19).
 
 ## Tests
 
