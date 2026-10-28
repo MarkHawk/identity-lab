@@ -7,6 +7,7 @@ This walkthrough follows support tickets from the first message to the fix, usin
 - **Chapter 4:** users can sign in, but the API refuses every call with 401. Access tokens issued for the wrong API, followed through the API's `WWW-Authenticate` header, token-inspector, Splunk's API panels and runbook 16. Then two side tickets: tokens that expire after 10 seconds (and how to tell that from clock skew), and a CORS mismatch the API logs as a 200.
 - **Chapter 5:** three short tickets at the reverse proxy. A redirect loop from one added header line, a maintenance page left on while every health check stays green (and how a 503 differs from a 502 or 504), and a partner's mutual-TLS calls refused with 400, first for a missing client certificate, then for an expired one. Runbooks 15, 17 and 18.
 - **Chapter 6:** nobody can get on the Wi-Fi after a controller swap. A RADIUS shared secret mismatch, read from a packet capture with auth-capture-explainer and runbook 05. Then a side ticket where only the admin account can sign in: the IdP's directory service account can't bind (runbook 04), and why a capture of LDAPS says so little.
+- **Chapter 7:** chapter 6's Wi-Fi ticket given to triage-assistant, with its real answer in full, and what a person still checks before sending its reply.
 
 | Step | Tool | Question it answers |
 |---|---|---|
@@ -19,10 +20,11 @@ This walkthrough follows support tickets from the first message to the fix, usin
 | Chapter 4 | identity-lab, token-inspector, identity-support-splunk, [runbooks 16](../runbooks/16-api-bearer-401.md) and [19](../runbooks/19-cors-blocked.md) | The login works, so why does the API say no? |
 | Chapter 5 | identity-lab, identity-support-splunk, [runbooks 15](../runbooks/15-redirect-loop.md), [17](../runbooks/17-service-unavailable.md) and [18](../runbooks/18-client-cert.md) | What is the proxy's answer telling me? |
 | Chapter 6 | identity-lab, [auth-capture-explainer](https://github.com/MarkHawk/auth-capture-explainer), [runbooks 05](../runbooks/05-radius-shared-secret-mismatch.md) and [04](../runbooks/04-ldap-bind-failure.md) | What does the traffic between the NAS, the IdP and the directory show? |
+| Chapter 7 | [triage-assistant](https://github.com/MarkHawk/triage-assistant) | Which runbook fits this ticket, and what should the first reply say? |
 
-**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, 20 for chapter 4, 15 for chapter 5 and 20 for chapter 6. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
+**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, 20 for chapter 4, 15 for chapter 5, 20 for chapter 6 and 10 for chapter 7. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
 
-**Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`, `../auth-capture-explainer`), each set up as its own README describes. Times in the examples are UTC.
+**Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`, `../auth-capture-explainer`, `../triage-assistant`), each set up as its own README describes. Times in the examples are UTC.
 
 ---
 
@@ -1448,7 +1450,91 @@ dave lands on **OIDC login succeeded** again, and the directory logs `err=0` for
 
 ---
 
+## Chapter 7: a second opinion from triage-assistant
+
+Every chapter so far started with an engineer reading the ticket and deciding where to look. [triage-assistant](https://github.com/MarkHawk/triage-assistant) does that first step for you. It finds the runbook that fits, names the likely cause with the log lines that support it, and drafts a reply, or asks questions when the ticket doesn't say enough. It runs on a local model through Ollama (or on Claude), and checks whatever the model returns in code before you see it: quotes that aren't in the ticket or logs are dropped, the runbook comes from the match rather than the model, and confidence is capped when the evidence is thin.
+
+Here it gets chapter 6's Wi-Fi ticket, with the three lines from the RADIUS server's log in 6.3. Save the ticket as a file:
+
+```
+---
+id: walkthrough-wifi
+channel: email
+subject: Nobody can get on the Wi-Fi since the controller swap
+---
+Hello,
+
+since the wireless controller was swapped last night, nobody on the second floor can get on the Wi-Fi. It spins for a while, then says it can't connect. The web portal with the same accounts works fine.
+
+Thanks
+```
+
+and the log lines as `radius.log`, then:
+
+```bash
+cd ../triage-assistant
+python -m triage ticket ~/ticket-1240/ticket.md --logs ~/ticket-1240/radius.log --backend ollama
+```
+
+This is the one and only run, on `qwen2.5:14b`, shown in full as it came:
+
+```
+> Runbook 05 was shortened to 7498 characters to fit.
+
+## Likely scenario: radius-shared-secret-mismatch
+Confidence: **high**
+
+### Likely cause
+The shared secret configured on the NAS no longer matches the secret in the RADIUS server's client entry for that NAS.
+
+### Evidence
+- `radius-1  | Wed Oct 28 12:15:53 2026 : Info: Dropping packet without response because of error: Received packet from 172.30.181.10 with invalid Message-Authenticator!  (Shared secret is incorrect.) (from client nas)`
+  This log line indicates that the shared secret is incorrect.
+
+### Runbook
+runbooks/05-radius-shared-secret-mismatch.md
+
+### Fix steps
+1. Check the shared secret configured on the NAS and the RADIUS server's client entry for that NAS.
+2. Set the shared secret on both sides from a known-good source.
+3. Restart or reload the RADIUS server after updating its client entry if necessary.
+
+### Questions for the customer
+1. Which NAS (switch, wireless controller, VPN gateway) are the failing logins going through? Do logins through other NASes, or web SSO with the same accounts, still work?
+
+### Draft reply to the customer
+Thank you for the details. The most likely cause is that the shared secret configured on the NAS no longer matches the secret in the RADIUS server's client entry for that NAS. Please check the shared secret on both the NAS and the RADIUS server and ensure they match. Can you confirm when the NAS was last replaced or reset?
+
+Sign-in service support
+```
+
+It took 15.5 seconds. The note at the top is the assistant saying it cut runbook 05 to fit the model's context window, rather than doing it silently.
+
+### What it got right, and what a person still checks
+
+**Right:** the scenario, the runbook and the cause, in the runbook's own words. Its evidence is the decisive log line, quoted word for word from the logs it was given. That line is what earns it *high* confidence, and the code checks the quote is real. The fix steps are sound and don't suggest switching off Message-Authenticator.
+
+**Not right, as it came:**
+
+- **It asks what the ticket already says.** The question "Which NAS ... are the failing logins going through? Do ... web SSO with the same accounts, still work?" is answered in the ticket (the wireless controller, and yes, the portal works). So is the reply's "Can you confirm when the NAS was last replaced or reset?" (last night). Both come from the runbook's list of questions. The assistant has a rule against confirming questions that repeat the ticket, and this one got through.
+- **The reply speaks in the runbook's words, not the customer's.** The customer said "wireless controller", and the reply says "NAS" three times. That's correct, but it's jargon to most customers.
+- **It hedges where it needn't, and doesn't say whose job it is.** It says "most likely" at high confidence, and asks the customer to check both sides, though the ticket already says which side changed: the controller. Compare the reply in 6.8.
+
+None of these would mislead the customer, but you'd edit all three before sending. That's the right way to use it: as a fast first read that finds the runbook and the decisive line in seconds, with a person still reading the logs, judging who owns what, and making the reply fit the customer. It never sees a capture, so it can't do what auth-capture-explainer does in 6.5. And it suggests, it doesn't fix: confirming recovery (6.7) is still yours.
+
+### No model? Use demo mode
+
+`BACKEND=demo`, the default, replays answers recorded from real model runs, with no model, GPU or API key. One of them is chapter 5.1's redirect loop:
+
+```bash
+cd ../triage-assistant
+BACKEND=demo python -m triage ticket demo/fixtures/redirect-loop/ticket.md --logs demo/fixtures/redirect-loop/logs.txt
+```
+
+Demo mode only has answers for the tickets it recorded, so the Wi-Fi ticket above needs a real model. triage-assistant's README covers setting up Ollama, including on another machine on your network.
+
+---
+
 ## Coming next
 
 - **The remaining scenarios** (02, 03, 09, 10 and 12) have runbooks but no chapter yet.
-- **An AI triage assistant** that reads a ticket and suggests the likely cause and runbook, using these runbooks as its knowledge base.
