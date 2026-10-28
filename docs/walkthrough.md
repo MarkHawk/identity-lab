@@ -6,6 +6,7 @@ This walkthrough follows support tickets from the first message to the fix, usin
 - **Chapter 3:** logins fail for everyone after a network change. An egress proxy that now wants credentials, followed through the app's error, Squid's log, Splunk and runbook 11. Then two side tickets: TLS interception, and a proxy that logs nothing because it is bypassed.
 - **Chapter 4:** users can sign in, but the API refuses every call with 401. Access tokens issued for the wrong API, followed through the API's `WWW-Authenticate` header, token-inspector, Splunk's API panels and runbook 16. Then two side tickets: tokens that expire after 10 seconds (and how to tell that from clock skew), and a CORS mismatch the API logs as a 200.
 - **Chapter 5:** three short tickets at the reverse proxy. A redirect loop from one added header line, a maintenance page left on while every health check stays green (and how a 503 differs from a 502 or 504), and a partner's mutual-TLS calls refused with 400, first for a missing client certificate, then for an expired one. Runbooks 15, 17 and 18.
+- **Chapter 6:** nobody can get on the Wi-Fi after a controller swap. A RADIUS shared secret mismatch, read from a packet capture with auth-capture-explainer and runbook 05. Then a side ticket where only the admin account can sign in: the IdP's directory service account can't bind (runbook 04), and why a capture of LDAPS says so little.
 
 | Step | Tool | Question it answers |
 |---|---|---|
@@ -17,10 +18,11 @@ This walkthrough follows support tickets from the first message to the fix, usin
 | Chapter 3 | identity-lab, identity-support-splunk, [runbooks 11](../runbooks/11-proxy-auth-required.md), [13](../runbooks/13-proxy-tls-interception.md) and [14](../runbooks/14-proxy-bypass.md) | Is it the IdP, the app, or the proxy between them? |
 | Chapter 4 | identity-lab, token-inspector, identity-support-splunk, [runbooks 16](../runbooks/16-api-bearer-401.md) and [19](../runbooks/19-cors-blocked.md) | The login works, so why does the API say no? |
 | Chapter 5 | identity-lab, identity-support-splunk, [runbooks 15](../runbooks/15-redirect-loop.md), [17](../runbooks/17-service-unavailable.md) and [18](../runbooks/18-client-cert.md) | What is the proxy's answer telling me? |
+| Chapter 6 | identity-lab, [auth-capture-explainer](https://github.com/MarkHawk/auth-capture-explainer), [runbooks 05](../runbooks/05-radius-shared-secret-mismatch.md) and [04](../runbooks/04-ldap-bind-failure.md) | What does the traffic between the NAS, the IdP and the directory show? |
 
-**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, 20 for chapter 4 and 15 for chapter 5. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
+**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, 20 for chapter 4, 15 for chapter 5 and 20 for chapter 6. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
 
-**Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`), each set up as its own README describes. Times in the examples are UTC.
+**Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`, `../auth-capture-explainer`), each set up as its own README describes. Times in the examples are UTC.
 
 ---
 
@@ -1212,6 +1214,8 @@ Verdict: 1 problem to fix (1 FAIL, 0 WARN, 5 PASS, 1 INFO, 1 SKIP)
 
 The *Conversations* table is the whole incident in two rows. The server answers its own health checks every five seconds, so it's up. The NAS's one login, sent three times with the same authenticator, gets nothing. And because the capture was taken on the server, a firewall is ruled out: the packets got there. A silent server that is clearly alive is how RADIUS treats a packet it can't verify: the RFCs tell it to discard such a packet without a word.
 
+No lab? `auth-capture-explainer demo radius-secret` runs a capture of this scenario that ships with the tool.
+
 The tool says "likely", not "confirmed", and lists what looks the same on the wire: a NAS missing from the server's client list. Its first step is the server log line from 6.3, which tells the two apart.
 
 Whoever holds the server's secret can give it to the tool, which checks it against the packets and never shows it. Read it into the environment without typing it on the command line:
@@ -1446,6 +1450,5 @@ dave lands on **OIDC login succeeded** again, and the directory logs `err=0` for
 
 ## Coming next
 
-- **Directory and RADIUS outages** (scenarios 04 and 05), with packet-level evidence from a planned RADIUS and LDAP pcap analyser.
 - **The remaining scenarios** (02, 03, 09, 10 and 12) have runbooks but no chapter yet.
 - **An AI triage assistant** that reads a ticket and suggests the likely cause and runbook, using these runbooks as its knowledge base.
