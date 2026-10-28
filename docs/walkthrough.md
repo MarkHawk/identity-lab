@@ -1086,6 +1086,364 @@ scripts/status.sh
 
 ---
 
+## Chapter 6: nobody can get on the Wi-Fi
+
+> "Since the wireless controller was swapped last night, nobody on the second floor can get on the Wi-Fi. It spins for a while, then says it can't connect. The web portal with the same accounts works fine."
+
+Not every login goes through a browser. Wi-Fi, VPN and switch port logins are passed by a NAS (here, the new wireless controller) to a RADIUS server, which checks the password against the directory. The ticket has the two clues that matter. The portal works with the same accounts, so the users and the directory are fine. And the one thing that changed is the NAS. In the lab, the NAS is the `nas` container and the RADIUS server is `radius`.
+
+There's no browser and no token in this chapter, so the evidence is a packet capture, read by [auth-capture-explainer](https://github.com/MarkHawk/auth-capture-explainer).
+
+### 6.1 Reproduce it
+
+```bash
+scripts/status.sh
+scripts/break.sh radius-shared-secret-mismatch
+```
+
+The controller was set up again from scratch, and the shared secret it was given isn't the one in the RADIUS server's client entry for it:
+
+```
+==> breaking radius-shared-secret-mismatch: the NAS's RADIUS shared secret no longer matches the server's
+ ok  radius-shared-secret-mismatch is broken: nas (172.30.181.10) has a different shared secret from the server's client entry
+```
+
+### 6.2 See it as the user does
+
+Send dave's login from the NAS, and type the demo password when asked:
+
+```bash
+docker compose exec nas nas-auth dave
+```
+
+```
+nas: Access-Request for dave to radius:1812
+nas: no reply from radius:1812 after 3 attempts (6s): RADIUS server not responding
+```
+
+Six seconds of nothing, then a timeout. That's the "spins for a while" in the ticket. A real controller logs the same as "server timeout" or marks the server dead. The user isn't told that the password was wrong, because nobody has checked it.
+
+### 6.3 Look where support looks first
+
+```bash
+docker compose logs radius | grep -E 'Message-Authenticator|Login'
+```
+
+```
+radius-1  | Wed Oct 28 12:15:53 2026 : Info: Dropping packet without response because of error: Received packet from 172.30.181.10 with invalid Message-Authenticator!  (Shared secret is incorrect.) (from client nas)
+radius-1  | Wed Oct 28 12:15:55 2026 : Info: Dropping packet without response because of error: Received packet from 172.30.181.10 with invalid Message-Authenticator!  (Shared secret is incorrect.) (from client nas)
+radius-1  | Wed Oct 28 12:15:58 2026 : Info: Dropping packet without response because of error: Received packet from 172.30.181.10 with invalid Message-Authenticator!  (Shared secret is incorrect.) (from client nas)
+```
+
+One line per attempt, three for one login. FreeRADIUS says it plainly, but only at `Info`, and often the RADIUS server belongs to a different team from the one with the ticket. What both teams can usually get is a capture.
+
+### 6.4 Take the capture
+
+auth-capture-explainer's README says where: on the RADIUS server, if you can. A capture there shows whether the requests arrive, which rules a firewall in or out. Start it before the login, and stop it about ten seconds after the login fails, so the NAS's resends are in.
+
+The lab's containers have no tcpdump, so run it in a throwaway container that shares the RADIUS server's network. The image is the one auth-capture-explainer builds for its own lab captures (`docker build -t auth-capture-explainer-capture:local ../auth-capture-explainer/scripts/capture`):
+
+```bash
+umask 077
+mkdir -p ~/ticket-1240
+docker run -d --rm --name radius-capture --net container:identity-lab-radius-1 -v ~/ticket-1240:/out \
+  auth-capture-explainer-capture:local \
+  tcpdump -i any -U -Z root -w /out/radius-05.pcap 'udp port 1812 or udp port 1813 or icmp'
+docker compose exec nas nas-auth dave     # the failing login, as in 6.2
+# about 10 seconds later:
+docker exec radius-capture chown "$(id -u):$(id -g)" /out/radius-05.pcap
+docker stop radius-capture
+```
+
+Treat the file as sensitive. It holds dave's password, hidden with the shared secret, and the secret is all it takes to reveal it. Keep it out of the ticket.
+
+### 6.5 Read it with auth-capture-explainer
+
+```bash
+cd ~/ticket-1240
+auth-capture-explainer radius-05.pcap
+```
+
+```
+auth-capture-explainer 0.1.0
+Capture:  radius-05.pcap (pcap, Linux cooked v2, 13 packets over 20.3 s, from 2026-10-28 12:15:47 UTC)
+Seen:     RADIUS 6 requests from 2 clients to 2 servers; LDAP none
+
+== Findings ==
+  FAIL  Requests unanswered    172.30.181.10 (NAS-Identifier "nas") sent an Access-Request for
+                               "dave" to 172.30.181.2:1812, then resent it twice over 4.0 s (ID 55,
+                               same authenticator). None of the 3 attempts got a reply. No ICMP
+                               error came back.
+  INFO  Capture point          The requests are marked as arriving at this host, and none was passed
+                               on, so the capture was taken on the server: they reached it, and a
+                               firewall in between is ruled out. This host also answers RADIUS on
+                               its loopback address.
+  PASS  Message-Authenticator  Present on every Access-Request and Status-Server from 172.30.181.10
+                               (NAS-Identifier "nas") (value hidden).
+...
+
+== Likely cause ==
+  For 172.30.181.10 (NAS-Identifier "nas") to 172.30.181.2:1812: shared secret mismatch, most likely
+  The server receives the requests from 172.30.181.10 and stays silent, while it answers others,
+  which is how a RADIUS server treats requests it cannot authenticate: the NAS's shared secret most
+  likely differs from the server's client entry for it. An unknown client looks the same on the
+  wire; the server's log tells them apart.
+  How sure:  likely: the evidence points to it, but does not settle it
+  Evidence:  For a secret mismatch: the request was resent twice and never answered; no ICMP error
+             came back; this host answers RADIUS on its loopback address meanwhile.
+  Evidence:  Against a firewall: the requests were seen arriving at the server.
+  Evidence:  Looks the same on the wire: an unknown client (the NAS's address missing from the
+             server's client list); the server's log tells them apart.
+  First:     Look in the server's log for "Shared secret is incorrect" or "unknown client" for
+             172.30.181.10, then set the secret again on both sides from one source. To confirm from
+             this capture, run it again with --secret (prompts), --secret-file or --secret-env and
+             the server's secret.
+  Runbook:   identity-lab 05-radius-shared-secret-mismatch
+             https://github.com/MarkHawk/identity-lab/blob/main/runbooks/05-radius-shared-secret-mismatch.md
+  Explains:  Requests unanswered, Capture point
+
+== Conversations ==
+  Proto   Client         Server             Requests  Resent  Answered  Outcome              p50    p95
+  RADIUS  127.0.0.1      127.0.0.1:1812            5       0         5  Status-Server OK x5  <1 ms  <1 ms
+  RADIUS  172.30.181.10  172.30.181.2:1812         1       2         0  no reply             -      -
+
+Verdict: 1 problem to fix (1 FAIL, 0 WARN, 5 PASS, 1 INFO, 1 SKIP)
+```
+
+The *Conversations* table is the whole incident in two rows. The server answers its own health checks every five seconds, so it's up. The NAS's one login, sent three times with the same authenticator, gets nothing. And because the capture was taken on the server, a firewall is ruled out: the packets got there. A silent server that is clearly alive is how RADIUS treats a packet it can't verify: the RFCs tell it to discard such a packet without a word.
+
+The tool says "likely", not "confirmed", and lists what looks the same on the wire: a NAS missing from the server's client list. Its first step is the server log line from 6.3, which tells the two apart.
+
+Whoever holds the server's secret can give it to the tool, which checks it against the packets and never shows it. Read it into the environment without typing it on the command line:
+
+```bash
+read -rs RADIUS_SECRET && export RADIUS_SECRET
+auth-capture-explainer radius-05.pcap --secret-env RADIUS_SECRET
+```
+
+Trimmed to what changed:
+
+```
+Secret:   given from environment variable RADIUS_SECRET (never shown)
+...
+  FAIL  Shared secret          No reply from this server to 172.30.181.10 (NAS-Identifier "nas")
+                               could be checked, so this says nothing about the server's own secret.
+                               It does not match the client 172.30.181.10 (NAS-Identifier "nas"):
+                               Message-Authenticator fails on its Access-Request (and 2 identical
+                               resends), and its User-Password decodes to unprintable bytes.
+...
+== Likely cause ==
+  For 172.30.181.10 (NAS-Identifier "nas") to 172.30.181.2:1812: shared secret mismatch
+  172.30.181.10 (NAS-Identifier "nas") signs its requests with a secret other than the one you gave.
+  If you gave the secret in the server's client entry for 172.30.181.10 (NAS-Identifier "nas"), the
+  two sides differ, so the server cannot verify its requests and drops them without replying.
+  How sure:  likely: the evidence points to it, but does not settle it
+  Evidence:  For a secret mismatch: the requests from 172.30.181.10 (NAS-Identifier "nas") do not
+             verify with the secret you gave.
+  Evidence:  RADIUS on this host's loopback address verifies with the secret you gave, so the server
+             does use it (unless the loopback client entry has its own).
+  Evidence:  Not settled: no reply to this NAS could be checked, so this assumes the secret you gave
+             is the one in its client entry.
+  First:     Check that the secret you gave is the one in the server's client entry for
+             172.30.181.10 (NAS-Identifier "nas"); if it is, set the secret on the NAS again from
+             that source.
+...
+Verdict: 2 problems to fix (2 FAIL, 0 WARN, 6 PASS, 1 INFO, 0 SKIP)
+```
+
+It still stops at "likely", and it's right to. The NAS's packets don't verify with the server's secret, and the server's own health checks do. But a server can hold a different secret for each client, and with no reply to the NAS there's nothing to prove which one this client entry holds. "Unprintable bytes" is the other half of runbook 05's story. A server with the wrong secret decodes the password to noise, which is why a legacy server that doesn't require Message-Authenticator turns this fault into a wave of "wrong password" rejects.
+
+In Splunk, **RADIUS: Access-Reject versus no reply** keeps the two apart: a reject is the server saying no to a user, while no reply is a dropped packet, a timeout for everyone on that NAS. **When did it start?** names the cause from the server's `Shared secret is incorrect` line, with runbook 05.
+
+### 6.6 Fix it
+
+[Runbook 05](../runbooks/05-radius-shared-secret-mismatch.md) covers deciding which side is right (usually the server's client entry), setting the secret on the other side from one source, and why `require_message_authenticator = no` isn't a fix. In the lab, the controller is the side that changed:
+
+```bash
+scripts/fix.sh radius-shared-secret-mismatch
+```
+
+```
+==> fixing radius-shared-secret-mismatch
+ ok  radius-shared-secret-mismatch is healthy: nas (172.30.181.10) has the same shared secret as the server
+```
+
+### 6.7 Confirm recovery
+
+The same login, captured the same way (into `radius-05-fixed.pcap`):
+
+```
+nas: Access-Request for dave to radius:1812
+nas: Access-Accept
+```
+
+```bash
+auth-capture-explainer radius-05-fixed.pcap
+```
+
+```
+...
+== Findings ==
+  PASS  Server answering             172.30.181.2:1812 answered 1 of 1 requests from 172.30.181.10
+                                     (NAS-Identifier "nas") (1 Access-Accept).
+...
+== Conversations ==
+  Proto   Client         Server             Requests  Resent  Answered  Outcome              p50    p95
+  RADIUS  127.0.0.1      127.0.0.1:1812            3       0         3  Status-Server OK x3  <1 ms  <1 ms
+  RADIUS  172.30.181.10  172.30.181.2:1812         1       0         1  Accept               16 ms  16 ms
+
+Verdict: no problems found (0 FAIL, 0 WARN, 8 PASS, 0 INFO, 1 SKIP)
+```
+
+For contrast, a wrong password now gets an answer, which is what the Splunk panel separates:
+
+```
+nas: Access-Request for dave to radius:1812
+nas: Access-Reject
+```
+
+```
+radius-1  | Wed Oct 28 12:16:37 2026 : Auth: (2239) Login OK: [dave] (from client nas port 0)
+radius-1  | Wed Oct 28 12:16:45 2026 : Auth: (2242) Login incorrect (ldap: Bind credentials incorrect: Invalid credentials): [dave] (from client nas port 0)
+```
+
+`scripts/status.sh` shows every scenario healthy. Delete the captures once the ticket is closed.
+
+### 6.8 Tell the customer
+
+> Wi-Fi logins are failing because the new wireless controller was given a different RADIUS shared secret from the one the RADIUS server holds for it. The server can't verify the controller's requests, so it drops them without replying, and every login through that controller times out. Users' passwords and accounts are fine, which is why the web portal still works. The first dropped request we can see was at 12:15:53 UTC. To fix it, set the controller's secret again from the value in your secret store (paste it, don't retype it). To stop a repeat, treat a controller replacement or restore as a secret change, and test a real login straight afterwards.
+
+---
+
+## Side ticket: "the admin account works, but nobody else can sign in"
+
+> "Since this morning nobody can sign in with their normal account. The admin account works fine. The directory team rotated some service account passwords at the weekend."
+
+This one is web SSO, and the directory is in the middle again. Keycloak finds directory users by binding to LDAP as its own service account, then checks each user's password with a second bind as that user.
+
+```bash
+scripts/break.sh ldap-bind-failure
+```
+
+```
+==> breaking ldap-bind-failure: Keycloak's LDAP bind credential no longer matches the service account
+ ok  ldap-bind-failure is broken: Keycloak cannot bind as cn=keycloak-svc,ou=services,dc=idlab,dc=example: LDAP result 49, invalid credentials
+```
+
+Sign in on `https://idlab.home:8182/` as dave, a directory user, and Keycloak answers:
+
+```
+We are sorry...
+Unexpected error when handling authentication request to identity provider.
+« Back to Application
+```
+
+alice, a local Keycloak user, lands on **OIDC login succeeded**. That's the "admin account works" in the ticket. Local accounts don't touch the directory, which makes this outage look partial when it hits every directory user.
+
+Keycloak's log has the cause, but under a misleading first line:
+
+```bash
+docker compose logs keycloak | grep -E 'error code 49|federated user validation|LOGIN_ERROR'
+```
+
+```
+keycloak-1  | 2026-10-28 12:17:06,100 WARN  [org.keycloak.storage.UserStorageManager] (executor-thread-3) User storage provider idlab-ldap failed during federated user validation: org.keycloak.storage.StorageUnavailableException: LDAP server is unavailable for provider [idlab-ldap]
+keycloak-1  | Caused by: javax.naming.AuthenticationException: [LDAP: error code 49 - Invalid Credentials]
+keycloak-1  | Caused by: javax.naming.AuthenticationException: [LDAP: error code 49 - Invalid Credentials]
+keycloak-1  | 2026-10-28 12:17:06,154 WARN  [org.keycloak.events] (executor-thread-3) type="LOGIN_ERROR", realmId="...", realmName="idlab", clientId="oidc-rp", userId="null", ipAddress="172.18.0.1", error="invalid_user_credentials", ...
+```
+
+"LDAP server is unavailable" isn't true: the directory is up and answering. The `Caused by` line is the real answer, error 49, invalid credentials. And the login event blames the user's password, which is fine. The directory's log says whose bind it refused:
+
+```
+ldap-1  | 6ae1e7cf.22716a5e 0x7ddd397fe6c0 conn=3258 op=0 BIND dn="cn=keycloak-svc,ou=services,dc=idlab,dc=example" method=128
+ldap-1  | 6ae1e7cf.227324b9 0x7ddd397fe6c0 conn=3258 op=0 RESULT tag=97 err=49 qtime=0.000019 etime=0.000152 text=
+```
+
+The service account, not dave. In Splunk, **LDAP binds refused by the directory** makes the same distinction: result 49 for a service account means the IdP's stored bind credential is wrong, and for a `uid=` it's that one user's password.
+
+### A capture of LDAPS says less than you'd hope
+
+auth-capture-explainer's README suggests capturing LDAP on the application's host, towards the directory. Either end of the connection shows the same thing here. This capture is from a throwaway container sharing the directory's network, as in 6.4, but with `-i eth0 'tcp port 1636'`, during dave's login:
+
+```bash
+auth-capture-explainer ldaps-04.pcap --ldap-port 1636
+```
+
+```
+auth-capture-explainer 0.1.0
+Capture:  ldaps-04.pcap (pcap, Ethernet, 38 packets over 97 ms, from 2026-10-28 12:17:06 UTC)
+Seen:     RADIUS none; LDAP 2 connections (2 TLS)
+
+== Findings ==
+  INFO  Encrypted (TLS)  2 connections from 172.18.0.5 to 172.18.0.3:1636 (non-standard port) use
+                         TLS (2 TLS from the start): the LDAP inside cannot be read, and this tool
+                         makes no claim about it. TLS version chosen: TLS 1.3. The TLS handshake
+                         completed and data flowed both ways.
+                         Next: To see the LDAP itself, capture where it is in clear: between a
+                               TLS-terminating proxy or load balancer and the directory, or on a
+                               test client using plain LDAP or StartTLS on a trusted network.
+                               Failing that, have the application log the LDAP result codes it gets,
+                               or read the directory's own access log. auth-capture-explainer does
+                               not decrypt TLS, even with keys.
+...
+Verdict: no problems visible, but 2 connections are encrypted and could not be checked (0 FAIL, 0 WARN, 0 PASS, 1 INFO, 0 SKIP)
+```
+
+That's the right answer, and an important one: a capture of LDAPS can prove the network and TLS are fine, and nothing more. "No problems visible" isn't "no problems". Most production directories speak only LDAPS or sign and seal their traffic, so for LDAP the logs above are usually the better evidence.
+
+To see the binds themselves, auth-capture-explainer's `scripts/capture_from_lab.sh ldap-04-broken` repeats Keycloak's binds through a relay that speaks plain LDAP on one side, and sanitises the result: addresses moved to 192.0.2.0/24, bind passwords replaced. (It writes into the tool's own `samples/lab/`, so run `git checkout -- samples/lab` there afterwards if you're not updating the samples.) On today's capture:
+
+```
+auth-capture-explainer 0.1.0
+Capture:  ldap-04-broken.pcap (pcap, Ethernet, 40 packets over 1.1 s, from 2026-10-28 12:17:51 UTC)
+Seen:     RADIUS none; LDAP 3 connections (3 clear text)
+
+== Findings ==
+  FAIL  Bind rejected      192.0.2.30 tried a bind as
+                           cn=keycloak-svc,ou=services,dc=idlab,dc=example on 192.0.2.20:389:
+                           resultCode 49 invalidCredentials (wrong password, or a DN that does not
+                           exist or cannot bind). The directory gave no diagnosticMessage. This is a
+                           service account: a successful bind as this DN was followed by searches on
+                           the same connection, as an application's own account does.
+...
+== Likely cause ==
+  For 192.0.2.30 to 192.0.2.20:389: the service account cannot bind
+  The application's directory service account cn=keycloak-svc,ou=services,dc=idlab,dc=example cannot
+  bind (49 invalidCredentials). Without it the application cannot look up any user, so every
+  directory login fails, whatever password the user types.
+  How sure:  confirmed by the capture
+  Evidence:  For a service account: a successful bind as this DN was followed by searches on the
+             same connection, as an application's own account does.
+  Evidence:  Not settled by the result code: 49 means a wrong password, or a DN that does not exist
+             (OpenLDAP answers 49 for both); Active Directory adds a data code that tells them
+             apart.
+  First:     Test the bind DN and the password the application stores with ldapwhoami (ldp.exe on
+             Windows), then make the stored password match the directory.
+  Runbook:   identity-lab 04-ldap-bind-failure
+             https://github.com/MarkHawk/identity-lab/blob/main/runbooks/04-ldap-bind-failure.md
+  Explains:  Bind rejected
+...
+```
+
+The capture starts with a login that works, as on the morning before the rotation. That's how the tool knows from the traffic, not from the DN's wording, that `cn=keycloak-svc` is a service account: it bound and then searched. A bind refused for a service account is everyone's outage. One refused for `uid=dave` would be dave's password.
+
+[Runbook 04](../runbooks/04-ldap-bind-failure.md) covers testing the bind with `ldapwhoami` before changing anything, storing the right password in the IdP, and why binding as the directory administrator isn't a fix. Put the lab back:
+
+```bash
+scripts/fix.sh ldap-bind-failure
+scripts/status.sh
+```
+
+```
+==> fixing ldap-bind-failure
+ ok  ldap-bind-failure is healthy: Keycloak binds to ldaps://ldap:1636 as cn=keycloak-svc,ou=services,dc=idlab,dc=example
+```
+
+dave lands on **OIDC login succeeded** again, and the directory logs `err=0` for the service account's bind.
+
+---
+
 ## Coming next
 
 - **Directory and RADIUS outages** (scenarios 04 and 05), with packet-level evidence from a planned RADIUS and LDAP pcap analyser.
