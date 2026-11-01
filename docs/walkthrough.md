@@ -1897,6 +1897,261 @@ What to tell the customer:
 
 ---
 
+## Chapter 9: the proxy logs nothing wrong
+
+> "Since the proxy team rolled out their new config template last night, our SAML apps say Invalid Request and our OIDC apps send people to an address that won't load. The proxy team says their logs are clean, so it must be the identity provider."
+
+Chapter 5 was about the reverse proxy refusing requests. This chapter is about a proxy that passes every request on and still breaks the login. Its logs are clean because, as far as it knows, nothing went wrong. In the lab, Keycloak sits behind the reverse proxy on 8183, with the SAML SP on 8184 and the OIDC RP on 8185 using that route. The direct routes (8180 to 8182) don't go through it and play the part of "the other apps that still work".
+
+### 9.1 Reproduce it
+
+```bash
+scripts/status.sh
+scripts/break.sh proxy-forwarded-headers
+```
+
+The new template has a block of headers written for a site on the standard HTTPS port:
+
+```
+==> breaking proxy-forwarded-headers: the proxy tells Keycloak the browser used port 443, not 8183
+ ok  proxy-forwarded-headers is broken: issuer through the proxy is https://idlab.home/realms/idlab, not https://idlab.home:8183/realms/idlab (proxy_set_header X-Forwarded-Port 443)
+```
+
+### 9.2 See it as the user does
+
+Two protocols, two different symptoms, which is why this often arrives as two tickets.
+
+**SAML:** go to `https://idlab.home:8184/` and click **Log in with SAML**. Keycloak shows an error page before any login form:
+
+```
+IDENTITY LAB
+We are sorry...
+Invalid Request
+« Back to Application
+```
+
+**OIDC:** go to `https://idlab.home:8185/` and click **Log in with OIDC**. The browser never reaches Keycloak. It ends on its own "can't connect" error page instead. `curl` shows where the app sent it:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' --cacert certs/ca.crt https://idlab.home:8185/login | cut -d'?' -f1
+curl -sS -o /dev/null --cacert certs/ca.crt https://idlab.home/realms/idlab/protocol/openid-connect/auth
+```
+
+```
+302 https://idlab.home/realms/idlab/protocol/openid-connect/auth
+curl: (7) Failed to connect to idlab.home port 443 after 0 ms: Could not connect to server
+```
+
+The port has gone from Keycloak's address. Nothing listens on 443, so the browser gets no answer at all, and nothing anywhere logs the failed request. This app loaded Keycloak's discovery document after the change, so it sends the browser to the wrong address from the start. An app that loaded it before the change shows Keycloak's login form as usual and fails when the password is posted to the port-less address ([runbook 09](../runbooks/09-proxy-forwarded-headers.md) shows that variant).
+
+### 9.3 Look where support looks first
+
+The proxy team is right about their logs. The error log has nothing at all for this, and the access log shows Keycloak's own answer passed through:
+
+```bash
+docker compose logs --no-log-prefix --since 10m proxy | grep 'host=idlab.home:8183'
+```
+
+```
+...
+172.30.182.1 "GET /realms/idlab/protocol/saml?SAMLRequest=***&RelayState=%2Fdebug&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256 HTTP/1.1" 400 3706 host=idlab.home:8183 upstream=172.30.182.2:8180 upstream_status=400 request_time=0.044 upstream_time=0.044
+...
+```
+
+A 400 with `upstream_status=400` comes from Keycloak, so the proxy looks blameless and Keycloak looks guilty. Keycloak's log says why it refused:
+
+```bash
+docker compose logs --no-log-prefix --since 10m keycloak | grep invalid_destination
+```
+
+```
+2026-11-01 17:03:20,463 WARN  [org.keycloak.events] (executor-thread-3) type="LOGIN_ERROR", realmId="37c793e2-fe71-48b4-ad5b-81df602cad8f", realmName="idlab", clientId="null", userId="null", ipAddress="172.30.182.1", error="invalid_authn_request", reason="invalid_destination"
+```
+
+`invalid_destination`: the SP addressed its request to Keycloak's real address on 8183, and Keycloak thinks its address is something else. The quickest check is to ask Keycloak who it thinks it is, through the proxy and directly:
+
+```bash
+curl -sS --cacert certs/ca.crt https://idlab.home:8183/realms/idlab/.well-known/openid-configuration | jq -r .issuer
+curl -sS --cacert certs/ca.crt https://idlab.home:8180/realms/idlab/.well-known/openid-configuration | jq -r .issuer
+curl -sS --cacert certs/ca.crt https://idlab.home:8183/realms/idlab/protocol/saml/descriptor | grep -oE '(entityID|Location)="[^"]*"' | sort -u
+```
+
+```
+https://idlab.home/realms/idlab
+https://idlab.home:8180/realms/idlab
+entityID="https://idlab.home/realms/idlab"
+Location="https://idlab.home/realms/idlab/protocol/saml"
+Location="https://idlab.home/realms/idlab/protocol/saml/resolve"
+```
+
+Through the proxy, Keycloak has lost its port. Directly, it's right. So the proxy is telling Keycloak something wrong about the request. Keycloak builds its own address from the `X-Forwarded-*` headers the proxy sends:
+
+```bash
+docker compose exec proxy nginx -T 2>/dev/null | grep -i -E 'configuration file .*forwarded|x-forwarded-(port|host)'
+```
+
+```
+# configuration file /etc/nginx/idlab/forwarded-headers.conf:
+proxy_set_header X-Forwarded-Host  $host;
+proxy_set_header X-Forwarded-Port  443;
+```
+
+The template says 443, but the browser used 8183. Keycloak believes the header, as it should when it comes from its trusted proxy, and drops the port, because 443 is the default for HTTPS. Every symptom follows from that one line. The SAML request's `Destination` no longer matches, and the OIDC endpoints point at a port nobody listens on. Leaving `X-Forwarded-Port` out altogether has the same effect, which is why so many templates written for port 443 carry this bug without anyone noticing.
+
+### 9.4 Scope it with Splunk
+
+**When did it start?** names the cause from Keycloak's event alone, with *apps* as `keycloak (via proxy)`: "Reverse proxy is the likely cause, even though nginx logs nothing: it sends the IdP wrong X-Forwarded-Port, -Proto or -Host headers, so the SAML request's Destination does not match the IdP's own URL", with runbook 09. The OIDC failures leave no event to count, so the real number of affected logins is higher than the row shows.
+
+### 9.5 Fix it
+
+[Runbook 09](../runbooks/09-proxy-forwarded-headers.md) has a table of which header gives which issuer, and covers the case where another load balancer in front terminates TLS. In the lab:
+
+```bash
+scripts/fix.sh proxy-forwarded-headers
+```
+
+```
+==> fixing proxy-forwarded-headers
+ ok  proxy-forwarded-headers is healthy: issuer through the proxy is https://idlab.home:8183/realms/idlab
+```
+
+SAML through 8184 works again at once. OIDC through 8185 doesn't, and the first `curl` from 9.2 still gives:
+
+```
+302 https://idlab.home/realms/idlab/protocol/openid-connect/auth
+```
+
+The app fetched Keycloak's discovery document while the proxy was wrong and keeps its copy, so it still sends browsers to the port-less address. That's the runbook's last step: any client that read Keycloak's metadata during the incident has to read it again. For this app, a restart does it:
+
+```bash
+docker compose restart oidc-rp-proxied
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' --cacert certs/ca.crt https://idlab.home:8185/login | cut -d'?' -f1
+```
+
+```
+302 https://idlab.home:8183/realms/idlab/protocol/openid-connect/auth
+```
+
+(Compose restarts the reverse proxy with it, because the proxy depends on the app.) In a real incident, make a list of every SP and RP that refreshes the IdP's metadata on its own, and check each one after the fix.
+
+Don't fix it by changing the clients to match the wrong address, or by setting Keycloak's hostname to a full URL with the port. Either one fixes this route and breaks the next one.
+
+### 9.6 Confirm recovery
+
+Sign in as alice through `https://idlab.home:8184/` and `https://idlab.home:8185/` in new private windows. You land on **SAML login succeeded** and **OIDC login succeeded**. `scripts/status.sh` shows every scenario healthy. It checks the issuer through the proxy, not what each app has cached, so it said healthy before the restart too. That's one more reason to test a real login after a fix.
+
+### 9.7 Tell the customer
+
+> The identity provider is working, and the new proxy template is the cause, even though the proxy logs no errors. The template tells the identity provider that browsers reach it on port 443, but they use port 8183. The identity provider builds its own address from that, so it rejects SAML requests sent to its real address ("Invalid Request") and sends OIDC users to an address without the port, where nothing answers. The first failure was at 17:03:20 UTC. To fix it, set the proxy's `X-Forwarded-Port` to the port users really connect to (or pass on `$server_port`), then restart or refresh any app that loaded the identity provider's settings during the incident. To stop a repeat, check the issuer reported through the proxy after every proxy change: `curl .../.well-known/openid-configuration | jq -r .issuer` takes a second.
+
+---
+
+## Side ticket: "Bad Gateway since the proxy tuning"
+
+> "Since the proxy was tuned to save memory, every sign-in gives a 502 Bad Gateway before the login page. The identity provider team says their logs are empty."
+
+```bash
+scripts/break.sh proxy-header-too-large
+```
+
+```
+==> breaking proxy-header-too-large: the proxy's header buffer for Keycloak is smaller than Keycloak's cookies
+ ok  proxy-header-too-large is broken: kc-buffers.conf: proxy_buffer_size 1k; proxy_buffers 8 16k; proxy_busy_buffers_size 32k; (Keycloak's login page sends about 2 KB of headers)
+```
+
+Click **Log in with OIDC** on 8185 (or **Log in with SAML** on 8184). Where Keycloak's login page should be, the browser shows nginx's page:
+
+```
+502 Bad Gateway
+nginx
+```
+
+Chapter 5 met a 502 already: the proxy reached the app, but what came back wasn't valid HTTP. This one looks the same to the user. The access log looks much the same too: the request reached Keycloak, came back in 15 ms, and still ended as a 502:
+
+```bash
+docker compose logs --no-log-prefix --since 5m proxy | grep -E '" 502 '
+```
+
+```
+172.30.182.1 "GET /realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp-proxied&redirect_uri=https%3A%2F%2Fidlab.home%3A8185%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256 HTTP/1.1" 502 552 host=idlab.home:8183 upstream=172.30.182.2:8180 upstream_status=502 request_time=0.015 upstream_time=0.016
+```
+
+The error log tells them apart:
+
+```bash
+docker compose logs --no-log-prefix --since 5m proxy | grep 'too big header'
+```
+
+```
+2026/11/01 17:05:38 [error] 46#46: *25 upstream sent too big header while reading response header from upstream, client: 172.30.182.1, server: , request: "GET /realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp-proxied&redirect_uri=https%3A%2F%2Fidlab.home%3A8185%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256 HTTP/1.1", upstream: "https://172.30.182.2:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp-proxied&redirect_uri=https%3A%2F%2Fidlab.home%3A8185%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256", host: "idlab.home:8183", referrer: "https://idlab.home:8185/"
+```
+
+Keycloak answered normally. The proxy couldn't fit the answer's headers into the buffer it keeps for them, so it threw the answer away. The IdP team is right that their logs are empty: Keycloak built the login page and sent it, and as far as it knows the request succeeded.
+
+How big are the headers? Ask Keycloak directly, without the proxy, with an authorisation request like the app's (runbook 10 explains the command):
+
+```bash
+curl -sS -o /dev/null -D - --cacert certs/ca.crt -G \
+  "https://idlab.home:8180/realms/idlab/protocol/openid-connect/auth" \
+  --data-urlencode client_id=oidc-rp --data-urlencode response_type=code \
+  --data-urlencode scope=openid --data-urlencode redirect_uri=https://idlab.home:8182/auth/callback \
+  --data-urlencode code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM \
+  --data-urlencode code_challenge_method=S256 \
+  | tr -d '\r' | awk 'tolower($1)=="set-cookie:" {split($2,a,"="); print length($0) "\t" a[1]}'
+```
+
+```
+255	AUTH_SESSION_ID
+159	KC_AUTH_SESSION_HASH
+1104	KC_RESTART
+```
+
+The same request with `-w 'header bytes %{size_header}, status %{http_code}\n'` instead of the `awk` gives the total:
+
+```
+header bytes 1940, status 200
+```
+
+and the proxy's setting for this route:
+
+```bash
+docker compose exec proxy nginx -T 2>/dev/null | grep -E 'proxy_buffer|proxy_busy'
+```
+
+```
+proxy_buffer_size       1k;
+proxy_buffers           8 16k;
+proxy_busy_buffers_size 32k;
+```
+
+About 1.9 KB of headers into a 1 KB buffer. `KC_RESTART` alone, the cookie that holds the login request so Keycloak can restart it, is over 1 KB. That's why it fails at the first Keycloak page, before the password. A buffer just big enough would fail only for some users, those with longer redirect URIs or more claims, which makes a much harder ticket. Runbook 10 covers that variant, and the request-side limits that give a 400 or a 413 instead of a 502.
+
+In Splunk, **Reverse proxy: refusals by likely cause** keeps this 502 apart from chapter 5's: "IdP's response headers (its session cookies) are too big for the reverse proxy's buffer (502): raise proxy_buffer_size", with runbook 10.
+
+[Runbook 10](../runbooks/10-proxy-header-too-large.md) covers sizing the buffer with headroom, and the `nginx -t` error you get if `proxy_busy_buffers_size` isn't raised with it. Put the lab back:
+
+```bash
+scripts/fix.sh proxy-header-too-large
+scripts/status.sh
+```
+
+```
+==> fixing proxy-header-too-large
+ ok  proxy-header-too-large is healthy: kc-buffers.conf: proxy_buffer_size 16k; proxy_buffers 8 16k; proxy_busy_buffers_size 32k;
+```
+
+Logins through 8184 and 8185 land on **SAML login succeeded** and **OIDC login succeeded**, and the proxy passes Keycloak's login page on again:
+
+```
+172.30.182.1 "GET /realms/idlab/protocol/openid-connect/auth?... HTTP/1.1" 200 6897 host=idlab.home:8183 upstream=172.30.182.2:8180 upstream_status=200 request_time=0.015 upstream_time=0.015
+```
+
+What to tell the customer:
+
+> Sign-ins fail with 502 Bad Gateway because the proxy's memory tuning shrank its buffer for the identity provider's response headers to 1 KB. The identity provider's login page sends about 2 KB of headers, mostly its session cookies, so the proxy discards every login page, although the identity provider answered normally. That's why its logs are empty. The first failure was at 17:05:38 UTC. To fix it, restore `proxy_buffer_size` on the identity provider's route to 16 KB (and `proxy_busy_buffers_size` with it). To stop a repeat, note next to the setting why it's that size, and test a full sign-in through the proxy after any tuning change.
+
+---
+
 ## Coming next
 
 - **The remaining scenarios** (02, 03, 09, 10 and 12) have runbooks but no chapter yet.
