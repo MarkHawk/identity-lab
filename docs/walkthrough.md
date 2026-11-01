@@ -442,6 +442,112 @@ scripts/status.sh
 
 ---
 
+## Side ticket: "the identity provider is blocking our servers"
+
+> "Since the web filtering update on Friday our app can't log anyone in. It says 403 Forbidden, so the identity provider must be blocking our servers. Can you unblock us?"
+
+```bash
+scripts/break.sh proxy-policy-block
+```
+
+```
+==> breaking proxy-policy-block: the egress proxy's policy refuses connections to the IdP
+ ok  proxy-policy-block is broken: policy.conf: acl blocked_sites dstdomain keycloak .unapproved.example http_access deny CONNECT blocked_sites (keycloak is the IdP the RP needs)
+```
+
+The filtering update added a rule that refuses the IdP's host name. Click **Log in with OIDC** on 8186, and this time the app fails at once, before any Keycloak page:
+
+```
+OIDC login failed
+HTTPSConnectionPool(host='keycloak', port=8180): Max retries exceeded with url: /realms/idlab/.well-known/openid-configuration (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))
+Error code   backchannel_failed
+Detail       ProxyError fetching https://keycloak:8180/realms/idlab/.well-known/openid-configuration
+```
+
+The app had restarted since its last login, so it hadn't loaded Keycloak's discovery document yet and failed on that, one step earlier than the 407 in 3.2. An app that still has it fails at the token endpoint, after the password.
+
+The customer has read the 403 the wrong way round. `Tunnel connection failed` means the 403 came from the proxy, in answer to the app's request to open a tunnel. Keycloak never saw it. A 403 from Keycloak itself would come back inside a working tunnel, and Squid would log `TCP_TUNNEL/200`. Squid's log, next to the app's:
+
+```bash
+docker compose logs --no-log-prefix --since 10m oidc-rp-egress | grep oidc_login_failed
+docker compose logs --no-log-prefix --since 10m squid | grep 'CONNECT keycloak'
+```
+
+```
+2026-11-01 16:58:18,614 WARNING oidc-rp event=oidc_login_failed reason=backchannel_failed error='HTTPSConnectionPool(host='"'"'keycloak'"'"', port=8180): Max retries exceeded with url: /realms/idlab/.well-known/openid-configuration (Caused by ProxyError('"'"'Unable to connect to proxy'"'"', OSError('"'"'Tunnel connection failed: 403 Forbidden'"'"')))' detail='ProxyError fetching https://keycloak:8180/realms/idlab/.well-known/openid-configuration'
+
+1793552298.613      5 172.30.183.2 TCP_DENIED/403 3331 CONNECT keycloak:8180 - HIER_NONE/- text/html
+```
+
+`TCP_DENIED` and `HIER_NONE/-` again, as in chapter 3's 407, but the status is 403. The difference matters for who fixes it. A 407 means "tell me who you are", and the app can fix it with credentials. A 403 means "I know enough, and the answer is no", and only the proxy's owner can change that. (Runbook 12 shows a variant, `TCP_DENIED_ABORTED/403`, when the app hangs up before Squid has sent its whole error page. Search for both.)
+
+You can ask the proxy yourself, from the app's container, and read its answer:
+
+```bash
+docker compose exec oidc-rp-egress python -c "
+import socket
+s = socket.create_connection(('squid', 3128))
+s.sendall(b'CONNECT keycloak:8180 HTTP/1.1\r\nHost: keycloak:8180\r\n\r\n')
+print(s.recv(65536).decode(errors='replace').split('\r\n\r\n')[0])"
+```
+
+```
+HTTP/1.1 403 Forbidden
+Server: squid/7.7
+...
+X-Squid-Error: ERR_ACCESS_DENIED 0
+...
+```
+
+`ERR_ACCESS_DENIED` says an `http_access` rule refused it, but not which one. `squid -k parse` lists the rules in the order Squid applies them, and the first match wins:
+
+```bash
+docker compose exec squid squid -k parse -f /etc/squid/squid.conf 2>&1 | grep -E 'Processing: (acl|http_access)'
+```
+
+```
+2026/11/01 16:58:37| Processing: acl egress_clients src 172.30.183.0/24
+2026/11/01 16:58:37| Processing: acl SSL_ports port 8180
+2026/11/01 16:58:37| Processing: acl CONNECT method CONNECT
+2026/11/01 16:58:37| Processing: http_access deny CONNECT !SSL_ports
+2026/11/01 16:58:37| Processing: acl blocked_sites dstdomain keycloak .unapproved.example
+2026/11/01 16:58:37| Processing: http_access deny CONNECT blocked_sites
+2026/11/01 16:58:37| Processing: http_access allow egress_clients
+2026/11/01 16:58:37| Processing: http_access deny all
+```
+
+The new `deny CONNECT blocked_sites` comes before `allow egress_clients`, so the app servers never reach the allow. A commercial proxy or secure web gateway usually names the category or policy instead ("Uncategorized", "Newly registered domain"). Either way, ask the proxy team for the log entry for the app server's address at the time of a failed login.
+
+In Splunk, the 403s have their own colour in **Forward proxy (egress): CONNECTs over time**, and the refusals panel names the cause: "Egress proxy's policy refuses the app's calls to the IdP (403, TCP_DENIED): an ACL or category block on the IdP's host; allow it on the proxy", with runbook 12.
+
+[Runbook 12](../runbooks/12-proxy-policy-block.md) covers asking for an explicit allow rule for all the IdP's host names, placed before the category rules, and why a 403 can look like a certificate error when the proxy also inspects TLS. Put the lab back:
+
+```bash
+scripts/fix.sh proxy-policy-block
+```
+
+```
+==> fixing proxy-policy-block
+ ok  proxy-policy-block is healthy: policy.conf: (no directives)
+```
+
+Sign in on 8186 again and you land on **OIDC login succeeded**. Squid's log shows the change:
+
+```
+1793552298.613      5 172.30.183.2 TCP_DENIED/403 3331 CONNECT keycloak:8180 - HIER_NONE/- text/html
+1793552317.186      0 172.30.183.2 TCP_DENIED/403 3331 CONNECT keycloak:8180 - HIER_NONE/- text/html
+1793552326.675     27 172.30.183.2 TCP_TUNNEL/200 9948 CONNECT keycloak:8180 - HIER_DIRECT/172.19.0.9 -
+1793552327.995    102 172.30.183.2 TCP_TUNNEL/200 7077 CONNECT keycloak:8180 - HIER_DIRECT/172.19.0.9 -
+1793552328.019     22 172.30.183.2 TCP_TUNNEL/200 6606 CONNECT keycloak:8180 - HIER_DIRECT/172.19.0.9 -
+1793552328.049     21 172.30.183.2 TCP_TUNNEL/200 3658 CONNECT keycloak:8180 - HIER_DIRECT/172.19.0.9 -
+```
+
+The second 403 is the probe above. Then come four tunnels for one login: the app's calls to Keycloak's discovery, token, keys and userinfo endpoints. What to tell the customer:
+
+> The identity provider isn't blocking you, and it never received your app's requests. Since Friday's filtering update, your web proxy refuses your application servers' connections to the identity provider (403 Forbidden from the proxy, rule `blocked_sites`), so the app can't start or complete any login. The first refusal we can see was at 16:58:18 UTC. To fix it, ask your proxy team for an explicit allow rule for the identity provider's host names, placed before the filtering rules. To stop a repeat, keep a list of identity endpoints your apps depend on, and test a login through the proxy after each policy update.
+
+---
+
 ## Chapter 4: the app signs in, but the API says 401
 
 > "Since this morning our users can sign in to the app, but the dashboard won't load any data. It says 401. The identity team tidied up some client scopes yesterday, but they say they didn't touch our app."
