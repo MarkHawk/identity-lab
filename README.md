@@ -4,7 +4,7 @@
 
 A self-contained identity lab you can break on purpose. A Keycloak identity provider, an OpenLDAP directory it federates users from, two sample apps (one SAML, one OIDC), an nginx reverse proxy in front of Keycloak and a second copy of each app, a Squid egress proxy that a third copy of the OIDC app must use to reach Keycloak, and a FreeRADIUS server with a NAS that authenticates the same directory users, all run in Docker Compose. One-command scenarios reproduce real single sign-on and network login failures, and each scenario has a support-style runbook for diagnosing and fixing it.
 
-**[Walkthrough: from ticket to fix, with every tool](docs/walkthrough.md)** follows support tickets from the first message to the fix: an expired SAML signing certificate, an egress proxy outage after a network change, API 401s, trouble at the reverse proxy, and a RADIUS and LDAP outage read from packet captures, with identity-lab, token-inspector, identity-support-splunk, rate-limit-probe and auth-capture-explainer, then one of those tickets given to triage-assistant.
+**[Walkthrough: from ticket to fix, with every tool](docs/walkthrough.md)** follows support tickets from the first message to the fix: an expired SAML signing certificate, an egress proxy outage after a network change, API 401s, trouble at the reverse proxy, and a RADIUS and LDAP outage read from packet captures, with identity-lab, token-inspector, identity-support-splunk, rate-limit-probe and auth-capture-explainer, then one of those tickets given to triage-assistant. Then an error page before the login form and a fast SP clock, and a reverse proxy that breaks logins while logging nothing wrong.
 
 ## The problem this solves
 

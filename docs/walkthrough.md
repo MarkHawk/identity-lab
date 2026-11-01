@@ -3,11 +3,13 @@
 This walkthrough follows support tickets from the first message to the fix, using identity-lab and the tools built around it. It shows how the pieces fit together, and the order a support engineer would actually work in: reproduce, diagnose, find out when it started and who is affected, fix, then explain it to the customer.
 
 - **Chapters 1 and 2:** nobody can sign in with SAML. An expired IdP signing certificate, followed through token-inspector, Splunk and runbook 01. Then a side ticket about 429s.
-- **Chapter 3:** logins fail for everyone after a network change. An egress proxy that now wants credentials, followed through the app's error, Squid's log, Splunk and runbook 11. Then two side tickets: TLS interception, and a proxy that logs nothing because it is bypassed.
+- **Chapter 3:** logins fail for everyone after a network change. An egress proxy that now wants credentials, followed through the app's error, Squid's log, Splunk and runbook 11. Then three side tickets: TLS interception, a proxy that logs nothing because it is bypassed, and a 403 from the proxy's policy that the customer blames on the IdP.
 - **Chapter 4:** users can sign in, but the API refuses every call with 401. Access tokens issued for the wrong API, followed through the API's `WWW-Authenticate` header, token-inspector, Splunk's API panels and runbook 16. Then two side tickets: tokens that expire after 10 seconds (and how to tell that from clock skew), and a CORS mismatch the API logs as a 200.
 - **Chapter 5:** three short tickets at the reverse proxy. A redirect loop from one added header line, a maintenance page left on while every health check stays green (and how a 503 differs from a 502 or 504), and a partner's mutual-TLS calls refused with 400, first for a missing client certificate, then for an expired one. Runbooks 15, 17 and 18.
 - **Chapter 6:** nobody can get on the Wi-Fi after a controller swap. A RADIUS shared secret mismatch, read from a packet capture with auth-capture-explainer and runbook 05. Then a side ticket where only the admin account can sign in: the IdP's directory service account can't bind (runbook 04), and why a capture of LDAPS says so little.
 - **Chapter 7:** chapter 6's Wi-Fi ticket given to triage-assistant, with its real answer in full, and what a person still checks before sending its reply.
+- **Chapter 8:** an error page before the login form. A redirect URI the IdP no longer accepts, where no token is ever issued, followed through the address bar, the IdP's event, the client's registration and runbook 03. Then a side ticket where the IdP says the logins succeeded: an SP clock 10 minutes fast, shown by token-inspector judging the same SAML response at two times (runbook 02).
+- **Chapter 9:** the proxy logs nothing wrong. A copied `X-Forwarded-Port 443` that moves the IdP's own address, followed through its issuer, the proxy's headers and runbook 09, including an app that keeps the wrong address until it restarts. Then a side ticket: a 502 from a proxy buffer too small for the IdP's cookies (runbook 10).
 
 | Step | Tool | Question it answers |
 |---|---|---|
@@ -16,13 +18,15 @@ This walkthrough follows support tickets from the first message to the fix, usin
 | Scope | [identity-support-splunk](https://github.com/MarkHawk/identity-support-splunk) | When did it start, and who is affected? |
 | Fix | [runbook 01](../runbooks/01-expired-signing-cert.md) | What do I change, and how do I stop it happening again? |
 | Side ticket | [rate-limit-probe](https://github.com/MarkHawk/rate-limit-probe) | Is a 429 the client's fault or the API's? |
-| Chapter 3 | identity-lab, identity-support-splunk, [runbooks 11](../runbooks/11-proxy-auth-required.md), [13](../runbooks/13-proxy-tls-interception.md) and [14](../runbooks/14-proxy-bypass.md) | Is it the IdP, the app, or the proxy between them? |
+| Chapter 3 | identity-lab, identity-support-splunk, [runbooks 11](../runbooks/11-proxy-auth-required.md), [13](../runbooks/13-proxy-tls-interception.md), [14](../runbooks/14-proxy-bypass.md) and [12](../runbooks/12-proxy-policy-block.md) | Is it the IdP, the app, or the proxy between them? |
 | Chapter 4 | identity-lab, token-inspector, identity-support-splunk, [runbooks 16](../runbooks/16-api-bearer-401.md) and [19](../runbooks/19-cors-blocked.md) | The login works, so why does the API say no? |
 | Chapter 5 | identity-lab, identity-support-splunk, [runbooks 15](../runbooks/15-redirect-loop.md), [17](../runbooks/17-service-unavailable.md) and [18](../runbooks/18-client-cert.md) | What is the proxy's answer telling me? |
 | Chapter 6 | identity-lab, [auth-capture-explainer](https://github.com/MarkHawk/auth-capture-explainer), [runbooks 05](../runbooks/05-radius-shared-secret-mismatch.md) and [04](../runbooks/04-ldap-bind-failure.md) | What does the traffic between the NAS, the IdP and the directory show? |
 | Chapter 7 | [triage-assistant](https://github.com/MarkHawk/triage-assistant) | Which runbook fits this ticket, and what should the first reply say? |
+| Chapter 8 | identity-lab, token-inspector, identity-support-splunk, [runbooks 03](../runbooks/03-redirect-uri-mismatch.md) and [02](../runbooks/02-clock-skew.md) | Did the IdP refuse the login, or did the app refuse the IdP's answer? |
+| Chapter 9 | identity-lab, identity-support-splunk, [runbooks 09](../runbooks/09-proxy-forwarded-headers.md) and [10](../runbooks/10-proxy-header-too-large.md) | The proxy passed every request on, so how did it break the login? |
 
-**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 20 for chapter 3, 20 for chapter 4, 15 for chapter 5, 20 for chapter 6 and 10 for chapter 7. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
+**Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 25 for chapter 3, 20 for chapter 4, 15 for chapter 5, 20 for chapter 6, 10 for chapter 7, 20 for chapter 8 and 20 for chapter 9. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
 
 **Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`, `../auth-capture-explainer`, `../triage-assistant`), each set up as its own README describes. Times in the examples are UTC.
 
@@ -2154,4 +2158,4 @@ What to tell the customer:
 
 ## Coming next
 
-- **The remaining scenarios** (02, 03, 09, 10 and 12) have runbooks but no chapter yet.
+Every scenario in the lab now has a chapter.
