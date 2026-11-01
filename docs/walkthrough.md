@@ -462,6 +462,8 @@ OIDC login failed
 HTTPSConnectionPool(host='keycloak', port=8180): Max retries exceeded with url: /realms/idlab/.well-known/openid-configuration (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))
 Error code   backchannel_failed
 Detail       ProxyError fetching https://keycloak:8180/realms/idlab/.well-known/openid-configuration
+RP clock (UTC)   2026-11-01 16:58:18
+...
 ```
 
 The app had restarted since its last login, so it hadn't loaded Keycloak's discovery document yet and failed on that, one step earlier than the 407 in 3.2. An app that still has it fails at the token endpoint, after the password.
@@ -1638,6 +1640,260 @@ BACKEND=demo python -m triage ticket demo/fixtures/redirect-loop/ticket.md --log
 ```
 
 Demo mode only has answers for the tickets it recorded, so the Wi-Fi ticket above needs a real model. triage-assistant's README covers setting up Ollama, including on another machine on your network.
+
+---
+
+## Chapter 8: an error page before the login form
+
+> "Since this morning, clicking Log in on our app shows an error page straight away. Nobody even gets to type their password. The identity team say they only tidied up some old redirect entries."
+
+The important detail is "before the password". Everything so far failed after the IdP had accepted the user. Here the IdP refuses to start the login at all, so the user, the password and the app's tokens are all irrelevant: none of them has come into play yet. In the lab the app is the direct OIDC RP on 8182.
+
+### 8.1 Reproduce it
+
+```bash
+scripts/status.sh
+scripts/break.sh redirect-uri-mismatch
+```
+
+The tidy-up left the client with a redirect URI the app doesn't use:
+
+```
+==> breaking redirect-uri-mismatch: oidc-rp client's registered redirect URI no longer matches the app
+ ok  redirect-uri-mismatch is broken: redirectUris=https://idlab.home:8182/callback (app sends https://idlab.home:8182/auth/callback)
+```
+
+### 8.2 See it as the user does
+
+Open a new private window, go to `https://idlab.home:8182/` and click **Log in with OIDC**. Keycloak's error page appears where its login form should be:
+
+```
+IDENTITY LAB
+We are sorry...
+Invalid parameter: redirect_uri
+« Back to Application
+```
+
+Other IdPs say the same in their own words: `AADSTS50011` from Entra ID, `redirect_uri_mismatch` from Google. The wording differs, but the timing is the giveaway: an error before any login form means the IdP refused the app's request, not the user.
+
+### 8.3 Look where support looks first
+
+There's no token to inspect. The IdP refused before anyone signed in, so nothing was issued, and token-inspector has nothing to read. The evidence is the request itself. The app sends the browser to Keycloak with its `redirect_uri` in the URL, which is in the address bar on the error page. `curl` shows the same without a browser:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' --cacert certs/ca.crt https://idlab.home:8182/login \
+  | tr '?&' '\n\n' | grep -E '^(30|redirect_uri|client_id|response_type)'
+```
+
+```
+302 https://idlab.home:8180/realms/idlab/protocol/openid-connect/auth
+response_type=code
+client_id=oidc-rp
+redirect_uri=https%3A%2F%2Fidlab.home%3A8182%2Fauth%2Fcallback
+```
+
+Keycloak logs the refusal with the URI it was given:
+
+```bash
+docker compose logs --no-log-prefix --since 10m keycloak | grep invalid_redirect_uri
+```
+
+```
+2026-11-01 16:59:41,577 WARN  [org.keycloak.events] (executor-thread-3) type="LOGIN_ERROR", realmId="37c793e2-fe71-48b4-ad5b-81df602cad8f", realmName="idlab", clientId="oidc-rp", userId="null", ipAddress="172.19.0.1", error="invalid_redirect_uri", redirect_uri="https://idlab.home:8182/auth/callback"
+```
+
+and the client's registration holds something else:
+
+```bash
+bash -c 'source scripts/lib.sh; load_env; kc_api GET "/idlab/clients?clientId=oidc-rp" | jq ".[0].redirectUris"'
+```
+
+```
+[
+  "https://idlab.home:8182/callback"
+]
+```
+
+`/auth/callback` against `/callback`. Keycloak compares them character by character, so a scheme, port, path, trailing slash or case difference is enough. In the admin console the setting is **Clients > oidc-rp > Settings > Valid redirect URIs**.
+
+The app's own log explains why the app team says "there's nothing in our logs":
+
+```bash
+docker compose logs --no-log-prefix --since 10m oidc-rp | grep -E 'oidc_authorize_redirect|oidc_login'
+```
+
+```
+2026-11-01 16:59:41,544 INFO oidc-rp event=oidc_authorize_redirect redirect_uri=https://idlab.home:8182/auth/callback
+2026-11-01 17:00:05,765 INFO oidc-rp event=oidc_authorize_redirect redirect_uri=https://idlab.home:8182/auth/callback
+```
+
+The first line is the browser and the second the `curl`. There's no `oidc_login_failed`. The app sent the user off to the IdP and the user never came back, so from the app's side nothing failed. It's the IdP's log that has the error.
+
+### 8.4 Scope it with Splunk
+
+**When did it start?** has the Keycloak event as "Redirect URI not registered for the client in the IdP", with runbook 03. Its *apps* column is the client ID, so a second client broken by the same tidy-up would show up as a second name.
+
+### 8.5 Fix it
+
+[Runbook 03](../runbooks/03-redirect-uri-mismatch.md) starts with deciding which side is right. Here the app hasn't moved and the registration changed, so the registration gets fixed:
+
+```bash
+scripts/fix.sh redirect-uri-mismatch
+```
+
+```
+==> fixing redirect-uri-mismatch
+ ok  redirect-uri-mismatch is healthy: redirectUris=https://idlab.home:8182/auth/callback
+```
+
+When the app is the side that's wrong (for example it builds an `http://` URI because it sits behind a proxy that terminates TLS), fix the app's settings and don't register the wrong URI to match it. And don't fix it with a wildcard such as `https://idlab.home:8182/*`: a loose redirect URI lets an attacker have authorisation codes sent to a page they control.
+
+### 8.6 Confirm recovery
+
+Sign in at `https://idlab.home:8182/` as alice in a new private window. The login form appears, and you land on **OIDC login succeeded**. The app logs:
+
+```
+2026-11-01 17:00:38,438 INFO oidc-rp event=oidc_login_ok sub=1e7d717f-82d0-49ab-...
+```
+
+`scripts/status.sh` shows every scenario healthy.
+
+### 8.7 Tell the customer
+
+> Your users see an error before the login form because the identity provider no longer has your app's sign-in return address registered. Your app asks to be sent back to `https://idlab.home:8182/auth/callback`, and since this morning's tidy-up the registration only allows `https://idlab.home:8182/callback`. The identity provider correctly refuses to start a login it can't return to your app. No passwords or accounts are affected. The first refused login was at 16:59:41 UTC. We've restored the registered address, and logins work again. To stop a repeat, manage client registrations as reviewed configuration, and register a new address before an app moves, keeping both during the change.
+
+---
+
+## Side ticket: "the IdP says the logins succeeded"
+
+> "SSO on our SAML app fails for everyone since the server was restored from a snapshot last night. Your identity provider's logs say the logins succeeded, so the problem must be on your side."
+
+```bash
+scripts/break.sh clock-skew
+```
+
+```
+==> breaking clock-skew: SAML SP clock 10 minutes ahead of the IdP
+ ok  clock-skew is broken: saml-sp clock is +600s vs host (faketime offset +600)
+```
+
+Only the SP container's clock moves, and the lab host's clock isn't touched. Sign in at `https://idlab.home:8181/` as alice. Keycloak accepts the password, and the SP refuses the response:
+
+```
+SAML login failed
+Could not validate timestamp: expired. Check system clock.
+Reason code   invalid_response
+Detail   errors=invalid_response sp_clock=2026-11-01 17:10:47 UTC
+SP clock (UTC)   2026-11-01 17:10:47
+Assertion timing vs SP clock
+IssueInstant   2026-11-01T17:00:46.956Z
+Conditions NotBefore   2026-11-01T17:00:44.956Z
+Conditions NotOnOrAfter   2026-11-01T17:01:44.956Z
+SP clock now   2026-11-01T17:10:47Z
+SP clock − IssueInstant   +600 s
+...
+```
+
+The customer is right that the IdP logged a success. An assertion issued at 17:00:46 is already 10 minutes old by the SP's clock. The lab's SP prints that comparison, but most real SPs only show the first line, so you usually work it out yourself. The SP's log shows both clocks on one line if you ask Docker for its own receive time:
+
+```bash
+docker compose logs --no-log-prefix --timestamps --since 10m saml-sp | grep saml_login_failed
+```
+
+```
+2026-11-01T17:00:47.163363134Z 2026-11-01 17:10:47,162 WARNING saml-sp event=saml_login_failed reason=invalid_response error='Could not validate timestamp: expired. Check system clock.' detail='errors=invalid_response sp_clock=2026-11-01 17:10:47 UTC' sp_clock_minus_issue_instant='+600 s'
+```
+
+The first time is Docker's and the second is the SP's own. That gap is also a warning about the incident window: everything the SP logs during the outage is stamped 10 minutes late, so take the times for the customer from a clock you trust.
+
+### Is it the clock or the assertion?
+
+token-inspector answers that offline. Capture a failing response while the scenario is broken (token-inspector's `scripts/capture_from_lab.sh --label clock-skew`), then check it twice: as the SP saw it, and as at the real time. The capture was taken at 17:01:12 real time, when the SP's clock read 17:11:12. `--skew 300` matches the SP's library, which allows 300 seconds:
+
+```bash
+cd ../token-inspector
+token-inspector samples/lab/clock-skew/saml-response.xml --skew 300 --redact --now 2026-11-01T17:11:12Z
+```
+
+```
+Checked at: 2026-11-01 17:11:12 UTC, clock skew allowance 300 s
+...
+  NotBefore       2026-11-01 17:01:10 UTC (10 min ago)
+  NotOnOrAfter    2026-11-01 17:02:10 UTC (9 min ago)
+...
+  PASS  Response signature           Valid rsa-sha256 signature, verified with the certificate from
+                                     metadata idp-metadata.xml.
+...
+  FAIL  Not on or after              Expired 9 min ago (Conditions NotOnOrAfter 2026-11-01 17:02:10
+                                     UTC). If the user had only just signed in, this looks like
+                                     clock skew: the receiving server's clock is ahead of the
+                                     issuer's.
+                                     Next: Compare the receiving server's clock with UTC. If the
+                                           clocks agree, the user took too long or resubmitted an
+                                           old page (back button, a tab left open).
+                                     Runbook: identity-lab 02-clock-skew
+...
+== Likely cause ==
+  The clocks on the IdP and the receiving server most likely disagree: the times are out by 9 min,
+  more than the 300 s allowance.
+  First:     Compare both servers' clocks with a reliable UTC source and fix NTP; raising the skew
+             allowance only hides the problem.
+  Runbook:   identity-lab 02-clock-skew
+             https://github.com/MarkHawk/identity-lab/blob/main/runbooks/02-clock-skew.md
+  Explains:  Not on or after
+
+Verdict: 1 problem to fix (1 FAIL, 0 WARN, 10 PASS, 4 SKIP)
+```
+
+and with `--now 2026-11-01T17:01:12Z`, the moment it was issued:
+
+```
+  PASS  Not on or after              Valid for another 58 s (Conditions NotOnOrAfter 2026-11-01
+                                     17:02:10 UTC).
+...
+Verdict: no problems found (0 FAIL, 0 WARN, 11 PASS, 4 SKIP)
+```
+
+The same response, signature and certificate both fine, fails or passes depending only on the clock it's judged by. That settles it: the assertion is good, and the SP's clock is wrong. Chapter 4's side ticket had the opposite case. There the clocks agreed and the token's lifetime was the problem, which is why it pays to check both.
+
+Then measure the offset directly:
+
+```bash
+date -u
+docker compose exec saml-sp date -u
+docker compose exec keycloak date -u
+```
+
+```
+Sun  1 Nov 17:00:57 UTC 2026
+Sun Nov  1 17:10:57 UTC 2026
+Sun Nov  1 05:00:57 PM UTC 2026
+```
+
+The host and Keycloak agree (in different formats), and the SP is 10 minutes ahead. On a real server, `chronyc tracking` or `timedatectl` also tells you whether time sync is running at all. After a snapshot restore it often isn't.
+
+In Splunk, the **SAML certificate or clock problem** alert fires, and **When did it start?** names the cause, "Clock skew between IdP and SP: assertion not yet valid or already expired", with runbook 02. Its times come from the SP's log, so check them against the real clock as above.
+
+[Runbook 02](../runbooks/02-clock-skew.md) covers fixing time sync on the host (containers share the host's clock), checking every node behind a load balancer when failures are intermittent, and why widening the SP's tolerance isn't a fix. Put the lab back:
+
+```bash
+scripts/fix.sh clock-skew
+```
+
+```
+==> fixing clock-skew
+ ok  clock-skew is healthy: saml-sp clock is +0s vs host
+```
+
+Sign in at `https://idlab.home:8181/` again and you land on **SAML login succeeded**. The SP's log and Docker now agree:
+
+```
+2026-11-01T17:01:37.675348073Z 2026-11-01 17:01:37,673 INFO saml-sp event=saml_login_ok ...
+```
+
+What to tell the customer:
+
+> You're right that the identity provider accepted the logins. Your application server's clock is about 10 minutes fast, so it judges every freshly issued sign-in as already expired and refuses it. The sign-ins themselves are valid: checked against the correct time, they pass. This most likely started when the server was restored from the snapshot, which often leaves time sync off. The first failure was at 17:00:47 UTC (your server's own log says 17:10:47, because of the same clock). To fix it, turn time sync back on and correct the clock. Please don't raise the application's clock tolerance, as that only hides the problem. To stop a repeat, monitor the clock offset on every server, and check time sync after any restore.
 
 ---
 
