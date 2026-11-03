@@ -9,6 +9,25 @@ A Docker lab that reproduces real single sign-on and network login failures on d
 
 ## How it fits together
 
+```mermaid
+flowchart LR
+    browser(["Browser"])
+    proxies["Reverse and egress proxies<br/>nginx, Squid"]
+    apps["Apps and API<br/>SAML, OIDC, resource server"]
+    kc["Keycloak<br/>identity provider"]
+    ldap[("OpenLDAP<br/>directory")]
+    radius["NAS and FreeRADIUS<br/>network login"]
+
+    browser --> apps
+    browser --> proxies
+    browser -- "login form" --> kc
+    proxies --> apps
+    proxies --> kc
+    apps -- "tokens, keys" --> kc
+    kc -- "users, groups" --> ldap
+    radius -- "users" --> ldap
+```
+
 Keycloak is the identity provider. It federates users from an OpenLDAP directory. SAML and OIDC apps and an API sit in front of it, some behind an nginx reverse proxy and one behind a Squid egress proxy. A NAS logs the same directory users in over RADIUS. The [full architecture](docs/architecture.md) shows every container, network and channel.
 
 ## 60-second tour
