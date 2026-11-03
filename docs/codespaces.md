@@ -48,7 +48,7 @@ Don't paste it into chats, tickets or screenshots.
 
 1. Open the repository's page on GitHub.
 2. Either click the **Open in GitHub Codespaces** badge at the top of the README, or click the green **Code** button, choose the **Codespaces** tab and click **Create codespace on main**.
-3. If you used the badge, GitHub shows the options it will use (the `main` branch and a 2-core machine). Click **Create new codespace**.
+3. If you used the badge, GitHub shows the options it will use (the `main` branch and a 2-core, 8 GB machine, the smallest size: the whole lab uses about 1.2 GB once running). Click **Create new codespace**.
 
 A browser tab opens with the VS Code editor and a terminal at the bottom. Creating the codespace takes a few minutes. When it's done, it runs `scripts/setup.sh` to generate the lab's own certificates and random secrets inside your codespace. None of them is ever committed.
 

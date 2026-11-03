@@ -2,6 +2,14 @@
 
 Why the lab is built the way it is. Several of these came from tests failing against the real software, not from the first plan.
 
+## The problem this solves
+
+When enterprise SSO breaks, the support engineer usually sees only the customer's description: *"SSO stopped working for everyone"*. The cause is buried in signed XML, token claims, certificates, clocks and two sets of logs owned by different teams.
+
+This lab makes those failures **reproducible and safe to practise on**. Each one shows the user the exact error a real system would, and the apps' debug pages show the decoded SAML assertion or ID token. The NAS shows what a switch or VPN gateway would: Access-Accept, Access-Reject or no reply.
+
+## Decisions
+
 - **Keycloak in production mode with Postgres**, not `start-dev`. The realm is imported only on first boot. After that, state lives in the database, as in a real deployment. Scenarios change it through the Admin REST API, just as an admin would.
 - **HTTPS everywhere, from a local CA.** Recent Keycloak versions have cookie problems over plain HTTP on non-localhost hostnames, and real SSO support happens over TLS. `setup.sh` issues one TLS certificate for `LAB_HOST`, `localhost` and the compose service names. The test browser trusts the CA through Chromium's NSS store rather than ignoring certificate errors.
 - **Secrets never leave `.env`.**

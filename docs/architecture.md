@@ -1,6 +1,6 @@
 # Architecture
 
-The full picture: every container, network and channel, and what the scenario scripts touch. The [README](../README.md) has a simpler version.
+The full picture: every container, network and channel, and what the scenario scripts touch. The [README](../README.md#how-it-fits-together) has a simpler version.
 
 ## Full diagram
 
