@@ -2,7 +2,30 @@
 
 This walkthrough follows support tickets from the first message to the fix, using identity-lab and the tools built around it. It shows how the pieces fit together, and the order a support engineer would actually work in: reproduce, diagnose, find out when it started and who is affected, fix, then explain it to the customer.
 
-- **Chapters 1 and 2:** nobody can sign in with SAML. An expired IdP signing certificate, followed through token-inspector, Splunk and runbook 01. Then a side ticket about 429s.
+## Start here: chapters 1 and 2
+
+About 10 minutes to read, 20 with the lab running. Every step also has a route that works without the lab, using the samples bundled with each tool.
+
+> "Since this morning nobody can sign in to our app with SSO. It worked yesterday and we haven't changed anything."
+
+The cause is an expired IdP signing certificate. The two chapters follow it in the order a support engineer works:
+
+1. [Reproduce it](#11-reproduce-it) with `scripts/break.sh expired-signing-cert`.
+2. [See it as the user does](#12-see-it-as-the-user-does): the SAML app's error page.
+3. [Look where support looks first](#13-look-where-support-looks-first): the app's log.
+4. [Diagnose the response](#21-diagnose-the-response-with-token-inspector) with token-inspector: what is wrong with it, and why.
+5. [Scope it with Splunk](#22-scope-it-with-splunk-when-did-it-start-and-who-is-affected): when it started, and who is affected.
+6. [Fix it](#23-fix-it) with runbook 01, then [tell the customer](#24-tell-the-customer).
+
+**Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`, `../auth-capture-explainer`, `../triage-assistant`), each set up as its own README describes. Times in the examples are UTC.
+
+Begin at [Chapter 1: the ticket](#chapter-1-the-ticket).
+
+## More tickets
+
+Each one stands on its own, after chapters 1 and 2.
+
+- **Side ticket after chapter 2:** an integration keeps getting 429 Too Many Requests, checked with rate-limit-probe and runbook 08.
 - **Chapter 3:** logins fail for everyone after a network change. An egress proxy that now wants credentials, followed through the app's error, Squid's log, Splunk and runbook 11. Then three side tickets: TLS interception, a proxy that logs nothing because it is bypassed, and a 403 from the proxy's policy that the customer blames on the IdP.
 - **Chapter 4:** users can sign in, but the API refuses every call with 401. Access tokens issued for the wrong API, followed through the API's `WWW-Authenticate` header, token-inspector, Splunk's API panels and runbook 16. Then two side tickets: tokens that expire after 10 seconds (and how to tell that from clock skew), and a CORS mismatch the API logs as a 200.
 - **Chapter 5:** three short tickets at the reverse proxy. A redirect loop from one added header line, a maintenance page left on while every health check stays green (and how a 503 differs from a 502 or 504), and a partner's mutual-TLS calls refused with 400, first for a missing client certificate, then for an expired one. Runbooks 15, 17 and 18.
@@ -27,8 +50,6 @@ This walkthrough follows support tickets from the first message to the fix, usin
 | Chapter 9 | identity-lab, identity-support-splunk, [runbooks 09](../runbooks/09-proxy-forwarded-headers.md) and [10](../runbooks/10-proxy-header-too-large.md) | The proxy passed every request on, so how did it break the login? |
 
 **Time:** about 20 minutes for chapters 1 and 2 with the lab running, another 25 for chapter 3, 20 for chapter 4, 15 for chapter 5, 20 for chapter 6, 10 for chapter 7, 20 for chapter 8 and 20 for chapter 9. Every step in chapters 1 and 2 also has a route that works without the lab, using the samples bundled with each tool.
-
-**Assumes:** identity-lab is running and every scenario shows **healthy** in `scripts/status.sh`. The tools are cloned next to it (`../token-inspector`, `../identity-support-splunk`, `../rate-limit-probe`, `../auth-capture-explainer`, `../triage-assistant`), each set up as its own README describes. Times in the examples are UTC.
 
 ---
 

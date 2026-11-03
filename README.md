@@ -18,7 +18,7 @@ A Docker lab that reproduces real single sign-on and network login failures on d
 <tr><td colspan="2"><i>A broken login from a real <code>scripts/test.sh</code> run, beside the start of its runbook.</i></td></tr>
 </table>
 
-**New here?** Read the [walkthrough](docs/walkthrough.md): real support tickets followed from the first message to the fix.
+**New here?** Read the walkthrough's [chapters 1 and 2](docs/walkthrough.md#start-here-chapters-1-and-2): a real support ticket followed from the first message to the fix, in about 10 minutes.
 
 ## How it fits together
 
@@ -102,7 +102,7 @@ No Linux machine? [Run it in GitHub Codespaces](docs/codespaces.md), step by ste
 
 ## Go deeper
 
-- [Walkthrough](docs/walkthrough.md): support tickets from first message to fix, with every tool.
+- [Walkthrough](docs/walkthrough.md): support tickets from first message to fix, with every tool. [Start with chapters 1 and 2](docs/walkthrough.md#start-here-chapters-1-and-2).
 - [Operating the lab](docs/operating.md): URLs, demo users, first logins, tests, rotating secrets, upgrading, troubleshooting.
 - [Architecture](docs/architecture.md): the full diagram, each component and channel, and the repository layout.
 - [Design decisions](docs/design-decisions.md): why it's built this way, and what testing against real software changed.
