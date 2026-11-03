@@ -126,13 +126,16 @@ browser()      { compose run --rm tests "$@"; }
 browser_as()   { local user="$1"; shift; compose run --rm -e E2E_USER="$user" tests "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_login ...
 radius_login() { # <user> <demo|wrong> <text nas-auth must print>; the password goes in on stdin
-  local out pw
+  local out pw code=""
   case "$2" in
     demo)  pw="$DEMO_PASSWORD" ;;
     wrong) pw="not-the-demo-password" ;;   # deliberately wrong, not a secret
     *)     echo "radius_login: password must be demo or wrong"; return 2 ;;
   esac
-  out="$(printf '%s' "$pw" | compose exec -T nas nas-auth "$1" 2>&1)" || true
+  # An MFA user also has a fresh code ready, as a second line, in case the
+  # NAS asks for it after an Access-Challenge.
+  if user_has_totp "$1"; then code="$(totp_for "$1" new)" || { echo "$code"; return 1; }; fi
+  out="$(printf '%s\n%s\n' "$pw" "$code" | compose exec -T nas nas-auth "$1" 2>&1)" || true
   echo "$out"
   grep -qF -- "$3" <<<"$out" || { echo "expected: $3"; return 1; }
 }
@@ -185,6 +188,52 @@ enrol_login() {
   new_starter_reset "$user" || return 1
   compose run --rm -T -e E2E_USER="$user" -e E2E_ENROL=1 tests "$app" "$@" </dev/null
 }
+# radius_mfa <new|wrong|again> <text>... -- heidi over RADIUS: the demo
+# password, then the code for the Access-Challenge. nas-auth must print
+# every <text>.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_mfa ...
+radius_mfa() {
+  local kind="$1" code out t; shift
+  code="$(totp_for heidi "$kind")" || { echo "$code"; return 1; }
+  out="$(printf '%s\n%s\n' "$DEMO_PASSWORD" "$code" | compose exec -T nas nas-auth heidi 2>&1)" || true
+  echo "$out"
+  for t in "$@"; do grep -qF -- "$t" <<<"$out" || { echo "expected: $t"; return 1; }; done
+}
+# radius_forged_state -- an Access-Request with a valid code and a State the
+# server never issued (no password round): it must be refused.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_forged_state
+radius_forged_state() {
+  local code out
+  code="$(totp_for heidi new)" || { echo "$code"; return 1; }
+  out="$(printf 'User-Name = "heidi"\nUser-Password = "%s"\nState = 0x%s\nNAS-Identifier = "nas"\nMessage-Authenticator = 0x00\n' \
+    "$code" "$(openssl rand -hex 16)" | compose exec -T nas radclient -r 1 -t 3 -S /var/lib/nas/secret radius:1812 auth 2>&1)" || true
+  grep -oE 'Received Access-[A-Za-z]+' <<<"$out" || echo "no reply"
+  grep -qF 'Received Access-Reject' <<<"$out"
+}
+# radius_tampered <strip-ma|bad-ma> -- heidi's login through
+# tests/radius-tamper.pl, which removes or changes the Access-Challenge's
+# Message-Authenticator: nas-auth must not answer the challenge, and the
+# server must get no second request.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_tampered ...
+radius_tampered() {
+  local code out since radius_log
+  code="$(totp_for heidi new)" || { echo "$code"; return 1; }
+  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # shellcheck disable=SC2016  # expanded by the nas container's bash
+  out="$(printf '%s\n%s\n' "$DEMO_PASSWORD" "$code" | compose exec -T nas bash -c \
+    'perl -e "$1" "$2" </dev/null & sleep 1; NAS_RADIUS_SERVER=127.0.0.1:11812 nas-auth heidi; rc=$?; kill %1 2>/dev/null; exit $rc' \
+    _ "$(<"$LAB_ROOT/tests/radius-tamper.pl")" "$1" 2>&1)" || true
+  echo "$out"
+  sleep 1
+  radius_log="$(compose logs --no-log-prefix --since "$since" radius)"
+  grep -qF 'radius-tamper: Access-Challenge relayed' <<<"$out" || { echo "the relay saw no challenge"; return 1; }
+  if grep -qF 'answering the challenge' <<<"$out"; then echo "nas-auth answered a tampered challenge"; return 1; fi
+  if grep -qE 'Login (OK|incorrect).*\[heidi\]' <<<"$radius_log"; then echo "the server got a second request"; return 1; fi
+  case "$1" in
+    strip-ma) grep -qF 'Access-Challenge without Message-Authenticator discarded' <<<"$out" ;;
+    bad-ma)   grep -qF 'RADIUS server not responding' <<<"$out" ;;   # radclient drops a reply that doesn't verify
+  esac
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" bf_failures_are ...
 bf_failures_are() { # <user> <n> -- Keycloak's count of the user's failed logins
   local st
@@ -213,7 +262,7 @@ authenticator_offline() { # the "phone" has no network: codes leave it only thro
 # here should ever print a code to, any six digits on their own count.
 # shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
 otp_code_re() { # <code>
-  local key="(otp|totp|totp-password|passcode|one[-_ ]?time[-_ ]?(code|password))"
+  local key="(otp|totp|totp-password|user-password|passcode|one[-_ ]?time[-_ ]?(code|password))"
   printf '%s' "${key}[\"' ]*([:=]|value=)[\"' ]*$1([^0-9]|\$)|name=[\"']?(otp|totp)[\"']?[^>]*value=[\"']?$1([^0-9]|\$)"
 }
 # shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
@@ -579,6 +628,20 @@ check "login: OIDC RP hands out the raw access token on /debug/access-token (ali
 check "login: mutual-TLS route accepts the partner client's certificate (browser)" browser mtls --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
+
+# --- MFA over RADIUS --------------------------------------------------------------------
+# heidi is in the directory's mfa-required group: after her password the
+# server answers Access-Challenge, and the NAS sends her code back with the State.
+log "MFA over RADIUS"
+since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+check "radius mfa: heidi's password gets an Access-Challenge, with Message-Authenticator verified by the NAS" \
+  radius_mfa new "nas: Access-Challenge (Message-Authenticator verified)" "nas: Access-Accept"
+check "radius mfa: the server's log shows the challenge" log_has "$since" radius 'Auth: Challenge sent: \[heidi\]'
+check "radius mfa: rlm_totp refuses the same code a second time: Access-Reject" radius_mfa again "nas: Access-Reject"
+check "radius mfa: a wrong code: Access-Reject" radius_mfa wrong "nas: Access-Reject"
+check "radius mfa: a State the server never issued is refused, even with a valid code" radius_forged_state
+check "radius mfa: the NAS discards a challenge without Message-Authenticator, and never answers it" radius_tampered strip-ma
+check "radius mfa: the NAS discards a challenge whose Message-Authenticator doesn't verify" radius_tampered bad-ma
 
 # --- MFA logins -----------------------------------------------------------------------
 # grace has a TOTP authenticator enrolled; Keycloak's browser flow asks her
