@@ -10,7 +10,7 @@ What each phase added, and why an existing lab needs `scripts/setup.sh` then `sc
 - The `authenticator` container, grace's "phone": it makes codes from the same secret, with its own clock and no network. `scripts/authenticator.sh code grace` shows the current code; `scripts/authenticator.sh otpauth grace --qr` adds her to your own phone, on your own screen only.
 - Brute-force protection for the realm: 5 failed logins lock an account for 5 minutes.
 - `ivan`, a new starter with the *Configure OTP* required action, and admin events for the realm (without details).
-- Scenario 20, `totp-clock-drift`, and scenario 21, `otp-policy-changed`, with runbooks 20 and 21.
+- Scenario 20, `totp-clock-drift`, scenario 21, `otp-policy-changed`, and scenario 22, `mfa-lockout`, with runbooks 20 to 22.
 - Tests: the authenticator's RFC 6238 test vectors and that it has no network; grace's MFA logins to the OIDC and SAML apps; a reused and a wrong code refused, logged, counted, and cleared; that alice and dave have no failed logins recorded; and that no TOTP secret or submitted code appears in any container's log, saved page or `test.log`.
 
 **Why the upgrade steps:**

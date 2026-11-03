@@ -103,6 +103,7 @@ No Linux machine? [Run it in GitHub Codespaces](docs/codespaces.md), step by ste
 | 19 | `cors-blocked` | Page: `Failed to fetch`; console: `blocked by CORS policy`. The API logs a 200. | [19-cors-blocked](runbooks/19-cors-blocked.md) |
 | 20 | `totp-clock-drift` | Keycloak, MFA user only: `Invalid authenticator code.` after the password is accepted | [20-totp-clock-drift](runbooks/20-totp-clock-drift.md) |
 | 21 | `otp-policy-changed` | Keycloak, new starters only: `Invalid authenticator code.` on the authenticator setup page. Enrolled users still sign in. | [21-otp-policy-changed](runbooks/21-otp-policy-changed.md) |
+| 22 | `mfa-lockout` | Keycloak, after five wrong codes: `Invalid username or password.` for the right password | [22-mfa-lockout](runbooks/22-mfa-lockout.md) |
 
 ## Go deeper
 

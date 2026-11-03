@@ -213,6 +213,8 @@ Every scenario, what it breaks and the exact error and log line. The [README](..
 
 | 21 | `otp-policy-changed` | OIDC (new starter ivan) | An admin sets the realm's OTP policy to HmacSHA256 and 8 digits. Enrolments keep their own values, so grace still signs in; ivan's app, like many, ignores those values in the QR code and makes SHA1, 6-digit codes. | Keycloak's Mobile Authenticator Setup page (as ivan): `Invalid authenticator code.` Keycloak's log: nothing (it raises no event for a refused setup code). Admin events: `UPDATE REALM` at the time of the change | [21-otp-policy-changed](../runbooks/21-otp-policy-changed.md) |
 
+| 22 | `mfa-lockout` | OIDC (MFA user grace) | Five wrong one-time codes, 3 s apart, lock grace's account for 5 minutes (brute-force protection, `failureFactor` 5; the gaps keep the quick-login rule out of it). Her right password and code fail until an admin unlocks her. | Keycloak (as grace, after her correct password): `Invalid username or password.` Keycloak log: `type="LOGIN_ERROR", ... error="user_temporarily_disabled", ... username="grace"`, after five `invalid_user_credentials` at the code step | [22-mfa-lockout](../runbooks/22-mfa-lockout.md) |
+
 ## How the scenarios work
 
 Every scenario is:
@@ -227,7 +229,7 @@ The proxy scenarios change one setting file each in `.state/proxy/` (healthy def
 
 The client-cert scenarios change the client, not the proxy: they remove the partner's certificate and key from `.state/mtls-client/`, or replace them with a lab-CA certificate that expired yesterday. `cors-blocked` changes the API's `.state/api/cors-allow-origin`, which it re-reads on every request.
 
-`totp-clock-drift` shifts the authenticator container's clock through `.state/authenticator/faketime.rc`, as `clock-skew` does the SAML SP's. `otp-policy-changed` changes the realm's OTP policy through the Admin REST API, sending the whole realm back with the policy changed, as the admin console does: Keycloak ignores a partial update without `otpPolicyType`. Its evidence is a silence: `scripts/test.sh` checks that Keycloak logged no `*_ERROR` event for the refused setup.
+`totp-clock-drift` shifts the authenticator container's clock through `.state/authenticator/faketime.rc`, as `clock-skew` does the SAML SP's. `otp-policy-changed` changes the realm's OTP policy through the Admin REST API, sending the whole realm back with the policy changed, as the admin console does: Keycloak ignores a partial update without `otpPolicyType`. Its evidence is a silence: `scripts/test.sh` checks that Keycloak logged no `*_ERROR` event for the refused setup. `mfa-lockout` signs in through Keycloak's login forms with curl five times, with the demo password and a wrong code, and is detected from the account's brute-force record in the Admin REST API; fix is the admin's *Unlock*.
 
 The API scenarios change Keycloak, not the API, through the Admin REST API like `redirect-uri-mismatch`: the `audience idlab-api` mapper on the `oidc-rp` client, or that client's access token lifespan. Tokens issued before a change keep their old values until they expire, so test with a new login.
 
@@ -241,7 +243,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 320 checks cover:
+The 331 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
