@@ -234,7 +234,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 295 checks cover:
+The 297 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -260,7 +260,7 @@ The 295 checks cover:
   - `cors-blocked`: the server-side API call still works, and the API logged the browser's preflight and its successful `GET`
   - `proxy-bypass`: the fix saved the broken container's log, with its `backchannel_failed` line, before recreating it
 - that brute-force protection, which is on for the whole realm, has recorded no failed login for alice or dave
-- last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, no JWT (access or ID token) in any container's log, saved page or `test.log`, no private key in any container's log or `test.log`, and no TOTP secret, or one-time code that was submitted, in any container's log, saved page or `test.log`
+- last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, no JWT (access or ID token) in any container's log, saved page or `test.log`, no private key in any container's log or `test.log`, and no TOTP secret, or one-time code that was submitted, in any container's log, saved page or `test.log`. Those last two scanners first prove themselves on a temporary directory: they must report a made-up secret and code planted where a leak would show, and pass the same directory without them.
 
 `scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log. One-time codes reach the browser on its standard input, never on a command line, so they're not in the log either.
 

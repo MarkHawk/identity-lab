@@ -185,36 +185,121 @@ authenticator_offline() { # the "phone" has no network: codes leave it only thro
   echo "network mode: $mode"
   [[ "$mode" == none ]]
 }
+# --- Leak scanners --------------------------------------------------------------
+# Each reads container logs on stdin and takes test.log and the saved pages
+# as files, so the live checks and their self-test run the same code. They
+# print counts and file names, never a secret or a code.
+#
+# A one-time code in container logs or pages counts only next to the name of
+# an OTP field: how a submitted code would show in a request line, form body,
+# debug dump or page. A bare six-digit number is too common there to flag:
+# LDAP's qtime and etime alone write hundreds. In test.log, which nothing
+# here should ever print a code to, any six digits on their own count.
+# shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
+otp_code_re() { # <code>
+  local key="(otp|totp|totp-password|passcode|one[-_ ]?time[-_ ]?(code|password))"
+  printf '%s' "${key}[\"' ]*([:=]|value=)[\"' ]*$1([^0-9]|\$)|name=[\"']?(otp|totp)[\"']?[^>]*value=[\"']?$1([^0-9]|\$)"
+}
+# shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
+bare_code_re() { printf '%s' "(^|[^0-9A-Za-z])$1([^0-9A-Za-z]|\$)"; }
+
+# scan_codes <codes-file> <test.log> [page...] -- 0 when no code is found.
+# shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
+scan_codes() {
+  local codes="$1" log="$2" text code n=0 hits=0 where; shift 2
+  text="$(cat)"
+  while read -r code; do
+    [[ -n "$code" ]] || continue
+    n=$((n + 1)) where=""
+    if grep -qiE -- "$(otp_code_re "$code")" <<<"$text"; then where="a container log "; fi
+    (( $# == 0 )) || where+="$(grep -liE -- "$(otp_code_re "$code")" "$@" 2>/dev/null | sed 's|.*/||' | tr '\n' ' ' || true)"
+    if grep -qE -- "$(bare_code_re "$code")" "$log"; then where+="${log##*/} "; fi
+    if [[ -n "$where" ]]; then hits=$((hits + 1)); echo "  code #$n found in: $where"; fi
+  done < <(sort -u "$codes")
+  echo "checked $n one-time code(s): $hits found"
+  (( hits == 0 ))
+}
+
+# scan_totp_secrets <array-name> <test.log> [page...] -- 0 when no form of any
+# secret in the named array is found. test.log is redacted as it's written,
+# so a secret that reached it shows as TOTP_MARK.
+# shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
+scan_totp_secrets() {
+  local -n _forms="$1"; local log="$2" text v in_logs=0 files="" marked; shift 2
+  text="$(cat)"
+  for v in "${_forms[@]}"; do
+    if grep -qF -- "$v" <<<"$text"; then in_logs=$((in_logs + 1)); fi
+    files+="$(grep -lF -- "$v" "$@" "$log" 2>/dev/null || true)"$'\n'
+  done
+  files="$(grep . <<<"$files" | sed 's|.*/||' | sort -u || true)"
+  marked="$(grep -cF -- "$TOTP_MARK" "$log" || true)"
+  echo "checked ${#_forms[@]} form(s) of $(( ${#_forms[@]} / 2 )) TOTP secret(s): in container logs: $in_logs;" \
+    "in saved pages or test.log: $(grep -c . <<<"$files" || true); redacted from test.log: $marked"
+  [[ -z "$files" ]] || while read -r v; do printf '  %s\n' "$v"; done <<<"$files"
+  (( in_logs == 0 && marked == 0 )) && [[ -z "$files" ]]
+}
+
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" totp_secret_nowhere
 totp_secret_nowhere() { # no TOTP secret in any service's log, saved page or test.log
-  local logs v in_logs=0 files="" marked
-  logs="$(compose logs --no-log-prefix 2>&1)"
-  for v in "${TOTP_SECRETS[@]}"; do
-    if grep -qF -- "$v" <<<"$logs"; then in_logs=$((in_logs + 1)); fi
-    files+="$(grep -lF -- "$v" "$RESULTS"/*.html "$LOG" 2>/dev/null || true)"
-  done
-  # test.log is redacted as it's written, so a secret that reached it shows as the marker.
-  marked="$(grep -cF -- "$TOTP_MARK" "$LOG" || true)"
-  echo "checked ${#TOTP_SECRETS[@]} forms of $(( ${#TOTP_SECRETS[@]} / 2 )) TOTP secret(s): in container logs: $in_logs;" \
-    "in saved pages or test.log: $(grep -c . <<<"$files" || true); redacted from test.log: $marked"
-  [[ -n "$files" ]] && sort -u <<<"$files" | sed 's/^/  /'
-  (( in_logs == 0 && marked == 0 )) && [[ -z "$files" ]]
+  compose logs --no-log-prefix 2>&1 | scan_totp_secrets TOTP_SECRETS "$LOG" "$RESULTS"/*.html
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" codes_nowhere
 codes_nowhere() { # no submitted one-time code in any service's log, saved page or test.log
-  local logs code re n=0 hits=0 where
-  logs="$(compose logs --no-log-prefix 2>&1)"
-  # A code is six digits on its own, not part of a longer number or word.
-  while read -r code; do
-    [[ -n "$code" ]] || continue
-    n=$((n + 1)) re="(^|[^0-9A-Za-z])$code([^0-9A-Za-z]|\$)"
-    where=""
-    if grep -qE -- "$re" <<<"$logs"; then where="a container log "; fi
-    where+="$(grep -lE -- "$re" "$RESULTS"/*.html "$LOG" 2>/dev/null | sed "s|^$RESULTS/||" | tr '\n' ' ' || true)"
-    if [[ -n "$where" ]]; then hits=$((hits + 1)); echo "  code #$n found in: $where"; fi
-  done < <(sort -u "$CODES_FILE")
-  echo "checked $n submitted one-time code(s): $hits found"
-  (( n > 0 && hits == 0 ))
+  [[ -s "$CODES_FILE" ]] || { echo "no one-time codes were submitted, so nothing to check"; return 1; }
+  compose logs --no-log-prefix 2>&1 | scan_codes "$CODES_FILE" "$LOG" "$RESULTS"/*.html
+}
+
+# The scanners' self-test: a temporary directory laid out like the real
+# evidence, with near misses that must not count, and (planted) a made-up
+# TOTP secret and code where a leak would really appear. Nothing from .env.
+SELFTEST_SECRET=MZXW6YTBOI2LKNJVGQ3TQOJQGEZDGNBV   # made up, base32, not a secret
+SELFTEST_CODE=246810                              # made up
+# shellcheck disable=SC2034  # read by scan_totp_secrets through a nameref
+SELFTEST_FORMS=("$SELFTEST_SECRET" "${SELFTEST_SECRET,,}")
+# shellcheck disable=SC2329  # invoked by the scanners, themselves invoked indirectly
+selftest_dir() { # <dir> <clean|planted>
+  local d="$1"
+  printf '%s\n' "$SELFTEST_CODE" >"$d/codes"
+  # Near misses: the same digits and letters, but nowhere a leak would be.
+  cat >"$d/logs" <<LOG
+conn=1012 op=3 RESULT tag=97 err=0 qtime=0.$SELFTEST_CODE etime=0.000412 nentries=1
+192.0.2.10 - - [03/Nov/2026:19:35:46 +0000] "GET /realms/idlab/account HTTP/1.1" 200 $SELFTEST_CODE host=idlab.example
+2026-11-03 19:35:46,345 WARN  [org.keycloak.events] type="LOGIN_ERROR", error="invalid_user_credentials", selected_credential_id="0f2c-$SELFTEST_CODE-a1"
+LOG
+  printf '<html><body><p>Ticket %s</p><input id="otp" name="otp" autocomplete="one-time-code"></body></html>\n' \
+    "$SELFTEST_CODE" >"$d/page.html"
+  printf '=== mfa: OIDC RP (grace, password and one-time code)\n$ mfa_login grace oidc new --expect ok\n[oidc] PASS\n' >"$d/test.log"
+  [[ "$2" == planted ]] || return 0
+  # Leaks: a form body logged by a proxy, a debug dump, a page that kept the
+  # typed value, and the script's own log.
+  cat >>"$d/logs" <<LOG
+192.0.2.10 - - [03/Nov/2026:19:35:47 +0000] "POST /realms/idlab/login-actions/authenticate?session_code=*** HTTP/1.1" 302 0 body="otp=$SELFTEST_CODE&login=Sign+In"
+2026-11-03 19:35:47,101 DEBUG [org.keycloak.credential] stored otp credential secret=$SELFTEST_SECRET
+LOG
+  printf '<html><body><input id="otp" name="otp" autocomplete="one-time-code" value="%s"></body></html>\n' \
+    "$SELFTEST_CODE" >"$d/page-planted.html"
+  printf '<p>otpauth://totp/Identity%%20Lab:grace?secret=%s</p>\n' "${SELFTEST_SECRET,,}" >"$d/otpauth.html"
+  printf '[oidc] typed %s\n' "$SELFTEST_CODE" >>"$d/test.log"
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" leak_scanners_selftest ...
+leak_scanners_selftest() { # <clean|planted> -- clean: both pass; planted: both report it
+  local d out_c out_s rc_c=0 rc_s=0
+  d="$(mktemp -d)"
+  selftest_dir "$d" "$1"
+  out_c="$(scan_codes "$d/codes" "$d/test.log" "$d"/*.html <"$d/logs")" || rc_c=$?
+  out_s="$(scan_totp_secrets SELFTEST_FORMS "$d/test.log" "$d"/*.html <"$d/logs")" || rc_s=$?
+  rm -rf "$d"
+  printf 'code scanner (exit %d):\n%s\nsecret scanner (exit %d):\n%s\n' "$rc_c" "$out_c" "$rc_s" "$out_s"
+  if [[ "$1" == clean ]]; then
+    (( rc_c == 0 && rc_s == 0 ))
+  else
+    # Every planted place must be named: a container log, the page, and test.log;
+    # the secret in the logs and in the otpauth page.
+    (( rc_c != 0 && rc_s != 0 )) \
+      && grep -qE 'found in: a container log .*page-planted\.html .*test\.log' <<<"$out_c" \
+      && grep -qE 'in container logs: [1-9].*in saved pages or test\.log: 1;' <<<"$out_s" \
+      && grep -qx '  otpauth.html' <<<"$out_s"
+  fi
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" ldap_bind_ok
 ldap_bind_ok() { # the by-hand test from runbook 04; the password goes in on stdin
@@ -522,6 +607,8 @@ check "secrets: no value from .env, authorisation code, OAuth state or other one
 check "secrets: the proxy's log has nonce, code_challenge, Signature, session_code and client_data, masked" proxy_masked_seen
 check "secrets: no JWT in any container's log, saved page evidence or test.log" no_jwt_anywhere
 check "secrets: no private key in any container's log or test.log" no_private_key_anywhere
+check "secrets: leak scanners report a planted fake TOTP secret and one-time code" leak_scanners_selftest planted
+check "secrets: leak scanners pass the same evidence without them (near misses only)" leak_scanners_selftest clean
 check "secrets: no TOTP secret in any container's log, saved page or test.log" totp_secret_nowhere
 check "secrets: no submitted one-time code in any container's log, saved page or test.log" codes_nowhere
 
