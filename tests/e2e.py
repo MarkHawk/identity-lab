@@ -25,6 +25,12 @@ mtls opens the reverse proxy's mutual-TLS route, presenting the client
 certificate in /etc/idlab/mtls-client/ if there is one (the partner
 system's, from .state/mtls-client/), and none if there isn't.
 
+With E2E_OTP=stdin (an MFA user such as grace), Keycloak's one-time code
+form is expected after the password, and the code is read from stdin, one
+per line, as scripts/test.sh passes it from the authenticator app. Without
+it, the flow is exactly as before. It never appears on the command line, in the output or
+in the saved page.
+
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
 dave work the same way), and checks where the flow ends up. Exit
@@ -64,6 +70,7 @@ APPS = {
     "mtls": (url("PROXY_MTLS_PORT"), None),
 }
 API_LATE_SECONDS = 15
+OTP_FROM_STDIN = os.environ.get("E2E_OTP") == "stdin"
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
@@ -156,6 +163,9 @@ def flow(page, app):
     page.fill("#username", USER)
     page.fill("#password", PASSWORD)
     page.click("#kc-login")
+    otp = otp_step(page, base) if OTP_FROM_STDIN else None
+    if otp is not None:
+        return otp
     try:
         page.wait_for_url(re.compile("^" + re.escape(base)), timeout=20000)
         page.wait_for_load_state("load")
@@ -170,6 +180,34 @@ def flow(page, app):
     if app == "oidc-cors":
         return call_api_from_browser(page, app)
     return f"{app}:login-ok", page.inner_text("body")
+
+
+def otp_step(page, base, timeout=20):
+    """Keycloak's one-time code form, if it asks for one: type the next code.
+
+    Returns None to carry on (no code asked for, or the code was accepted),
+    or the (where, text) outcome when Keycloak refused the code or asked for
+    one that wasn't given.
+    """
+    deadline = time.monotonic() + timeout
+    while page.locator("#otp").count() == 0:
+        if page.url.startswith(base + "/") or time.monotonic() > deadline:
+            return None  # no code asked for: the caller handles the rest
+        page.wait_for_timeout(250)
+    code = sys.stdin.readline().strip()
+    if not code:
+        return "keycloak:otp-asked", "Keycloak asked for a one-time code, but none was given\n" + page.inner_text("body")
+    page.fill("#otp", code)
+    del code
+    page.click("#kc-login")
+    deadline = time.monotonic() + timeout
+    while not page.url.startswith(base + "/"):
+        if page.locator("#otp").count() and page.locator('[id^="input-error"]').count():
+            return "keycloak:otp-error", page.inner_text("body")
+        if time.monotonic() > deadline:
+            return None
+        page.wait_for_timeout(250)
+    return None
 
 
 def mtls(page, app, base):

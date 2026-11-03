@@ -59,10 +59,16 @@ FAILED=0
 # Values of every *PASSWORD, *SECRET and *SECRET_KEY in .env, filled in after
 # load_env. Nothing that reaches test.log or the terminal may contain them.
 declare -a SECRETS=()
+# The MFA users' TOTP secrets (*_TOTP_SECRET, base32), in upper and lower
+# case. They're in SECRETS too, but are redacted with their own marker, so
+# the leak check can tell that one reached test.log.
+declare -a TOTP_SECRETS=()
+TOTP_MARK="<redacted-totp-""secret>"   # split, so this file never holds the marker itself
 load_secrets() {
   local v
   while read -r v; do
     [[ -n "${!v:-}" ]] && SECRETS+=("${!v}")
+    [[ -n "${!v:-}" && "$v" == *_TOTP_SECRET ]] && TOTP_SECRETS+=("${!v}" "${!v,,}")
   done < <(sed -n 's/^\([A-Z_]*\(PASSWORD\|SECRET\|SECRET_KEY\)\)=.*/\1/p' "$ENV_FILE")
   return 0
 }
@@ -70,6 +76,7 @@ load_secrets() {
 # redact <text> -- print text with every secret value replaced.
 redact() {
   local s="$1" v
+  for v in "${TOTP_SECRETS[@]}"; do s="${s//"$v"/$TOTP_MARK}"; done
   for v in "${SECRETS[@]}"; do s="${s//"$v"/<redacted>}"; done
   printf '%s' "$s"
 }
@@ -83,7 +90,12 @@ redact_log() {
   all="$(<"$LOG")"
   { redact "$all"; echo; } >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 }
-trap redact_log EXIT
+# One-time codes submitted during the run, one per line, for the leak check.
+# Outside test-results/, mode 0600, deleted on exit. Never printed.
+CODES_FILE="$(umask 077; mktemp)"
+# shellcheck disable=SC2329  # invoked by the EXIT trap
+on_exit() { redact_log; rm -f "$CODES_FILE"; }
+trap on_exit EXIT
 
 # check <description> <command...> -- run, record, show output on failure.
 # Pass secrets by name (see radius_login), never as arguments: the command
@@ -133,6 +145,76 @@ login_as()     {
     --expect)       radius_login "$user" demo "nas: Access-Accept" ;;
     --expect-error) radius_login "$user" demo "$2" ;;
   esac
+}
+# totp_for <user> <new|wrong|again> -- a one-time code from the user's
+# authenticator app (again: the last one submitted), remembered in CODES_FILE.
+# shellcheck disable=SC2329  # invoked by mfa_login, itself invoked indirectly
+totp_for() {
+  local code
+  case "$2" in
+    new|wrong) code="$(compose exec -T authenticator authenticator code "$1" "--$2" 2>&1)" ;;
+    again)     code="$(tail -n 1 "$CODES_FILE")" ;;
+    *)         echo "totp_for: new, wrong or again"; return 2 ;;
+  esac
+  [[ "$code" =~ ^[0-9]{6}$ ]] || { echo "the authenticator app gave no code: ${code:0:200}"; return 1; }
+  [[ "$2" == again ]] || printf '%s\n' "$code" >>"$CODES_FILE"
+  printf '%s\n' "$code"
+}
+# mfa_login <user> <app> <new|wrong|again> --expect ok | --expect-error <text>
+# Password and one-time code, as an MFA user. The code reaches the browser on
+# stdin, never as an argument, so it isn't in this log's command lines.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" mfa_login ...
+mfa_login() {
+  local user="$1" app="$2" kind="$3" code; shift 3
+  code="$(totp_for "$user" "$kind")" || { echo "$code"; return 1; }
+  printf '%s\n' "$code" | compose run --rm -T -e E2E_USER="$user" -e E2E_OTP=stdin tests "$app" "$@"
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" bf_failures_are ...
+bf_failures_are() { # <user> <n> -- Keycloak's count of the user's failed logins
+  local st
+  st="$(bf_status "$1")" || return 1
+  echo "$1: $(jq -c '{numFailures, disabled}' <<<"$st")"
+  [[ "$(jq -r .numFailures <<<"$st")" == "$2" ]]
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" bf_clear_and_check ...
+bf_clear_and_check() { bf_clear "$1" && bf_failures_are "$1" 0; }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" authenticator_offline
+authenticator_offline() { # the "phone" has no network: codes leave it only through exec
+  local mode
+  mode="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$(compose ps -q authenticator)")"
+  echo "network mode: $mode"
+  [[ "$mode" == none ]]
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" totp_secret_nowhere
+totp_secret_nowhere() { # no TOTP secret in any service's log, saved page or test.log
+  local logs v in_logs=0 files="" marked
+  logs="$(compose logs --no-log-prefix 2>&1)"
+  for v in "${TOTP_SECRETS[@]}"; do
+    if grep -qF -- "$v" <<<"$logs"; then in_logs=$((in_logs + 1)); fi
+    files+="$(grep -lF -- "$v" "$RESULTS"/*.html "$LOG" 2>/dev/null || true)"
+  done
+  # test.log is redacted as it's written, so a secret that reached it shows as the marker.
+  marked="$(grep -cF -- "$TOTP_MARK" "$LOG" || true)"
+  echo "checked ${#TOTP_SECRETS[@]} forms of $(( ${#TOTP_SECRETS[@]} / 2 )) TOTP secret(s): in container logs: $in_logs;" \
+    "in saved pages or test.log: $(grep -c . <<<"$files" || true); redacted from test.log: $marked"
+  [[ -n "$files" ]] && sort -u <<<"$files" | sed 's/^/  /'
+  (( in_logs == 0 && marked == 0 )) && [[ -z "$files" ]]
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" codes_nowhere
+codes_nowhere() { # no submitted one-time code in any service's log, saved page or test.log
+  local logs code re n=0 hits=0 where
+  logs="$(compose logs --no-log-prefix 2>&1)"
+  # A code is six digits on its own, not part of a longer number or word.
+  while read -r code; do
+    [[ -n "$code" ]] || continue
+    n=$((n + 1)) re="(^|[^0-9A-Za-z])$code([^0-9A-Za-z]|\$)"
+    where=""
+    if grep -qE -- "$re" <<<"$logs"; then where="a container log "; fi
+    where+="$(grep -lE -- "$re" "$RESULTS"/*.html "$LOG" 2>/dev/null | sed "s|^$RESULTS/||" | tr '\n' ' ' || true)"
+    if [[ -n "$where" ]]; then hits=$((hits + 1)); echo "  code #$n found in: $where"; fi
+  done < <(sort -u "$CODES_FILE")
+  echo "checked $n submitted one-time code(s): $hits found"
+  (( n > 0 && hits == 0 ))
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" ldap_bind_ok
 ldap_bind_ok() { # the by-hand test from runbook 04; the password goes in on stdin
@@ -338,6 +420,8 @@ check "health: API preflight from the OIDC RP's origin: 204, Authorization allow
 check "health: mutual-TLS route accepts the partner client's certificate (curl)" mtls_status 200
 check "health: mutual-TLS route refuses a request without a client certificate: 400" mtls_status 400 no-cert
 check "health: LDAP bind as keycloak-svc (ldapwhoami over LDAPS)" ldap_bind_ok
+check "health: authenticator app container healthy (RFC 6238 test vectors)" healthy authenticator
+check "health: authenticator app has no network" authenticator_offline
 
 # --- Baseline logins --------------------------------------------------------------
 log "baseline logins"
@@ -368,6 +452,21 @@ check "login: OIDC RP hands out the raw access token on /debug/access-token (ali
 check "login: mutual-TLS route accepts the partner client's certificate (browser)" browser mtls --expect ok
 check "login: RADIUS Access-Accept (dave, from LDAP)" radius_login dave demo "nas: Access-Accept"
 check "login: RADIUS Access-Reject (dave, wrong password)" radius_login dave wrong "nas: Access-Reject"
+
+# --- MFA logins -----------------------------------------------------------------------
+# grace has a TOTP authenticator enrolled; Keycloak's browser flow asks her
+# for a code after the password. Codes come from the authenticator app.
+log "MFA logins"
+check "mfa: OIDC RP (grace, password and one-time code)" mfa_login grace oidc new --expect ok
+check "mfa: OIDC RP refuses a code grace has already used" mfa_login grace oidc again --expect-error "Invalid authenticator code."
+since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+check "mfa: OIDC RP refuses a wrong code (grace)" mfa_login grace oidc wrong --expect-error "Invalid authenticator code."
+check "mfa: Keycloak logs the wrong code as LOGIN_ERROR invalid_user_credentials" \
+  log_has "$since" keycloak 'type="LOGIN_ERROR".*error="invalid_user_credentials"'
+check "mfa: Keycloak counted grace's 2 failed codes (brute-force protection)" bf_failures_are grace 2
+# Start the later checks clean: two more failures would be nearer the lockout.
+check "mfa: grace's failed logins cleared, as an admin's Unlock does" bf_clear_and_check grace
+check "mfa: SAML SP (grace, password and one-time code)" mfa_login grace saml new --expect ok
 
 # Break, check and fix one scenario. <name> [label prefixed to each check]
 run_scenario() {
@@ -410,12 +509,21 @@ log "restart"
 check "restart: squid container restarts and is healthy again" restart_squid
 run_scenario proxy-auth-required "after squid restart: "
 
+# --- Brute-force protection ----------------------------------------------------------
+# It is on for the whole realm. No check before this one should have left a
+# failed login on the existing users.
+log "brute-force protection"
+check "brute force: alice has no failed logins recorded" bf_failures_are alice 0
+check "brute force: dave has no failed logins recorded" bf_failures_are dave 0
+
 # --- Secrets ----------------------------------------------------------------------
 log "secrets"
 check "secrets: no value from .env, authorisation code, OAuth state or other one-time login value in any container's log" logs_free_of_secrets
 check "secrets: the proxy's log has nonce, code_challenge, Signature, session_code and client_data, masked" proxy_masked_seen
 check "secrets: no JWT in any container's log, saved page evidence or test.log" no_jwt_anywhere
 check "secrets: no private key in any container's log or test.log" no_private_key_anywhere
+check "secrets: no TOTP secret in any container's log, saved page or test.log" totp_secret_nowhere
+check "secrets: no submitted one-time code in any container's log, saved page or test.log" codes_nowhere
 
 # --- Summary ----------------------------------------------------------------------
 echo

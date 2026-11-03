@@ -481,3 +481,23 @@ mtls_client_set() {
   install -m 600 "$2" "$MTLS_CLIENT_DIR/client.key"
 }
 mtls_client_restore() { mtls_client_set "$CERTS_DIR/mtls-client.crt" "$CERTS_DIR/mtls-client.key"; }
+
+# --- MFA: brute-force protection ----------------------------------------------------
+# The realm locks an account for a while after repeated failed logins (wrong
+# passwords or wrong one-time codes): see failureFactor in the realm import.
+# These read and clear a user's record as the admin console's "Unlock" does.
+kc_user_id() { kc_api GET "/$REALM/users?username=$1&exact=true" | jq -r '.[0].id // empty'; }
+
+# bf_status <user> -- the user's brute-force record: numFailures, disabled, ...
+bf_status() {
+  local id
+  id="$(kc_user_id "$1")"; [[ -n "$id" ]] || { echo "no user $1 in realm $REALM" >&2; return 1; }
+  kc_api GET "/$REALM/attack-detection/brute-force/users/$id"
+}
+
+# bf_clear <user> -- forget the user's failed logins and unlock them.
+bf_clear() {
+  local id
+  id="$(kc_user_id "$1")"; [[ -n "$id" ]] || { echo "no user $1 in realm $REALM" >&2; return 1; }
+  kc_api DELETE "/$REALM/attack-detection/brute-force/users/$id" >/dev/null
+}
