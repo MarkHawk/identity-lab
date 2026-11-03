@@ -53,6 +53,7 @@ import os
 import re
 import sys
 import time
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Error as PWError
 from playwright.sync_api import TimeoutError as PWTimeout
@@ -181,7 +182,7 @@ def flow(page, app):
         if page.url.startswith(base + "/") and app_error_shown(page):
             return f"{app}:error", page.inner_text("body")
         if time.monotonic() > deadline:
-            raise PWTimeout(f"no Keycloak page after Log in; still at {page.url}")
+            raise PWTimeout(f"no Keycloak page after Log in; still at {without_query(page.url)}")
         page.wait_for_timeout(250)
     page.wait_for_load_state("load")
     if page.locator("#username").count() == 0:
@@ -198,7 +199,7 @@ def flow(page, app):
         page.wait_for_url(re.compile("^" + re.escape(base)), timeout=20000)
         page.wait_for_load_state("load")
     except PWTimeout:
-        return f"stuck:{page.url}", page.inner_text("body")
+        return f"stuck:{without_query(page.url)}", page.inner_text("body")
     if not page.locator("#login-ok").count():
         return f"{app}:error", page.inner_text("body")
     if app.startswith("oidc-api"):
@@ -350,6 +351,13 @@ def call_api_from_browser(page, app):
     if page.locator("#api-browser-ok").count():
         return f"{app}:login-ok", text
     return f"{app}:api-error", text
+
+
+def without_query(url):
+    """A URL fit to print: no query or fragment. Keycloak's login-action URLs
+    carry one-time values (client_data, session_code, tab_id, execution),
+    and an app's callback URL carries the code and state."""
+    return urlsplit(url)._replace(query="", fragment="").geturl()
 
 
 def app_error_shown(page):
