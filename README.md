@@ -101,6 +101,7 @@ No Linux machine? [Run it in GitHub Codespaces](docs/codespaces.md), step by ste
 | 18a | `client-cert-missing` | Partner system: `400 Bad Request`, `No required SSL certificate was sent` | [18-client-cert](runbooks/18-client-cert.md) |
 | 18b | `client-cert-expired` | Partner system: `400 Bad Request`, `The SSL certificate error` | [18-client-cert](runbooks/18-client-cert.md) |
 | 19 | `cors-blocked` | Page: `Failed to fetch`; console: `blocked by CORS policy`. The API logs a 200. | [19-cors-blocked](runbooks/19-cors-blocked.md) |
+| 20 | `totp-clock-drift` | Keycloak, MFA user only: `Invalid authenticator code.` after the password is accepted | [20-totp-clock-drift](runbooks/20-totp-clock-drift.md) |
 
 ## Go deeper
 

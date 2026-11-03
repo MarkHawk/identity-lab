@@ -208,6 +208,8 @@ Every scenario, what it breaks and the exact error and log line. The [README](..
 | 18b | `client-cert-expired` | Partner client on the proxy's mutual-TLS route | The partner's client certificate expired yesterday; it still sends it. | nginx: `400 Bad Request`, `The SSL certificate error` (495 inside nginx). Proxy log: `ssl_client_verify=FAILED:certificate has expired` | [18-client-cert](../runbooks/18-client-cert.md) |
 | 19 | `cors-blocked` | OIDC RP's page calling the API from the browser | The API's `Access-Control-Allow-Origin` gains a trailing slash, `https://LAB_HOST:8182/`. The preflight still allows the call, so the API answers it with 200. The RP's server-side call still works. | Page: `API call from the browser failed: TypeError: Failed to fetch`. Console: `has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value 'https://idlab.home:8182/' that is not equal to the supplied origin`. API log: `event=api_request_ok`, a success | [19-cors-blocked](../runbooks/19-cors-blocked.md) |
 
+| 20 | `totp-clock-drift` | OIDC (MFA user grace) | The clock on grace's authenticator app (the `authenticator` container, libfaketime) runs 3 minutes fast: her codes are 6 steps of 30 s ahead, and Keycloak accepts only 1 step either side. Keycloak's clock is right. | Keycloak (as grace, after her password): `Invalid authenticator code.` Keycloak log: `type="LOGIN_ERROR", ... userId="<grace>", error="invalid_user_credentials", ... selected_credential_id="<her OTP credential>"` | [20-totp-clock-drift](../runbooks/20-totp-clock-drift.md) |
+
 ## How the scenarios work
 
 Every scenario is:
@@ -234,7 +236,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 297 checks cover:
+The 308 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
