@@ -36,7 +36,7 @@ You only need 8183 to 8185 for the reverse proxy scenarios (6 to 10 in [step 5](
 - `alice` lives in Keycloak's own database.
 - `dave` lives in the LDAP directory, which Keycloak and the RADIUS server both read.
 
-Both share one randomly generated password. It isn't written in the repository: the README's [Demo users](../README.md#demo-users) section explains how to show it on your own screen. In short, run this in the codespace's terminal:
+Both share one randomly generated password. It isn't written in the repository: [Demo users](operating.md#demo-users) explains how to show it on your own screen. In short, run this in the codespace's terminal:
 
 ```bash
 grep '^DEMO_PASSWORD=' .env | cut -d= -f2
@@ -140,7 +140,7 @@ Use the browser on your own computer. Every address is `https://`: an `http://` 
 - for the redirect loop: https://localhost:8187
 - for the API, before **Call the API from the browser** (scenario 19): https://localhost:8188/healthz. Until you accept it, the browser refuses the page's call to the API with a certificate error, which the page also reports as `Failed to fetch`.
 
-Do them before your first login. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. Don't install the lab's CA as trusted on your computer: the README [explains why](../README.md#dont-install-the-lab-ca-as-trusted-on-your-computer).
+Do them before your first login. Otherwise the hand-off from Keycloak back to an app can stop at a warning page. Don't install the lab's CA as trusted on your computer: [Operating the lab explains why](operating.md#dont-install-the-lab-ca-as-trusted-on-your-computer).
 
 **OIDC as alice:**
 

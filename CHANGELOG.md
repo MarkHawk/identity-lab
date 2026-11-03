@@ -1,6 +1,6 @@
 # Changelog
 
-What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](README.md#upgrading-an-existing-lab) in the README.
+What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](docs/operating.md#upgrading-an-existing-lab).
 
 ## Scenario 14 keeps its evidence (2026-10-23)
 
