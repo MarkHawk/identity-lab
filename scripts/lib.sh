@@ -530,3 +530,42 @@ new_starter_reset() {
   user="$(kc_api GET "/$REALM/users/$id")"
   kc_api PUT "/$REALM/users/$id" "$(jq -c '{requiredActions: ((.requiredActions // []) - ["CONFIGURE_TOTP"] + ["CONFIGURE_TOTP"])}' <<<"$user")" >/dev/null
 }
+
+# _kc_form_action <form id> -- the action URL of that form in the HTML on stdin.
+_kc_form_action() { grep -o "<form[^>]*id=\"$1\"[^>]*" | grep -o 'action="[^"]*"' | head -n1 | sed 's/^action="//; s/"$//; s/&amp;/\&/g'; }
+
+# kc_form_login <user> <code> -- sign in to the OIDC RP's client through
+# Keycloak's login forms with curl, as a script or a person at a browser
+# would: the demo password, then <code> on the one-time code form. Prints
+# where it ended: "code-refused", "password-refused", "login-ok" or
+# "unexpected". Nothing it sends is printed or put on a command line: the
+# password and code go to curl on stdin.
+kc_form_login() {
+  local user="$1" code="$2" jar base page action rc=0
+  jar="$(mktemp -d)"
+  base="https://$LAB_HOST:$KC_PORT/realms/$REALM"
+  # The authorisation request oidc-rp would send. PKCE is required for this
+  # client; any well-formed challenge will do, since no code is redeemed.
+  page="$(kc_curl -c "$jar/c" -b "$jar/c" -G "$base/protocol/openid-connect/auth" \
+    -d client_id=oidc-rp -d response_type=code -d scope=openid \
+    --data-urlencode "redirect_uri=https://$LAB_HOST:$OIDC_RP_PORT/auth/callback" \
+    -d "state=$(openssl rand -hex 16)" -d "code_challenge=$(openssl rand -hex 32 | head -c 43)" \
+    -d code_challenge_method=S256)" || rc=$?
+  action="$(_kc_form_action kc-form-login <<<"$page")"
+  if (( rc == 0 )) && [[ -n "$action" ]]; then
+    page="$(printf '%s' "$DEMO_PASSWORD" | kc_curl -c "$jar/c" -b "$jar/c" "$action" \
+      --data-urlencode "username=$user" --data-urlencode "password@-")" || rc=$?
+    action="$(_kc_form_action kc-otp-login-form <<<"$page")"
+    if (( rc == 0 )) && [[ -n "$action" ]]; then
+      page="$(printf '%s' "$code" | kc_curl -c "$jar/c" -b "$jar/c" -w '\n%{http_code}' "$action" \
+        --data-urlencode "otp@-" -d login=Sign+In)" || rc=$?
+      if grep -qF 'Invalid authenticator code.' <<<"$page"; then echo code-refused
+      elif [[ "$(tail -n1 <<<"$page")" == 302 ]]; then echo login-ok
+      else echo unexpected; fi
+    elif grep -qF 'Invalid username or password.' <<<"$page"; then echo password-refused
+    else echo unexpected; fi
+  else
+    echo unexpected
+  fi
+  rm -rf "$jar"
+}
