@@ -15,5 +15,15 @@ if [[ ! -s "$SECRET_FILE" ]]; then
 fi
 unset RADIUS_SECRET
 
+# Whether this NAS does challenge-response (Access-Challenge, used for MFA):
+# a setting in its configuration, on by default. Seeded when missing, so a
+# NAS volume from before Phase 4 gets it too.
+# (scenarios/radius-challenge-unsupported.sh turns it off.)
+CHALLENGE_FILE=/var/lib/nas/challenge
+if [[ ! -s "$CHALLENGE_FILE" ]]; then
+  printf 'yes\n' >"$CHALLENGE_FILE.tmp" && mv "$CHALLENGE_FILE.tmp" "$CHALLENGE_FILE"
+  echo "nas: challenge-response (Access-Challenge) enabled"
+fi
+
 # Nothing to serve: the NAS only sends requests, via nas-auth.
 exec sleep infinity
