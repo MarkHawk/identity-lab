@@ -118,11 +118,7 @@ The first part lists the services again. The second part, `scenarios (detected f
 scripts/test.sh --fresh
 ```
 
-This deletes the lab's data, rebuilds it, and runs real headless-browser logins, RADIUS logins and every scenario. The first run takes about 20 minutes, because it compiles the Squid egress proxy from source. It ends with:
-
-```
-  175 checks, 175 passed, 0 failed. Full log: /workspaces/identity-lab/test-results/test.log
-```
+This deletes the lab's data, rebuilds it, and runs real headless-browser logins, RADIUS logins and every scenario. The first run takes about 20 minutes, because it compiles the Squid egress proxy from source. It ends with a summary line: the number of checks, how many passed, `0 failed`, and the path of the full log, `test-results/test.log`.
 
 Screenshots and page HTML for every check go to `test-results/`. `--fresh` also pins the certificate, so you don't need to run `pin-idp-cert.sh` again afterwards.
 
