@@ -225,6 +225,9 @@ EGRESS_PROXY_PASSWORD=$(keep EGRESS_PROXY_PASSWORD "$(rand 32)")
 # grace's enrolled TOTP secret (base32): Keycloak holds it from the realm
 # import, and the authenticator app (her "phone") makes codes from it.
 GRACE_TOTP_SECRET=$(keep GRACE_TOTP_SECRET "$(rand_totp)")
+# heidi's TOTP secret (base32), for her logins over RADIUS: FreeRADIUS holds
+# it, and the authenticator app makes codes from it.
+HEIDI_TOTP_SECRET=$(keep HEIDI_TOTP_SECRET "$(rand_totp)")
 
 # Public certificate (not secret): Keycloak uses it to verify signed AuthnRequests.
 SP_SIGNING_CERT=$(cert_b64 "$CERTS_DIR/sp-signing.crt")
@@ -232,11 +235,11 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD GRACE_TOTP_SECRET"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD GRACE_TOTP_SECRET HEIDI_TOTP_SECRET"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
   warn "demo user passwords, OIDC client secrets and LDAP passwords are only applied when the"
   warn "databases are created, and the RADIUS secret when the NAS volume is created."
-  warn "grace's TOTP secret changes too: add her to your phone again if you had."
+  warn "grace's and heidi's TOTP secrets change too: add them to your phone again if you had."
   warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak, LDAP and NAS volumes)"
   exit 0
 fi
@@ -249,3 +252,4 @@ echo "    All URLs are https://. Browsers will warn about the lab's own CA; clic
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."
 echo "    grace (Keycloak) also needs a one-time code: scripts/authenticator.sh code grace"
+echo "    heidi (LDAP) does too over RADIUS: docker compose exec nas nas-auth heidi"

@@ -64,14 +64,37 @@ sn: Foster
 mail: frank@idlab.example
 userPassword: ${DEMO_PASSWORD_HASH}
 
+# Over RADIUS, heidi also needs a one-time code (cn=mfa-required, below).
+dn: uid=heidi,ou=people,dc=idlab,dc=example
+objectClass: inetOrgPerson
+uid: heidi
+cn: Heidi Hughes
+givenName: Heidi
+sn: Hughes
+mail: heidi@idlab.example
+userPassword: ${DEMO_PASSWORD_HASH}
+
 # Group names match the realm roles; Keycloak maps membership to roles.
 dn: cn=lab-user,ou=groups,dc=idlab,dc=example
 objectClass: groupOfNames
 cn: lab-user
 member: uid=dave,ou=people,dc=idlab,dc=example
 member: uid=erin,ou=people,dc=idlab,dc=example
+member: uid=heidi,ou=people,dc=idlab,dc=example
 
 dn: cn=lab-admin,ou=groups,dc=idlab,dc=example
 objectClass: groupOfNames
 cn: lab-admin
 member: uid=erin,ou=people,dc=idlab,dc=example
+
+# RADIUS policy groups. A branch of their own, so Keycloak's group mapper
+# (ou=groups) never sees them.
+dn: ou=radius,dc=idlab,dc=example
+objectClass: organizationalUnit
+ou: radius
+
+# Members need a one-time code after their password over RADIUS.
+dn: cn=mfa-required,ou=radius,dc=idlab,dc=example
+objectClass: groupOfNames
+cn: mfa-required
+member: uid=heidi,ou=people,dc=idlab,dc=example
