@@ -255,6 +255,20 @@ scan_totp_secrets() {
   (( in_logs == 0 && marked == 0 )) && [[ -z "$files" ]]
 }
 
+# scan_login_values <file> -- 0 when the file has no unmasked authorisation
+# code, OAuth state or other one-time login value (client_data,
+# session_code, nonce, ...), with the same patterns as the container logs.
+# shellcheck disable=SC2329  # invoked by the checks below
+scan_login_values() {
+  local codes states others
+  codes="$(grep -cE -- "$AUTH_CODE_RE" "$1" || true)"
+  states="$(grep -cE -- "$STATE_RE" "$1" || true)"
+  others="$(grep -cE -- "$ONE_TIME_RE" "$1" || true)"
+  echo "${1##*/}: lines with an authorisation code: $codes; an OAuth state value: $states; an unmasked ${ONE_TIME_NAMES[*]}: $others"
+  (( codes == 0 && states == 0 && others == 0 ))
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" testlog_free_of_login_values
+testlog_free_of_login_values() { scan_login_values "$LOG"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" totp_secret_nowhere
 totp_secret_nowhere() { # no TOTP secret in any service's log, saved page or test.log
   compose logs --no-log-prefix 2>&1 | scan_totp_secrets TOTP_SECRETS "$LOG" "$RESULTS"/*.html
@@ -284,7 +298,7 @@ conn=1012 op=3 RESULT tag=97 err=0 qtime=0.$SELFTEST_CODE etime=0.000412 nentrie
 LOG
   printf '<html><body><p>Ticket %s</p><input id="otp" name="otp" autocomplete="one-time-code"></body></html>\n' \
     "$SELFTEST_CODE" >"$d/page.html"
-  printf '=== mfa: OIDC RP (grace, password and one-time code)\n$ mfa_login grace oidc new --expect ok\n[oidc] PASS\n' >"$d/test.log"
+  printf '=== mfa: OIDC RP (grace, password and one-time code)\n$ mfa_login grace oidc new --expect ok\n[oidc] ended at stuck:https://idlab.example:8180/realms/idlab/login-actions/authenticate\n[oidc] PASS\n' >"$d/test.log"
   [[ "$2" == planted ]] || return 0
   # Leaks: a form body logged by a proxy, a debug dump, a page that kept the
   # typed value, and the script's own log.
@@ -296,22 +310,26 @@ LOG
     "$SELFTEST_CODE" >"$d/page-planted.html"
   printf '<p>otpauth://totp/Identity%%20Lab:grace?secret=%s</p>\n' "${SELFTEST_SECRET,,}" >"$d/otpauth.html"
   printf '[oidc] typed %s\n' "$SELFTEST_CODE" >>"$d/test.log"
+  # A browser stuck on a Keycloak login-action URL, printed whole.
+  printf '[oidc] ended at stuck:https://idlab.example:8180/realms/idlab/login-actions/authenticate?execution=1f2e&client_id=oidc-rp&tab_id=Ab3_&client_data=eyJydSI6Imh0dHBzOi8vZXhhbXBsZSJ9\n' >>"$d/test.log"
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" leak_scanners_selftest ...
 leak_scanners_selftest() { # <clean|planted> -- clean: both pass; planted: both report it
-  local d out_c out_s rc_c=0 rc_s=0
+  local d out_c out_s out_l rc_c=0 rc_s=0 rc_l=0
   d="$(mktemp -d)"
   selftest_dir "$d" "$1"
   out_c="$(scan_codes "$d/codes" "$d/test.log" "$d"/*.html <"$d/logs")" || rc_c=$?
   out_s="$(scan_totp_secrets SELFTEST_FORMS "$d/test.log" "$d"/*.html <"$d/logs")" || rc_s=$?
+  out_l="$(scan_login_values "$d/test.log")" || rc_l=$?
   rm -rf "$d"
-  printf 'code scanner (exit %d):\n%s\nsecret scanner (exit %d):\n%s\n' "$rc_c" "$out_c" "$rc_s" "$out_s"
+  printf 'code scanner (exit %d):\n%s\nsecret scanner (exit %d):\n%s\nlogin value scanner (exit %d):\n%s\n' \
+    "$rc_c" "$out_c" "$rc_s" "$out_s" "$rc_l" "$out_l"
   if [[ "$1" == clean ]]; then
-    (( rc_c == 0 && rc_s == 0 ))
+    (( rc_c == 0 && rc_s == 0 && rc_l == 0 ))
   else
     # Every planted place must be named: a container log, the page, and test.log;
     # the secret in the logs and in the otpauth page.
-    (( rc_c != 0 && rc_s != 0 )) \
+    (( rc_c != 0 && rc_s != 0 && rc_l != 0 )) \
       && grep -qE 'found in: a container log .*page-planted\.html .*test\.log' <<<"$out_c" \
       && grep -qE 'in container logs: [1-9].*in saved pages or test\.log: 1;' <<<"$out_s" \
       && grep -qx '  otpauth.html' <<<"$out_s"
@@ -639,8 +657,9 @@ check "secrets: no value from .env, authorisation code, OAuth state or other one
 check "secrets: the proxy's log has nonce, code_challenge, Signature, session_code and client_data, masked" proxy_masked_seen
 check "secrets: no JWT in any container's log, saved page evidence or test.log" no_jwt_anywhere
 check "secrets: no private key in any container's log or test.log" no_private_key_anywhere
-check "secrets: leak scanners report a planted fake TOTP secret and one-time code" leak_scanners_selftest planted
+check "secrets: leak scanners report a planted fake TOTP secret, one-time code and login-action URL" leak_scanners_selftest planted
 check "secrets: leak scanners pass the same evidence without them (near misses only)" leak_scanners_selftest clean
+check "secrets: no authorisation code, OAuth state or other one-time login value in test.log" testlog_free_of_login_values
 check "secrets: no TOTP secret in any container's log, saved page or test.log" totp_secret_nowhere
 check "secrets: no submitted one-time code in any container's log, saved page or test.log" codes_nowhere
 
