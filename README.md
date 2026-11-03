@@ -5,6 +5,8 @@
 
 A Docker lab that reproduces real single sign-on and network login failures on demand: SAML, OIDC, LDAP, RADIUS, proxies and APIs. Each failure has a support runbook: the symptom, where to look, the fix and what to ask the customer. An automated test breaks every scenario, checks the user sees the right error, fixes it and proves the login works again.
 
+When enterprise SSO breaks, support usually gets only *"SSO stopped working for everyone"*. The cause is buried in signed XML, tokens, certificates, clocks and two teams' logs, and this lab makes it safe to practise finding it.
+
 <table>
 <tr>
 <td width="58%"><img src="docs/images/clock-skew-error.png" alt="The SAML app's error page: Could not validate timestamp: expired. Check system clock. SP clock minus IssueInstant: +600 s."></td>
