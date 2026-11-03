@@ -34,7 +34,7 @@ import time
 
 ALGORITHM, DIGITS, PERIOD = "sha1", 6, 30
 ISSUER = "Identity Lab"
-# The last time step whose code was shown, per user, so --new never repeats
+# The time steps whose codes --new has shown, per user, so it never repeats
 # one (the IdP refuses a code that has already been used).
 STATE_DIR = "/tmp/authenticator"
 
@@ -62,8 +62,16 @@ def key_of(user):
     return base64.b32decode(b32 + "=" * (-len(b32) % 8))
 
 
-def last_step_file(user):
-    return os.path.join(STATE_DIR, f"{user}.last-step")
+def shown_steps_file(user):
+    return os.path.join(STATE_DIR, f"{user}.shown-steps")
+
+
+def shown_steps(user):
+    try:
+        with open(shown_steps_file(user)) as fh:
+            return [int(x) for x in fh.read().split()]
+    except (FileNotFoundError, ValueError):
+        return []
 
 
 def cmd_code(user, mode):
@@ -78,19 +86,18 @@ def cmd_code(user, mode):
         print(f"{code:0{DIGITS}d}")
         return
     if mode == "--new":
+        # Wait for a step whose code this app hasn't shown, as a person waits
+        # for the app to change. A set, not just the last step: when the
+        # clock is put back (scenarios/totp-clock-drift.sh), the steps it
+        # showed while it was fast are still ahead.
         os.makedirs(STATE_DIR, exist_ok=True)
-        try:
-            with open(last_step_file(user)) as fh:
-                last = int(fh.read().strip() or -1)
-        except (FileNotFoundError, ValueError):
-            last = -1
-        # Wait for the next step, as a person waits for the app to change.
-        while int(time.time() // PERIOD) <= last:
+        shown = shown_steps(user)
+        while int(time.time() // PERIOD) in shown:
             time.sleep(0.5)
     now = time.time()
     if mode == "--new":
-        with open(last_step_file(user), "w") as fh:
-            fh.write(str(int(now // PERIOD)))
+        with open(shown_steps_file(user), "w") as fh:
+            fh.write(" ".join(str(x) for x in (shown + [int(now // PERIOD)])[-50:]))
     print(totp(key, now))
 
 
