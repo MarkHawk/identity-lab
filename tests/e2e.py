@@ -221,6 +221,10 @@ def otp_step(page, base, timeout=20):
     while page.locator("#otp").count() == 0:
         if page.url.startswith(base + "/") or time.monotonic() > deadline:
             return None  # no code asked for: the caller handles the rest
+        # The password form again, with an error (a wrong password, or a
+        # locked account, which Keycloak words the same way on purpose).
+        if page.locator("#kc-form-login #password").count() and page.locator('[id^="input-error"]').count():
+            return "keycloak:password-refused", page.inner_text("body")
         page.wait_for_timeout(250)
     code = sys.stdin.readline().strip()
     if not code:
