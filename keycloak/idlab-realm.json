@@ -6,6 +6,21 @@
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "eventsListeners": ["jboss-logging"],
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyCodeReusable": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 300,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+  "maxTemporaryLockouts": 0,
   "roles": {
     "realm": [
       { "name": "lab-user", "description": "Can sign in to the sample apps" },
@@ -42,6 +57,24 @@
       "enabled": true,
       "realmRoles": ["default-roles-idlab"],
       "credentials": [{ "type": "password", "value": "${DEMO_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "grace",
+      "email": "grace@idlab.example",
+      "emailVerified": true,
+      "firstName": "Grace",
+      "lastName": "Garcia",
+      "enabled": true,
+      "realmRoles": ["lab-user", "default-roles-idlab"],
+      "credentials": [
+        { "type": "password", "value": "${DEMO_PASSWORD}", "temporary": false },
+        {
+          "type": "otp",
+          "userLabel": "Lab authenticator",
+          "secretData": "{\"value\":\"${GRACE_TOTP_SECRET}\"}",
+          "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\",\"secretEncoding\":\"BASE32\"}"
+        }
+      ]
     }
   ],
   "components": {

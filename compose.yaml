@@ -182,6 +182,7 @@ services:
       OIDC_EDGE_CLIENT_SECRET: ${OIDC_EDGE_CLIENT_SECRET:?run scripts/setup.sh}
       SP_SIGNING_CERT: ${SP_SIGNING_CERT}
       LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD}
+      GRACE_TOTP_SECRET: ${GRACE_TOTP_SECRET:?run scripts/setup.sh}
     volumes:
       - ./keycloak/idlab-realm.json:/opt/keycloak/data/import/idlab-realm.json:ro
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
