@@ -6,6 +6,8 @@
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "eventsListeners": ["jboss-logging"],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
   "otpPolicyType": "totp",
   "otpPolicyAlgorithm": "HmacSHA1",
   "otpPolicyDigits": 6,
@@ -75,6 +77,17 @@
           "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\",\"secretEncoding\":\"BASE32\"}"
         }
       ]
+    },
+    {
+      "username": "ivan",
+      "email": "ivan@idlab.example",
+      "emailVerified": true,
+      "firstName": "Ivan",
+      "lastName": "Ivanov",
+      "enabled": true,
+      "realmRoles": ["lab-user", "default-roles-idlab"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "credentials": [{ "type": "password", "value": "${DEMO_PASSWORD}", "temporary": false }]
     }
   ],
   "components": {
