@@ -12,7 +12,7 @@
 # Nothing secret is ever printed. Read values from .env when you need them.
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
-require openssl docker date base64
+require openssl docker date base64 base32
 
 FORCE=0 ROTATE=0
 case "${1:-}" in
@@ -23,6 +23,9 @@ case "${1:-}" in
 esac
 
 rand() { openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c "${1:-32}"; }
+# A TOTP secret as authenticator apps take it: 20 random bytes (160 bits, as
+# RFC 4226 recommends), base32 without padding.
+rand_totp() { openssl rand 20 | base32 | tr -d '=\n'; }
 
 # Value from an existing .env, without sourcing it.
 existing() { [[ -f "$ENV_FILE" ]] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -n1 || true; }
@@ -155,6 +158,11 @@ fi
 mkdir -p "$STATE_DIR/api"
 [[ -f "$STATE_DIR/api/cors-allow-origin" ]] || echo "https://$LAB_HOST:8182" >"$STATE_DIR/api/cors-allow-origin"
 
+# libfaketime offset of the authenticator app, the MFA users' "phone"
+# (see scenarios/totp-clock-drift.sh).
+mkdir -p "$STATE_DIR/authenticator"
+[[ -f "$STATE_DIR/authenticator/faketime.rc" ]] || echo "+0" >"$STATE_DIR/authenticator/faketime.rc"
+
 # --- .env ---------------------------------------------------------------------
 # Keep an existing secret, unless rotating.
 keep() {
@@ -214,6 +222,9 @@ RADIUS_SECRET=$(keep RADIUS_SECRET "$(rand 32)")
 # Password of egress-svc, the account Squid asks for when proxy login is on
 # (scenarios/proxy-auth-required.sh). Hashed inside the Squid container.
 EGRESS_PROXY_PASSWORD=$(keep EGRESS_PROXY_PASSWORD "$(rand 32)")
+# grace's enrolled TOTP secret (base32): Keycloak holds it from the realm
+# import, and the authenticator app (her "phone") makes codes from it.
+GRACE_TOTP_SECRET=$(keep GRACE_TOTP_SECRET "$(rand_totp)")
 
 # Public certificate (not secret): Keycloak uses it to verify signed AuthnRequests.
 SP_SIGNING_CERT=$(cert_b64 "$CERTS_DIR/sp-signing.crt")
@@ -221,10 +232,11 @@ ENV
 mv "$tmp_env" "$ENV_FILE"
 
 if (( ROTATE )); then
-  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD"
+  ok "rotated KC_ADMIN_PASSWORD POSTGRES_PASSWORD DEMO_PASSWORD OIDC_CLIENT_SECRET OIDC_PROXIED_CLIENT_SECRET OIDC_EGRESS_CLIENT_SECRET OIDC_EDGE_CLIENT_SECRET SAML_SP_SECRET_KEY OIDC_RP_SECRET_KEY LDAP_ADMIN_PASSWORD LDAP_BIND_PASSWORD RADIUS_LDAP_BIND_PASSWORD RADIUS_SECRET EGRESS_PROXY_PASSWORD GRACE_TOTP_SECRET"
   warn "the running lab still uses the OLD secrets: the Postgres password, Keycloak admin,"
   warn "demo user passwords, OIDC client secrets and LDAP passwords are only applied when the"
   warn "databases are created, and the RADIUS secret when the NAS volume is created."
+  warn "grace's TOTP secret changes too: add her to your phone again if you had."
   warn "Recreate the lab now:  scripts/test.sh --fresh   (deletes the Keycloak, LDAP and NAS volumes)"
   exit 0
 fi
@@ -236,3 +248,4 @@ echo "    Through the reverse proxy, with a client certificate (mutual TLS): :81
 echo "    All URLs are https://. Browsers will warn about the lab's own CA; clicking through"
 echo "    is fine for a lab. Don't install certs/ca.crt as a trusted root (see README)."
 echo "    Demo users alice, bob, carol (Keycloak) and dave, erin, frank (LDAP) share DEMO_PASSWORD in .env."
+echo "    grace (Keycloak) also needs a one-time code: scripts/authenticator.sh code grace"
