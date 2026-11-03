@@ -273,7 +273,7 @@ scripts/setup.sh --rotate     # new random value for every secret in .env; certi
 scripts/test.sh --fresh       # recreate the lab with them, then prove it still works
 ```
 
-`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `OIDC_PROXIED_CLIENT_SECRET`, `OIDC_EGRESS_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET`, `EGRESS_PROXY_PASSWORD`, grace's `GRACE_TOTP_SECRET` and the two apps' session keys. It prints none of them.
+`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `OIDC_PROXIED_CLIENT_SECRET`, `OIDC_EGRESS_CLIENT_SECRET`, `OIDC_EDGE_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET`, `EGRESS_PROXY_PASSWORD`, grace's `GRACE_TOTP_SECRET` and the two apps' session keys. It prints none of them.
 
 The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secrets and the directory's passwords only receive their values when the databases are first created, and the NAS stores its copy of the RADIUS secret when its volume is first created. `--fresh` deletes the Keycloak, LDAP and NAS volumes, re-imports the realm, re-seeds the directory and the NAS. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again. If you added grace to your phone, add her again: the old entry's codes no longer work.
 
