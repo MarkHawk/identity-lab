@@ -142,7 +142,10 @@ login_as()     {
   local user="$1" app="$2"; shift 2
   if [[ "$app" != radius ]]; then
     # An MFA user also types a fresh code from the authenticator app.
-    if user_has_totp "$user"; then mfa_login "$user" "$app" new "$@"; else browser_as "$user" "$app" "$@"; fi
+    # A new starter sets one up, from scratch each time.
+    if user_has_totp "$user"; then mfa_login "$user" "$app" new "$@"
+    elif user_enrols_totp "$user"; then enrol_login "$user" "$app" "$@"
+    else browser_as "$user" "$app" "$@"; fi
     return
   fi
   case "$1" in
@@ -172,6 +175,15 @@ mfa_login() {
   local user="$1" app="$2" kind="$3" code; shift 3
   code="$(totp_for "$user" "$kind")" || { echo "$code"; return 1; }
   printf '%s\n' "$code" | compose run --rm -T -e E2E_USER="$user" -e E2E_OTP=stdin tests "$app" "$@"
+}
+# enrol_login <user> <app> --expect ok | --expect-error <text> -- a new
+# starter's first login: the setup page, with an app that ignores the
+# enrolment's algorithm and digits (e2e.py). The user is reset first.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" enrol_login ...
+enrol_login() {
+  local user="$1" app="$2"; shift 2
+  new_starter_reset "$user" || return 1
+  compose run --rm -T -e E2E_USER="$user" -e E2E_ENROL=1 tests "$app" "$@" </dev/null
 }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" bf_failures_are ...
 bf_failures_are() { # <user> <n> -- Keycloak's count of the user's failed logins
@@ -564,6 +576,8 @@ check "mfa: Keycloak counted grace's 2 failed codes (brute-force protection)" bf
 # Start the later checks clean: two more failures would be nearer the lockout.
 check "mfa: grace's failed logins cleared, as an admin's Unlock does" bf_clear_and_check grace
 check "mfa: SAML SP (grace, password and one-time code)" mfa_login grace saml new --expect ok
+# ivan is a new starter: Keycloak asks him to set up an authenticator at login.
+check "mfa: a new starter (ivan) sets up an authenticator at first login" enrol_login ivan oidc --expect ok
 
 # Break, check and fix one scenario. <name> [label prefixed to each check]
 run_scenario() {

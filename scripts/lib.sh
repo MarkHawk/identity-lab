@@ -512,3 +512,21 @@ bf_clear() {
   id="$(kc_user_id "$1")"; [[ -n "$id" ]] || { echo "no user $1 in realm $REALM" >&2; return 1; }
   kc_api DELETE "/$REALM/attack-detection/brute-force/users/$id" >/dev/null
 }
+
+# --- MFA: new starters ----------------------------------------------------------------
+# ivan has no authenticator yet: the realm import gives him the
+# CONFIGURE_TOTP required action, so Keycloak's setup page appears at his
+# next login. He is the only new starter.
+user_enrols_totp() { [[ "$1" == ivan ]]; }
+
+# new_starter_reset <user> -- remove the user's authenticators and ask them
+# to set one up at their next login, as an admin does to re-enrol someone.
+new_starter_reset() {
+  local id cid user
+  id="$(kc_user_id "$1")"; [[ -n "$id" ]] || { echo "no user $1 in realm $REALM" >&2; return 1; }
+  for cid in $(kc_api GET "/$REALM/users/$id/credentials" | jq -r '.[] | select(.type == "otp") | .id'); do
+    kc_api DELETE "/$REALM/users/$id/credentials/$cid" >/dev/null
+  done
+  user="$(kc_api GET "/$REALM/users/$id")"
+  kc_api PUT "/$REALM/users/$id" "$(jq -c '{requiredActions: ((.requiredActions // []) - ["CONFIGURE_TOTP"] + ["CONFIGURE_TOTP"])}' <<<"$user")" >/dev/null
+}

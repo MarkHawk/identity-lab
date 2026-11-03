@@ -28,7 +28,16 @@ system's, from .state/mtls-client/), and none if there isn't.
 With E2E_OTP=stdin (an MFA user such as grace), Keycloak's one-time code
 form is expected after the password, and the code is read from stdin, one
 per line, as scripts/test.sh passes it from the authenticator app. Without
-it, the flow is exactly as before. It never appears on the command line, in the output or
+it, the flow is exactly as before.
+
+With E2E_ENROL=1 (a new starter such as ivan), Keycloak's Mobile
+Authenticator Setup page is expected after the password. e2e.py plays an
+authenticator app that, like many, ignores the algorithm and digits in the
+enrolment: it reads the key in the page's manual mode and types an
+HMAC-SHA1, 6-digit, 30-second code from it (the lab authenticator's own
+code, authenticator.py). It prints what the page asked for. The key is
+removed from the page before the screenshot and HTML are saved, and the
+saved HTML is checked for it. It never appears on the command line, in the output or
 in the saved page.
 
 Each run uses a fresh browser context (no Keycloak SSO session carried
@@ -39,6 +48,7 @@ are written to /results on every run.
 """
 
 import argparse
+import base64
 import os
 import re
 import sys
@@ -47,6 +57,8 @@ import time
 from playwright.sync_api import Error as PWError
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
+
+import authenticator  # the lab's authenticator app (apps/authenticator), for its TOTP code
 
 LAB_HOST = os.environ["LAB_HOST"]
 
@@ -71,6 +83,10 @@ APPS = {
 }
 API_LATE_SECONDS = 15
 OTP_FROM_STDIN = os.environ.get("E2E_OTP") == "stdin"
+ENROL = os.environ.get("E2E_ENROL") == "1"
+# Keys read from a setup page during this run: scrubbed from the evidence,
+# and the saved HTML checked for them. Never printed.
+SETUP_KEYS = []
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
@@ -106,11 +122,21 @@ def run(app, expect_error=None):
             stamp = f"{app}-{int(time.time())}"
             os.makedirs(RESULTS, exist_ok=True)
             try:
+                scrub_setup_key(page)
                 page.screenshot(path=f"{RESULTS}/{stamp}.png", full_page=True)
+                html = page.content()
+                leaked = any(k in html or k.lower() in html for k in SETUP_KEYS)
+                if leaked:
+                    html = "<!-- not saved: it still held an authenticator setup key -->"
                 with open(f"{RESULTS}/{stamp}.html", "w") as fh:
-                    fh.write(page.content())
+                    fh.write(html)
+                if SETUP_KEYS:
+                    print(f"[{app}] authenticator setup key kept out of the saved page: {not leaked}")
+                    if leaked:
+                        outcome = (f"{app}:evidence-error", "setup key still on the page after scrubbing")
             except Exception:  # noqa: BLE001 - evidence capture is best effort
                 pass
+            SETUP_KEYS.clear()
             browser.close()
 
     where, text = outcome
@@ -164,6 +190,8 @@ def flow(page, app):
     page.fill("#password", PASSWORD)
     page.click("#kc-login")
     otp = otp_step(page, base) if OTP_FROM_STDIN else None
+    if otp is None and ENROL:
+        otp = enrol_step(page, base)
     if otp is not None:
         return otp
     try:
@@ -208,6 +236,55 @@ def otp_step(page, base, timeout=20):
             return None
         page.wait_for_timeout(250)
     return None
+
+
+def enrol_step(page, base, timeout=20):
+    """Keycloak's Mobile Authenticator Setup page: enrol, as an app that
+    ignores the enrolment's algorithm and digits (most apps, in practice).
+
+    Returns None when the setup was accepted, or the (where, text) outcome
+    when Keycloak refused the code or showed no setup page.
+    """
+    deadline = time.monotonic() + timeout
+    while page.locator("#kc-totp-settings-form").count() == 0:
+        if page.url.startswith(base + "/") or time.monotonic() > deadline:
+            return "keycloak:no-setup-page", page.inner_text("body")
+        page.wait_for_timeout(250)
+    # "Unable to scan?": the key as text, and the values the IdP asks for.
+    page.click("#mode-manual")
+    page.wait_for_load_state("load")
+    page.locator("#kc-totp-secret-key").wait_for(timeout=10000)
+    key = page.inner_text("#kc-totp-secret-key").replace(" ", "").strip()
+    SETUP_KEYS.append(key)
+    asked = [page.inner_text(f"#kc-totp-{f}").strip() for f in ("algorithm", "digits", "period")
+             if page.locator(f"#kc-totp-{f}").count()]
+    print(f"[enrol] the setup page asks for: {', '.join(asked)}")
+    code = authenticator.totp(base64.b32decode(key.upper() + "=" * (-len(key) % 8)), time.time())
+    del key
+    page.fill("#totp", code)
+    del code
+    page.fill("#userLabel", "Lab authenticator")
+    page.click("#saveTOTPBtn")
+    deadline = time.monotonic() + timeout
+    while not page.url.startswith(base + "/"):
+        if page.locator("#kc-totp-settings-form").count() and page.locator('[id^="input-error"]').count():
+            return "keycloak:setup-refused", page.inner_text("body") + "\nThe setup page asked for: " + ", ".join(asked)
+        if time.monotonic() > deadline:
+            return None
+        page.wait_for_timeout(250)
+    return None
+
+
+def scrub_setup_key(page):
+    """Take an authenticator setup key off the page: its text, the hidden
+    form field and the QR code (it encodes the same key)."""
+    page.evaluate(
+        """() => {
+            document.querySelectorAll('#kc-totp-secret-key').forEach(e => { e.textContent = '(removed by e2e.py)'; });
+            document.querySelectorAll('#totpSecret').forEach(e => { e.setAttribute('value', ''); e.value = ''; });
+            document.querySelectorAll('#kc-totp-secret-qr-code').forEach(e => { e.removeAttribute('src'); });
+        }"""
+    )
 
 
 def mtls(page, app, base):

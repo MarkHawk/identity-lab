@@ -10,4 +10,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
 WORKDIR /tests
 COPY entrypoint.sh e2e.py ./
+# The lab authenticator's TOTP code, for enrolling a new starter (ivan):
+# the build context "authenticator" is apps/authenticator (compose.yaml).
+COPY --from=authenticator authenticator.py ./
 ENTRYPOINT ["/tests/entrypoint.sh"]

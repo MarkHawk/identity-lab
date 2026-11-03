@@ -546,7 +546,11 @@ services:
   # Headless browser used by scripts/test.sh (docker compose run --rm tests ...).
   tests:
     profiles: ["test"]
-    build: ./tests
+    build:
+      context: ./tests
+      # e2e.py uses the authenticator's TOTP code to enrol a new starter.
+      additional_contexts:
+        authenticator: ./apps/authenticator
     image: identity-lab/tests:local
     network_mode: host
     user: "${LAB_UID}:${LAB_UID}"
