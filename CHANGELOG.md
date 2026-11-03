@@ -2,7 +2,7 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](docs/operating.md#upgrading-an-existing-lab).
 
-## Phase 4, foundation: MFA with one-time codes (2026-11-03)
+## Phase 4: multi-factor authentication with one-time codes (2026-11-03)
 
 **Added:**
 
@@ -10,13 +10,16 @@ What each phase added, and why an existing lab needs `scripts/setup.sh` then `sc
 - The `authenticator` container, grace's "phone": it makes codes from the same secret, with its own clock and no network. `scripts/authenticator.sh code grace` shows the current code; `scripts/authenticator.sh otpauth grace --qr` adds her to your own phone, on your own screen only.
 - Brute-force protection for the realm: 5 failed logins lock an account for 5 minutes.
 - `ivan`, a new starter with the *Configure OTP* required action, and admin events for the realm (without details).
-- Scenario 20, `totp-clock-drift`, scenario 21, `otp-policy-changed`, and scenario 22, `mfa-lockout`, with runbooks 20 to 22.
-- Tests: the authenticator's RFC 6238 test vectors and that it has no network; grace's MFA logins to the OIDC and SAML apps; a reused and a wrong code refused, logged, counted, and cleared; that alice and dave have no failed logins recorded; and that no TOTP secret or submitted code appears in any container's log, saved page or `test.log`.
+- `heidi`, a directory user in a new RADIUS policy group, `cn=mfa-required,ou=radius`, with her own TOTP secret (`HEIDI_TOTP_SECRET`). The RADIUS server answers her password with an Access-Challenge, and the NAS (`nas-auth`) answers it with her code, after checking its Message-Authenticator.
+- Scenario 20, `totp-clock-drift`, scenario 21, `otp-policy-changed`, scenario 22, `mfa-lockout`, and scenario 23, `radius-challenge-unsupported`, with runbooks 20 to 23.
+- Tests: the authenticator's RFC 6238 test vectors and that it has no network; heidi's RADIUS logins with a challenge, a reused, wrong or forged-`State` second round, and tampered challenges; grace's MFA logins to the OIDC and SAML apps; a reused and a wrong code refused, logged, counted, and cleared; that alice and dave have no failed logins recorded; and that no TOTP secret or submitted code appears in any container's log, saved page or `test.log`.
+
+**Fixed:** `e2e.py` printed the whole URL of a stuck login into `test.log`, and for Keycloak's login-action URLs that included `client_data`, which holds the OAuth state (`ldap-bind-failure` and `proxy-rate-limit` each left one). It now prints scheme, host and path only, and `scripts/test.sh` scans `test.log` for authorisation codes, OAuth state and the other one-time login values, as it already did the containers' logs.
 
 **Why the upgrade steps:**
 
-- `scripts/setup.sh` adds `GRACE_TOTP_SECRET` to your existing `.env` and writes `.state/authenticator/faketime.rc`. Compose refuses to start until the new `.env` value exists.
-- `scripts/test.sh --fresh`: grace, her authenticator, ivan, admin events and the brute-force settings are created at realm import, which only happens when the Keycloak database is new.
+- `scripts/setup.sh` adds `GRACE_TOTP_SECRET` and `HEIDI_TOTP_SECRET` to your existing `.env` and writes `.state/authenticator/faketime.rc`. Compose refuses to start until the new `.env` value exists.
+- `scripts/test.sh --fresh`: grace, her authenticator, ivan, admin events and the brute-force settings are created at realm import, which only happens when the Keycloak database is new, and heidi and `ou=radius` when the directory is first seeded. The NAS's new challenge-response setting is added to an existing NAS volume when it starts.
 
 ## Scenario 14 keeps its evidence (2026-10-23)
 

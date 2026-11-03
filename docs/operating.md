@@ -66,16 +66,17 @@ If you imported it earlier, remove it:
 | `dave` | dave@idlab.example | `lab-user` (LDAP group) | **From LDAP.** The automated tests use dave for the directory logins, the RADIUS logins, and the `ldap-bind-failure` and `radius-shared-secret-mismatch` scenarios. |
 | `erin` | erin@idlab.example | `lab-user`, `lab-admin` (LDAP groups) | From LDAP, with every lab role, like alice. |
 | `frank` | frank@idlab.example | *none* | From LDAP, in no group, like carol. |
+| `heidi` | heidi@idlab.example | `lab-user` (LDAP group) | **From LDAP, with MFA over RADIUS.** She's in `cn=mfa-required,ou=radius`, so after her password the RADIUS server asks the NAS for a one-time code (Access-Challenge). Her authenticator is `HEIDI_TOTP_SECRET`; read a code with `scripts/authenticator.sh code heidi`. Through Keycloak she signs in with her password only. |
 | `grace` | grace@idlab.example | `lab-user` | **Multi-factor.** A Keycloak user with a TOTP authenticator enrolled, so after the password Keycloak asks for a one-time code. See [MFA](#mfa-graces-one-time-codes). |
 | `ivan` | ivan@idlab.example | `lab-user` | **A new starter.** A Keycloak user with no authenticator yet: at login, Keycloak asks him to set one up (the *Configure OTP* required action). The tests reset him before each login, so he enrols from scratch every time. |
 
-alice, bob, carol, grace and ivan live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
+alice, bob, carol, grace and ivan live in Keycloak's own database. dave, erin, frank and heidi live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
 
-Over RADIUS, only the directory users can log in: FreeRADIUS reads the directory, not Keycloak, so alice, bob and carol get Access-Reject from the NAS.
+Over RADIUS, only the directory users can log in, and heidi also needs a one-time code: FreeRADIUS reads the directory, not Keycloak, so alice, bob and carol get Access-Reject from the NAS.
 
 Every user also carries Keycloak's default roles (`default-roles-idlab`, `offline_access`, `uma_authorization`), and these show up in the claims too. In SAML, the `role` attribute also includes the built-in `account` client's roles (`view-profile`, `manage-account`, …). The OIDC `realm_roles` claim has realm roles only.
 
-**Password:** all eight share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
+**Password:** all nine share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
 
 ```bash
 grep '^DEMO_PASSWORD=' .env | cut -d= -f2
@@ -215,6 +216,8 @@ Every scenario, what it breaks and the exact error and log line. The [README](..
 
 | 22 | `mfa-lockout` | OIDC (MFA user grace) | Five wrong one-time codes, 3 s apart, lock grace's account for 5 minutes (brute-force protection, `failureFactor` 5; the gaps keep the quick-login rule out of it). Her right password and code fail until an admin unlocks her. | Keycloak (as grace, after her correct password): `Invalid username or password.` Keycloak log: `type="LOGIN_ERROR", ... error="user_temporarily_disabled", ... username="grace"`, after five `invalid_user_credentials` at the code step | [22-mfa-lockout](../runbooks/22-mfa-lockout.md) |
 
+| 23 | `radius-challenge-unsupported` | RADIUS (NAS), MFA user heidi | heidi is in the directory's `mfa-required` group, so after her password the server answers Access-Challenge. The NAS's challenge-response setting is off, so, as RFC 2865 requires of a NAS that can't prompt, it treats the challenge as a reject. dave, without MFA, still logs in. | NAS: `nas: Access-Reject`, with no prompt for a code. Server log: `Auth: Challenge sent: [heidi] (from client nas port 0)` and then nothing for that attempt: no second Access-Request | [23-radius-challenge-unsupported](../runbooks/23-radius-challenge-unsupported.md) |
+
 ## How the scenarios work
 
 Every scenario is:
@@ -229,7 +232,7 @@ The proxy scenarios change one setting file each in `.state/proxy/` (healthy def
 
 The client-cert scenarios change the client, not the proxy: they remove the partner's certificate and key from `.state/mtls-client/`, or replace them with a lab-CA certificate that expired yesterday. `cors-blocked` changes the API's `.state/api/cors-allow-origin`, which it re-reads on every request.
 
-`totp-clock-drift` shifts the authenticator container's clock through `.state/authenticator/faketime.rc`, as `clock-skew` does the SAML SP's. `otp-policy-changed` changes the realm's OTP policy through the Admin REST API, sending the whole realm back with the policy changed, as the admin console does: Keycloak ignores a partial update without `otpPolicyType`. Its evidence is a silence: `scripts/test.sh` checks that Keycloak logged no `*_ERROR` event for the refused setup. `mfa-lockout` signs in through Keycloak's login forms with curl five times, with the demo password and a wrong code, and is detected from the account's brute-force record in the Admin REST API; fix is the admin's *Unlock*.
+`totp-clock-drift` shifts the authenticator container's clock through `.state/authenticator/faketime.rc`, as `clock-skew` does the SAML SP's. `otp-policy-changed` changes the realm's OTP policy through the Admin REST API, sending the whole realm back with the policy changed, as the admin console does: Keycloak ignores a partial update without `otpPolicyType`. Its evidence is a silence: `scripts/test.sh` checks that Keycloak logged no `*_ERROR` event for the refused setup. `radius-challenge-unsupported` changes the NAS, not the server, like `radius-shared-secret-mismatch`: its challenge-response setting is a file in the NAS's volume, `/var/lib/nas/challenge` (`yes` or `no`). `mfa-lockout` signs in through Keycloak's login forms with curl five times, with the demo password and a wrong code, and is detected from the account's brute-force record in the Admin REST API; fix is the admin's *Unlock*.
 
 The API scenarios change Keycloak, not the API, through the Admin REST API like `redirect-uri-mismatch`: the `audience idlab-api` mapper on the `oidc-rp` client, or that client's access token lifespan. Tokens issued before a change keep their old values until they expire, so test with a new login.
 
@@ -243,7 +246,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 331 checks cover:
+The 350 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -253,6 +256,7 @@ The 331 checks cover:
 - a real Chromium login to each app, directly and through the reverse proxy (including the edge OIDC app it reaches over plain HTTP), and to the OIDC app behind the egress proxy (with its back channel in Squid's log), as a local user (alice) and as an LDAP user (dave)
 - the direct OIDC app calling the API with its access token (with the token's `iat` and `exp` in the API's log), its debug page calling the API from the browser (cross-origin, under CORS), and handing out the raw token on `/debug/access-token`
 - a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
+- heidi's RADIUS login with MFA: her password gets an Access-Challenge whose Message-Authenticator the NAS verifies, and her code an Access-Accept; the same code again, a wrong code, and a `State` the server never issued all rejected; and, through a relay that tampers with the challenge (`tests/radius-tamper.pl`), the NAS refusing one without Message-Authenticator or with one that doesn't verify, and never answering it
 - the authenticator app passing the RFC 6238 test vectors and having no network; grace's MFA logins to the OIDC and SAML apps with a code from it; Keycloak refusing a code she has already used and a wrong one with `Invalid authenticator code.` (and logging `LOGIN_ERROR ... error="invalid_user_credentials"`), counting both failures, and the admin's unlock clearing them; and ivan, a new starter, setting up an authenticator at his first login
 - for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
 - scenario by scenario, what still works and what else the break leaves behind:

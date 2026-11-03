@@ -66,10 +66,12 @@ flowchart LR
     kc -- "LDAPS: bind as keycloak-svc,<br/>search users and groups,<br/>bind as the user" --> ldap
     pin -. "read on every login" .-> sp
     nas -- "Access-Request (PAP)<br/>+ Message-Authenticator,<br/>shared secret" --> radius
+    radius -- "Access-Challenge (MFA users):<br/>State, Reply-Message,<br/>Message-Authenticator" --> nas
+    authn -. "heidi's code, typed on the NAS" .-> nas
     radius -- "LDAPS: bind as radius-svc,<br/>search the user,<br/>bind as the user" --> ldap
     scripts["scripts/break.sh · fix.sh · status.sh"] -- "Admin REST API" --> kc
     scripts -- "pin cert, set clock offset" --> pin
-    scripts -- "set the NAS's secret<br/>(docker compose exec)" --> nas
+    scripts -- "set the NAS's secret and<br/>challenge-response (docker compose exec)" --> nas
     scripts -- "rewrite a proxy setting" --> pstate
     scripts -- "remove or replace<br/>the client certificate" --> mstate
     scripts -- "set the CORS origin" --> astate
@@ -87,7 +89,7 @@ flowchart LR
 - **Mutual TLS:** on `:8189` nginx accepts only clients that present a certificate from the lab CA, like a partner or device endpoint, and answers itself with what it verified. The partner system's certificate and key are in `.state/mtls-client/`; `scripts/test.sh` presents them from curl and Chromium.
 - **Back channel:** the OIDC RP talks to Keycloak directly over the compose network at `https://keycloak:8180`, rewriting the token, userinfo and JWKS endpoints from discovery to that address (`OIDC_BACKCHANNEL_BASE`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
 - **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
-- **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin and frank can log in over RADIUS as well as through Keycloak. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
+- **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin, frank and heidi can log in over RADIUS as well as through Keycloak. heidi is in `cn=mfa-required,ou=radius`: after her password the server answers Access-Challenge with a `State` it remembers for a minute, the NAS sends her one-time code back with that `State`, and `rlm_totp` checks it. The NAS answers challenges only while its own setting, `/var/lib/nas/challenge`, is `yes`, and only if the challenge carries Message-Authenticator. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
 - **MFA:** grace has a TOTP authenticator enrolled in Keycloak (algorithm, digits and period are stored with the enrolment). Keycloak's built-in browser flow asks for a code after the password from any user who has one, so nothing changed for the others. The `authenticator` container is her phone: it holds the same secret from `.env`, makes codes from its own clock, which libfaketime can shift, and has no network at all. A person reads a code with `scripts/authenticator.sh code grace`; `scripts/test.sh` reads one the same way and gives it to the browser on stdin. Brute-force protection is on for the whole realm: 5 failed logins (wrong passwords or wrong codes) lock an account for 5 minutes. ivan, a new starter, has no authenticator yet: the *Configure OTP* required action makes Keycloak show its setup page at his login.
 - **SP trust:** the SAML SP doesn't fetch IdP metadata. Like most SaaS service providers, it trusts the IdP certificate pinned at onboarding (`scripts/pin-idp-cert.sh`).
 
@@ -99,8 +101,10 @@ compose.yaml                 Keycloak, Postgres, OpenLDAP, FreeRADIUS, NAS, saml
                              proxy and the apps behind it, Squid and the OIDC RP behind it, tests (profile "test")
 keycloak/idlab-realm.json    realm, clients, demo users and LDAP federation; secrets injected via placeholders
 ldap/                        OpenLDAP image: cn=config and directory seed LDIF, first-boot entrypoint
-radius/                      FreeRADIUS image: minimal config, clients.conf, LDAP module, the one virtual server
-nas/                         NAS image: first-boot secret seeding and nas-auth (one Access-Request)
+radius/                      FreeRADIUS image: minimal config, clients.conf, LDAP, TOTP, cache, linelog and expr
+                             modules, the one virtual server (with MFA by Access-Challenge)
+nas/                         NAS image: first-boot secret and settings, and nas-auth (one login, answering an
+                             Access-Challenge when it can)
 apps/saml-sp/                Flask + python3-saml service provider
 apps/oidc-rp/                Flask + Authlib relying party (also the edge copy, with plain HTTP and forced HTTPS)
 apps/api/                    Flask + joserfc API (resource server) that accepts Keycloak access tokens
@@ -111,7 +115,7 @@ squid/                       Squid image built from source, squid.conf, and defa
                              each setting the egress proxy scenarios change
 scenarios/<name>.sh          detect / break / fix for each scenario
 scripts/                     setup, pin-idp-cert, break, fix, status, test, lib, authenticator
-tests/                       Playwright image and e2e.py
+tests/                       Playwright image, e2e.py, and radius-tamper.pl (a relay that tampers with challenges)
 runbooks/                    one support runbook per scenario
 docs/codespaces.md           step-by-step guide to running the lab in GitHub Codespaces
 docs/operating.md            URLs, demo users, first logins, tests, secrets, upgrading, troubleshooting

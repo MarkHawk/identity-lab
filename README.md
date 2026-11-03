@@ -3,7 +3,7 @@
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/MarkHawk/identity-lab?quickstart=1)
 [![CI](https://github.com/MarkHawk/identity-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/MarkHawk/identity-lab/actions/workflows/ci.yml)
 
-A Docker lab that reproduces real single sign-on and network login failures on demand: SAML, OIDC, LDAP, RADIUS, proxies and APIs. Each failure has a support runbook: the symptom, where to look, the fix and what to ask the customer. An automated test breaks every scenario, checks the user sees the right error, fixes it and proves the login works again.
+A Docker lab that reproduces real single sign-on and network login failures on demand: SAML, OIDC, LDAP, RADIUS, proxies, APIs and multi-factor authentication. Each failure has a support runbook: the symptom, where to look, the fix and what to ask the customer. An automated test breaks every scenario, checks the user sees the right error, fixes it and proves the login works again.
 
 When enterprise SSO breaks, support usually gets only *"SSO stopped working for everyone"*. The cause is buried in signed XML, tokens, certificates, clocks and two teams' logs, and this lab makes it safe to practise finding it.
 
@@ -104,6 +104,7 @@ No Linux machine? [Run it in GitHub Codespaces](docs/codespaces.md), step by ste
 | 20 | `totp-clock-drift` | Keycloak, MFA user only: `Invalid authenticator code.` after the password is accepted | [20-totp-clock-drift](runbooks/20-totp-clock-drift.md) |
 | 21 | `otp-policy-changed` | Keycloak, new starters only: `Invalid authenticator code.` on the authenticator setup page. Enrolled users still sign in. | [21-otp-policy-changed](runbooks/21-otp-policy-changed.md) |
 | 22 | `mfa-lockout` | Keycloak, after five wrong codes: `Invalid username or password.` for the right password | [22-mfa-lockout](runbooks/22-mfa-lockout.md) |
+| 23 | `radius-challenge-unsupported` | NAS, MFA users only: `nas: Access-Reject` straight after the password, never asked for a code. dave still logs in. | [23-radius-challenge-unsupported](runbooks/23-radius-challenge-unsupported.md) |
 
 ## Go deeper
 
