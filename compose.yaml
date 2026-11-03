@@ -513,6 +513,35 @@ services:
     healthcheck: *app-healthcheck
     restart: unless-stopped
 
+  # The authenticator app on an MFA user's phone: it makes TOTP codes from the
+  # enrolled secret. No network at all; read a code with
+  # `scripts/authenticator.sh code grace`.
+  authenticator:
+    build: ./apps/authenticator
+    image: identity-lab/authenticator:local
+    user: "${LAB_UID}:${LAB_UID}"
+    init: true
+    network_mode: none
+    environment:
+      GRACE_TOTP_SECRET: ${GRACE_TOTP_SECRET:?run scripts/setup.sh}
+      # libfaketime, as in saml-sp: scenarios/totp-clock-drift.sh writes an
+      # offset to faketime.rc ("+0" normally), re-read on every clock call,
+      # so the "phone's" clock moves and nothing else does.
+      LD_PRELOAD: /usr/local/lib/faketime/libfaketime.so.1
+      FAKETIME_TIMESTAMP_FILE: /var/lib/idlab/state/faketime.rc
+      FAKETIME_NO_CACHE: "1"
+    volumes:
+      - ./.state/authenticator:/var/lib/idlab/state:ro
+    # Which time steps it has shown (code --new), forgotten on restart.
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "authenticator", "selftest"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   # Headless browser used by scripts/test.sh (docker compose run --rm tests ...).
   tests:
     profiles: ["test"]
