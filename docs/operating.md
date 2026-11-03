@@ -67,14 +67,15 @@ If you imported it earlier, remove it:
 | `erin` | erin@idlab.example | `lab-user`, `lab-admin` (LDAP groups) | From LDAP, with every lab role, like alice. |
 | `frank` | frank@idlab.example | *none* | From LDAP, in no group, like carol. |
 | `grace` | grace@idlab.example | `lab-user` | **Multi-factor.** A Keycloak user with a TOTP authenticator enrolled, so after the password Keycloak asks for a one-time code. See [MFA](#mfa-graces-one-time-codes). |
+| `ivan` | ivan@idlab.example | `lab-user` | **A new starter.** A Keycloak user with no authenticator yet: at login, Keycloak asks him to set one up (the *Configure OTP* required action). The tests reset him before each login, so he enrols from scratch every time. |
 
-alice, bob, carol and grace live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
+alice, bob, carol, grace and ivan live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
 
 Over RADIUS, only the directory users can log in: FreeRADIUS reads the directory, not Keycloak, so alice, bob and carol get Access-Reject from the NAS.
 
 Every user also carries Keycloak's default roles (`default-roles-idlab`, `offline_access`, `uma_authorization`), and these show up in the claims too. In SAML, the `role` attribute also includes the built-in `account` client's roles (`view-profile`, `manage-account`, …). The OIDC `realm_roles` claim has realm roles only.
 
-**Password:** all seven share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
+**Password:** all eight share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
 
 ```bash
 grep '^DEMO_PASSWORD=' .env | cut -d= -f2
@@ -210,6 +211,8 @@ Every scenario, what it breaks and the exact error and log line. The [README](..
 
 | 20 | `totp-clock-drift` | OIDC (MFA user grace) | The clock on grace's authenticator app (the `authenticator` container, libfaketime) runs 3 minutes fast: her codes are 6 steps of 30 s ahead, and Keycloak accepts only 1 step either side. Keycloak's clock is right. | Keycloak (as grace, after her password): `Invalid authenticator code.` Keycloak log: `type="LOGIN_ERROR", ... userId="<grace>", error="invalid_user_credentials", ... selected_credential_id="<her OTP credential>"` | [20-totp-clock-drift](../runbooks/20-totp-clock-drift.md) |
 
+| 21 | `otp-policy-changed` | OIDC (new starter ivan) | An admin sets the realm's OTP policy to HmacSHA256 and 8 digits. Enrolments keep their own values, so grace still signs in; ivan's app, like many, ignores those values in the QR code and makes SHA1, 6-digit codes. | Keycloak's Mobile Authenticator Setup page (as ivan): `Invalid authenticator code.` Keycloak's log: nothing (it raises no event for a refused setup code). Admin events: `UPDATE REALM` at the time of the change | [21-otp-policy-changed](../runbooks/21-otp-policy-changed.md) |
+
 ## How the scenarios work
 
 Every scenario is:
@@ -224,6 +227,8 @@ The proxy scenarios change one setting file each in `.state/proxy/` (healthy def
 
 The client-cert scenarios change the client, not the proxy: they remove the partner's certificate and key from `.state/mtls-client/`, or replace them with a lab-CA certificate that expired yesterday. `cors-blocked` changes the API's `.state/api/cors-allow-origin`, which it re-reads on every request.
 
+`totp-clock-drift` shifts the authenticator container's clock through `.state/authenticator/faketime.rc`, as `clock-skew` does the SAML SP's. `otp-policy-changed` changes the realm's OTP policy through the Admin REST API, sending the whole realm back with the policy changed, as the admin console does: Keycloak ignores a partial update without `otpPolicyType`. Its evidence is a silence: `scripts/test.sh` checks that Keycloak logged no `*_ERROR` event for the refused setup.
+
 The API scenarios change Keycloak, not the API, through the Admin REST API like `redirect-uri-mismatch`: the `audience idlab-api` mapper on the `oidc-rp` client, or that client's access token lifespan. Tokens issued before a change keep their old values until they expire, so test with a new login.
 
 The egress proxy scenarios 11 to 13 work the same way on Squid: one include file each in `.state/squid/` (healthy defaults in `squid/defaults/`), applied with `squid -k parse && squid -k reconfigure`. `proxy-bypass` changes the app instead: its `HTTPS_PROXY` and `NO_PROXY` are in `.state/oidc-rp-egress/proxy.env`, and as with any environment variable the container is recreated to pick them up. For 11 to 13 the app fails after the password, at the token request, because it already has Keycloak's discovery document; if it has restarted since its last login, the same error appears straight after **Log in**.
@@ -236,7 +241,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 308 checks cover:
+The 320 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -246,7 +251,7 @@ The 308 checks cover:
 - a real Chromium login to each app, directly and through the reverse proxy (including the edge OIDC app it reaches over plain HTTP), and to the OIDC app behind the egress proxy (with its back channel in Squid's log), as a local user (alice) and as an LDAP user (dave)
 - the direct OIDC app calling the API with its access token (with the token's `iat` and `exp` in the API's log), its debug page calling the API from the browser (cross-origin, under CORS), and handing out the raw token on `/debug/access-token`
 - a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
-- the authenticator app passing the RFC 6238 test vectors and having no network; grace's MFA logins to the OIDC and SAML apps with a code from it; Keycloak refusing a code she has already used and a wrong one with `Invalid authenticator code.` (and logging `LOGIN_ERROR ... error="invalid_user_credentials"`), counting both failures, and the admin's unlock clearing them
+- the authenticator app passing the RFC 6238 test vectors and having no network; grace's MFA logins to the OIDC and SAML apps with a code from it; Keycloak refusing a code she has already used and a wrong one with `Invalid authenticator code.` (and logging `LOGIN_ERROR ... error="invalid_user_credentials"`), counting both failures, and the admin's unlock clearing them; and ivan, a new starter, setting up an authenticator at his first login
 - for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
 - scenario by scenario, what still works and what else the break leaves behind:
   - `ldap-bind-failure`: alice (a local user) still logs in while LDAP users can't

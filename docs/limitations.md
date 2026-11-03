@@ -13,6 +13,7 @@ What the lab doesn't do, or does differently from production.
 - **The OIDC app's debug page hands its access token to its own script** (through `/debug/access-token`) for the browser's API call. A real single-page app gets its own tokens; a server-side app shouldn't expose them to the page.
 - **Single-worker apps.** Each app runs one gunicorn worker with an in-memory store for decoded logins. That's fine for a lab, not for production.
 - **MFA logins in the tests wait for a fresh code.** Keycloak refuses a code that has been used, so each of grace's test logins waits for the authenticator's next 30-second step. That adds a few minutes to a run.
+- **ivan's setup codes aren't in the leak scan.** `e2e.py` makes them in the browser container from the key on the setup page, so `scripts/test.sh` never sees them. That key is scrubbed from the saved page and checked for there; the codes made from it are not searched for in the logs.
 - **One authenticator, and its secret is in its environment.** The authenticator container gets grace's TOTP secret as an environment variable, as the other containers get theirs, so `docker inspect` shows it to anyone who can run Docker on the lab host. A real phone keeps it in secure storage.
 - **Tested platform.** The lab has only been tested on x86_64 Linux.
 - **Codespaces: no browser logins at the forwarded URLs.** In a codespace, use `scripts/test.sh`, or forward the ports to your own `localhost` (see the [Codespaces guide](codespaces.md#2-open-it-in-desktop-vs-code)).
