@@ -440,6 +440,14 @@ log_has()      { # <since> <service> <pattern>
   grep -E -m1 -- "$3" <<<"$logs" \
     || { echo "no log line matching /$3/ in $2 since $1"; return 1; }
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" log_lacks ...
+log_lacks()    { # <since> <service> <pattern> -- no line matches
+  local logs n
+  logs="$(compose logs --no-log-prefix --since "$1" "$2")"
+  n="$(grep -cE -- "$3" <<<"$logs" || true)"
+  echo "$(grep -c . <<<"$logs" || true) line(s) from $2 since $1; matching /$3/: $n"
+  (( n == 0 ))
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" healthy ...
 healthy()      {
   local st
@@ -568,7 +576,13 @@ run_scenario() {
   check "$label$name: break again is a no-op"  "$LAB_ROOT/scripts/break.sh" "$name"
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   check "$label$name: $user sees \"$SCENARIO_EXPECT\"" login_as "$user" "$SCENARIO_APP" --expect-error "$SCENARIO_EXPECT"
-  check "$label$name: log shows ${SCENARIO_LOG#* }" log_has "$since" "${SCENARIO_LOG%% *}" "${SCENARIO_LOG#* }"
+  if [[ -n "${SCENARIO_LOG:-}" ]]; then
+    check "$label$name: log shows ${SCENARIO_LOG#* }" log_has "$since" "${SCENARIO_LOG%% *}" "${SCENARIO_LOG#* }"
+  fi
+  if [[ -n "${SCENARIO_LOG_ABSENT:-}" ]]; then
+    check "$label$name: ${SCENARIO_LOG_ABSENT%% *} logs nothing matching ${SCENARIO_LOG_ABSENT#* }" \
+      log_lacks "$since" "${SCENARIO_LOG_ABSENT%% *}" "${SCENARIO_LOG_ABSENT#* }"
+  fi
   if [[ -n "${SCENARIO_UNAFFECTED:-}" ]]; then
     read -r ua_app ua_user <<<"$SCENARIO_UNAFFECTED"
     check "$label$name: $ua_user still logs in to $ua_app while broken" login_as "$ua_user" "$ua_app" --expect ok

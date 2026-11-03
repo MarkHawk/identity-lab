@@ -144,6 +144,8 @@ REALM=idlab
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
+#   SCENARIO_LOG_ABSENT optional, instead of SCENARIO_LOG: "<service> <pattern>" that must
+#                      NOT appear, for a failure the software doesn't log
 #   SCENARIO_USER      optional: demo user who sees the failure (default alice)
 #   SCENARIO_UNAFFECTED optional: "<app> <user>" who must still log in while broken
 #   SCENARIO_ALSO      optional: what scenario_also_check proves; test.sh runs it while broken
@@ -161,7 +163,7 @@ load_scenario() {
   [[ "$name" =~ ^[a-z0-9-]+$ && -f "$SCENARIOS_DIR/$name.sh" ]] \
     || die "unknown scenario '$name' (available: $(scenario_names | tr '\n' ' '))"
   unset -f scenario_detect scenario_break scenario_fix scenario_also_check
-  unset SCENARIO_USER SCENARIO_UNAFFECTED SCENARIO_ALSO
+  unset SCENARIO_USER SCENARIO_UNAFFECTED SCENARIO_ALSO SCENARIO_LOG SCENARIO_LOG_ABSENT
   # shellcheck disable=SC1090
   source "$SCENARIOS_DIR/$name.sh"
 }
