@@ -1,8 +1,12 @@
 # rlm_always: modules that just return a fixed result, used by name in
-# sites/default ("reject", "ok").
+# sites/default ("reject", "ok", "handled").
 always reject {
 	rcode = reject
 }
 always ok {
 	rcode = ok
+}
+# Ends authenticate with the reply as built: the Access-Challenge for MFA.
+always handled {
+	rcode = handled
 }

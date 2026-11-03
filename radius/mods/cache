@@ -1,0 +1,13 @@
+# rlm_cache: who passed the first factor, keyed on the State this server
+# sent with its Access-Challenge. The second Access-Request must bring the
+# same State back for the same User-Name, within a minute, or it's rejected,
+# so the code step can't be reached without the password.
+cache mfa_state {
+	driver = "rlm_cache_rbtree"
+	key = "%{control:Tmp-String-0}"
+	ttl = 60
+	add_stats = no
+	update {
+		&control:Tmp-String-1 := &User-Name
+	}
+}

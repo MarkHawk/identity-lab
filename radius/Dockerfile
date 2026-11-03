@@ -8,7 +8,7 @@ FROM freeradius/freeradius-server:3.2.10@sha256:cc7fd136e7b03e7b332d94297530318e
 RUN find /etc/freeradius -mindepth 1 -maxdepth 1 ! -name dictionary -exec rm -rf {} + \
  && mkdir -p /etc/freeradius/mods /etc/freeradius/sites
 COPY --chmod=0644 radiusd.conf clients.conf /etc/freeradius/
-COPY --chmod=0644 mods/always mods/ldap /etc/freeradius/mods/
+COPY --chmod=0644 mods/always mods/expr mods/ldap mods/totp mods/cache mods/linelog /etc/freeradius/mods/
 COPY --chmod=0644 sites/default /etc/freeradius/sites/
 # The image's entrypoint runs "freeradius -f" plus these arguments:
 # log to stdout so `docker compose logs radius` shows every request.

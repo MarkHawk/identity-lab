@@ -15,6 +15,18 @@ ldap {
 		scope = 'one'
 	}
 
+	# Policy groups for RADIUS, under ou=radius (Keycloak doesn't read that
+	# branch): sites/default asks LDAP-Group == "mfa-required".
+	group {
+		base_dn = "ou=radius,${..base_dn}"
+		filter = '(objectClass=groupOfNames)'
+		scope = 'one'
+		name_attribute = cn
+		membership_filter = "(member=%{control:Ldap-UserDn})"
+		cacheable_name = no
+		cacheable_dn = no
+	}
+
 	options {
 		chase_referrals = no
 		res_timeout = 5

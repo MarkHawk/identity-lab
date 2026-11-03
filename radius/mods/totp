@@ -1,0 +1,11 @@
+# rlm_totp: check a one-time code (TOTP, RFC 6238) against the user's
+# secret. sites/default sets &control:TOTP-Secret (base32) and
+# &TOTP-Password (the code the user typed). The same values as Keycloak's
+# OTP policy: 30-second steps, 6 digits, one step either side.
+totp {
+	time_step = 30
+	otp_length = 6
+	lookback_steps = 1
+	lookback_interval = 30
+	lookforward_steps = 1
+}

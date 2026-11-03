@@ -1,4 +1,7 @@
 # The lab's only virtual server: PAP Access-Requests checked against LDAP.
+# Users in the directory's mfa-required group (ou=radius) also need a
+# one-time code: after their password, the server answers Access-Challenge,
+# and the NAS sends a second Access-Request with the code and the State.
 server default {
 	listen {
 		type = auth
@@ -17,12 +20,57 @@ server default {
 			reject
 		}
 
-		# Find the user. If found and the NAS sent a password, check it by
-		# binding to the directory as that user.
-		ldap
-		if ((ok || updated) && &User-Password) {
+		if (&State) {
+			# Round 2: a one-time code, answering a challenge this server sent.
+			# The State must be one it issued, for this user, under a minute
+			# ago (mods/cache); then it's used up.
 			update control {
-				&Auth-Type := ldap
+				&Tmp-String-0 := "%{string:State}"
+				&Cache-Read-Only := yes
+			}
+			mfa_state
+			if (!&control:Tmp-String-1 || (&control:Tmp-String-1 != &User-Name)) {
+				reject
+			}
+			update control {
+				&Cache-Read-Only !* ANY
+				&Cache-TTL := 0
+			}
+			mfa_state
+
+			# The user's TOTP secret (base32). A real server keeps these in
+			# the directory or a database; the lab has one MFA user here.
+			switch &User-Name {
+				case "heidi" {
+					update control {
+						&TOTP-Secret := "$ENV{HEIDI_TOTP_SECRET}"
+					}
+				}
+				case {
+					reject
+				}
+			}
+			update request {
+				&TOTP-Password := &User-Password
+			}
+			update control {
+				&Auth-Type := totp
+			}
+		}
+		else {
+			# Round 1, or the only round: find the user. If found and the NAS
+			# sent a password, check it by binding to the directory as that
+			# user, and note whether a second factor is needed.
+			ldap
+			if ((ok || updated) && &User-Password) {
+				update control {
+					&Auth-Type := ldap
+				}
+				if (LDAP-Group == "mfa-required") {
+					update control {
+						&Tmp-String-2 := "mfa"
+					}
+				}
 			}
 		}
 
@@ -35,6 +83,22 @@ server default {
 	authenticate {
 		Auth-Type LDAP {
 			ldap
+			# The password was right, and this user needs a code as well:
+			# challenge instead of accepting. post-auth remembers the State.
+			if (ok && (&control:Tmp-String-2 == "mfa")) {
+				update control {
+					&Tmp-String-0 := "%{randstr:hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh}"
+					&Response-Packet-Type := Access-Challenge
+				}
+				update reply {
+					&State := "%{control:Tmp-String-0}"
+					&Reply-Message := "Enter the code from your authenticator app"
+				}
+				handled
+			}
+		}
+		Auth-Type totp {
+			totp
 		}
 	}
 
@@ -47,6 +111,10 @@ server default {
 
 	post-auth {
 		Post-Auth-Type REJECT {
+		}
+		Post-Auth-Type Challenge {
+			mfa_state
+			mfa_challenge_log
 		}
 	}
 }

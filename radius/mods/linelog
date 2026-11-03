@@ -1,0 +1,7 @@
+# rlm_linelog: one line on stdout when the server sends an Access-Challenge,
+# which FreeRADIUS doesn't log by itself (it logs only Login OK and Login
+# incorrect). Shaped like those lines.
+linelog mfa_challenge_log {
+	filename = /dev/stdout
+	format = "%t : Auth: Challenge sent: [%{User-Name}] (from client %{Client-Shortname} port %{%{NAS-Port}:-0})"
+}

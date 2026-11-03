@@ -86,6 +86,8 @@ services:
       # Expanded by FreeRADIUS as $ENV{...} in clients.conf and mods/ldap.
       RADIUS_SECRET: ${RADIUS_SECRET:?run scripts/setup.sh}
       RADIUS_LDAP_BIND_PASSWORD: ${RADIUS_LDAP_BIND_PASSWORD:?run scripts/setup.sh}
+      # heidi's one-time code secret, in sites/default (MFA over RADIUS).
+      HEIDI_TOTP_SECRET: ${HEIDI_TOTP_SECRET:?run scripts/setup.sh}
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
     networks:
@@ -525,6 +527,7 @@ services:
     network_mode: none
     environment:
       GRACE_TOTP_SECRET: ${GRACE_TOTP_SECRET:?run scripts/setup.sh}
+      HEIDI_TOTP_SECRET: ${HEIDI_TOTP_SECRET:?run scripts/setup.sh}
       # libfaketime, as in saml-sp: scenarios/totp-clock-drift.sh writes an
       # offset to faketime.rc ("+0" normally), re-read on every clock call,
       # so the "phone's" clock moves and nothing else does.
