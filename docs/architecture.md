@@ -8,6 +8,7 @@ The full picture: every container, network and channel, and what the scenario sc
 flowchart LR
     user(["Browser<br/>(you, or Playwright in tests)"])
     partner(["Partner system<br/>(curl, or Playwright in tests)"])
+    authn["Authenticator app<br/>grace's phone · TOTP<br/>no network · libfaketime"]
 
     subgraph host["Docker host · LAB_HOST (idlab.home / localhost)"]
         direction LR
@@ -39,6 +40,8 @@ flowchart LR
     end
 
     user -- "AuthnRequest / login form" --> kc
+    authn -. "one-time code, read off the screen<br/>(docker compose exec)" .-> user
+    user -- "password, then one-time code (grace)" --> kc
     user -- "SAMLResponse (POST)" --> sp
     user -- "code + state (redirect)" --> rp
     rp -- "back channel: discovery, token,<br/>userinfo, JWKS · https://keycloak:8180" --> kc
@@ -70,6 +73,7 @@ flowchart LR
     scripts -- "rewrite a proxy setting" --> pstate
     scripts -- "remove or replace<br/>the client certificate" --> mstate
     scripts -- "set the CORS origin" --> astate
+    scripts -- "set the phone's clock offset" --> authn
     scripts -- "rewrite a Squid setting,<br/>recreate the egress RP" --> sstate
 ```
 
@@ -84,6 +88,7 @@ flowchart LR
 - **Back channel:** the OIDC RP talks to Keycloak directly over the compose network at `https://keycloak:8180`, rewriting the token, userinfo and JWKS endpoints from discovery to that address (`OIDC_BACKCHANNEL_BASE`). The same images therefore work with `LAB_HOST=idlab.home` on a LAN and `LAB_HOST=localhost` in CI.
 - **Directory:** Keycloak federates users from OpenLDAP (read only, imported on first login). It binds as a dedicated read-only service account, `cn=keycloak-svc`, to find users and their groups, then binds as the user to check the password. The directory has no host port; it's reachable only on the compose network.
 - **RADIUS:** the NAS stands in for a switch, wireless controller or VPN gateway. It sends PAP Access-Requests to FreeRADIUS, which finds the user in the directory as its own read-only account, `cn=radius-svc`, and checks the password by binding as the user. So dave, erin and frank can log in over RADIUS as well as through Keycloak. RADIUS publishes no host port. The NAS sits on an internal network with a fixed IP, because the server identifies clients by source address.
+- **MFA:** grace has a TOTP authenticator enrolled in Keycloak (algorithm, digits and period are stored with the enrolment). Keycloak's built-in browser flow asks for a code after the password from any user who has one, so nothing changed for the others. The `authenticator` container is her phone: it holds the same secret from `.env`, makes codes from its own clock, which libfaketime can shift, and has no network at all. A person reads a code with `scripts/authenticator.sh code grace`; `scripts/test.sh` reads one the same way and gives it to the browser on stdin. Brute-force protection is on for the whole realm: 5 failed logins (wrong passwords or wrong codes) lock an account for 5 minutes.
 - **SP trust:** the SAML SP doesn't fetch IdP metadata. Like most SaaS service providers, it trusts the IdP certificate pinned at onboarding (`scripts/pin-idp-cert.sh`).
 
 ## Repository layout
@@ -99,12 +104,13 @@ nas/                         NAS image: first-boot secret seeding and nas-auth (
 apps/saml-sp/                Flask + python3-saml service provider
 apps/oidc-rp/                Flask + Authlib relying party (also the edge copy, with plain HTTP and forced HTTPS)
 apps/api/                    Flask + joserfc API (resource server) that accepts Keycloak access tokens
+apps/authenticator/          the MFA users' authenticator app (TOTP, Python standard library), with no network
 proxy/                       nginx.conf for the reverse proxy (with its mutual-TLS route), and defaults/ with
                              the healthy value of each setting the proxy scenarios change
 squid/                       Squid image built from source, squid.conf, and defaults/ with the healthy value of
                              each setting the egress proxy scenarios change
 scenarios/<name>.sh          detect / break / fix for each scenario
-scripts/                     setup, pin-idp-cert, break, fix, status, test, lib
+scripts/                     setup, pin-idp-cert, break, fix, status, test, lib, authenticator
 tests/                       Playwright image and e2e.py
 runbooks/                    one support runbook per scenario
 docs/codespaces.md           step-by-step guide to running the lab in GitHub Codespaces

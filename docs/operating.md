@@ -4,6 +4,7 @@ How to use the lab day to day, once it's running. Start with the [Quick start](.
 
 - [Open the apps: HTTPS only](#open-the-apps-https-only): the URLs, the certificate warning, and why not to trust the lab CA
 - [Demo users](#demo-users): who to sign in as, and how to see the password
+- [MFA: grace's one-time codes](#mfa-graces-one-time-codes): the authenticator app, and adding grace to your own phone
 - [First logins](#first-logins): OIDC, SAML and single sign-on, then one scenario end to end
 - [More scenarios to try](#more-scenarios-to-try): break, check and fix commands for a few more
 - [Scenario reference](#scenario-reference): every scenario, what it breaks, the exact error and log line
@@ -65,20 +66,44 @@ If you imported it earlier, remove it:
 | `dave` | dave@idlab.example | `lab-user` (LDAP group) | **From LDAP.** The automated tests use dave for the directory logins, the RADIUS logins, and the `ldap-bind-failure` and `radius-shared-secret-mismatch` scenarios. |
 | `erin` | erin@idlab.example | `lab-user`, `lab-admin` (LDAP groups) | From LDAP, with every lab role, like alice. |
 | `frank` | frank@idlab.example | *none* | From LDAP, in no group, like carol. |
+| `grace` | grace@idlab.example | `lab-user` | **Multi-factor.** A Keycloak user with a TOTP authenticator enrolled, so after the password Keycloak asks for a one-time code. See [MFA](#mfa-graces-one-time-codes). |
 
-alice, bob and carol live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
+alice, bob, carol and grace live in Keycloak's own database. dave, erin and frank live in the directory under `ou=people,dc=idlab,dc=example`. Keycloak imports each one on their first login, and maps their LDAP groups (`ou=groups`) to the realm roles of the same name. So the claims look the same whichever kind of user signs in. In the admin console, federated users show a *Federation link* to `idlab-ldap`.
 
 Over RADIUS, only the directory users can log in: FreeRADIUS reads the directory, not Keycloak, so alice, bob and carol get Access-Reject from the NAS.
 
 Every user also carries Keycloak's default roles (`default-roles-idlab`, `offline_access`, `uma_authorization`), and these show up in the claims too. In SAML, the `role` attribute also includes the built-in `account` client's roles (`view-profile`, `manage-account`, …). The OIDC `realm_roles` claim has realm roles only.
 
-**Password:** all six share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
+**Password:** all seven share `DEMO_PASSWORD`, which `setup.sh` generates at random into `.env`. It isn't written anywhere else. To see it on your own screen, run this on the lab host:
 
 ```bash
 grep '^DEMO_PASSWORD=' .env | cut -d= -f2
 ```
 
 Don't paste it into tickets, chats or screenshots. If it does leak, [rotate the secrets](#rotating-secrets).
+
+## MFA: grace's one-time codes
+
+grace signs in with the demo password and then a one-time code: a time-based one-time password (TOTP, RFC 6238), the 6-digit code an authenticator app such as Google Authenticator shows. Her authenticator is enrolled in advance. `setup.sh` generates its secret into `.env` as `GRACE_TOTP_SECRET`, and the realm import gives it to Keycloak.
+
+Keycloak's standard browser flow asks for a code only from users who have an authenticator enrolled. So alice, bob, carol and the directory users sign in exactly as before.
+
+**The authenticator app.** The `authenticator` container plays grace's phone. It holds her secret, has its own clock and no network. Ask it for the code it shows now:
+
+```bash
+scripts/authenticator.sh code grace     # 6 digits; a new one every 30 seconds
+```
+
+Then open **https://idlab.home:8182**, click **Log in with OIDC**, sign in as `grace` with the demo password, and type the code when Keycloak asks. Each code works once: to sign in again within the same 30 seconds, wait for the next code.
+
+**Add grace to your own phone** (optional). This prints her secret, so run it on your own screen only:
+
+```bash
+scripts/authenticator.sh otpauth grace --qr   # a QR code to scan with your authenticator app
+scripts/authenticator.sh otpauth grace        # the otpauth:// URI, for apps that take one
+```
+
+It refuses to write to a pipe or a file. Don't scan it during a screen share, and don't paste the URI into a ticket, chat or screenshot. If it leaks, [rotate the secrets](#rotating-secrets) and add grace to your phone again. Your phone's codes and the lab's are the same, so a code used on one is used up for both.
 
 ## First logins
 
@@ -209,7 +234,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 282 checks cover:
+The 295 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -219,6 +244,7 @@ The 282 checks cover:
 - a real Chromium login to each app, directly and through the reverse proxy (including the edge OIDC app it reaches over plain HTTP), and to the OIDC app behind the egress proxy (with its back channel in Squid's log), as a local user (alice) and as an LDAP user (dave)
 - the direct OIDC app calling the API with its access token (with the token's `iat` and `exp` in the API's log), its debug page calling the API from the browser (cross-origin, under CORS), and handing out the raw token on `/debug/access-token`
 - a RADIUS login from the NAS as dave (Access-Accept), and with a wrong password (Access-Reject)
+- the authenticator app passing the RFC 6238 test vectors and having no network; grace's MFA logins to the OIDC and SAML apps with a code from it; Keycloak refusing a code she has already used and a wrong one with `Invalid authenticator code.` (and logging `LOGIN_ERROR ... error="invalid_user_credentials"`), counting both failures, and the admin's unlock clearing them
 - for every scenario: break (twice), detected as broken, the exact error in the browser (or in the NAS's output), the matching log line, fix (twice), detected as healthy, and a successful login again
 - scenario by scenario, what still works and what else the break leaves behind:
   - `ldap-bind-failure`: alice (a local user) still logs in while LDAP users can't
@@ -233,9 +259,10 @@ The 282 checks cover:
   - the client-cert scenarios: curl gets the same 400 and the proxy's error log gives nginx's reason
   - `cors-blocked`: the server-side API call still works, and the API logged the browser's preflight and its successful `GET`
   - `proxy-bypass`: the fix saved the broken container's log, with its `backchannel_failed` line, before recreating it
-- last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, no JWT (access or ID token) in any container's log, saved page or `test.log`, and no private key in any container's log or `test.log`
+- that brute-force protection, which is on for the whole realm, has recorded no failed login for alice or dave
+- last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, no JWT (access or ID token) in any container's log, saved page or `test.log`, no private key in any container's log or `test.log`, and no TOTP secret, or one-time code that was submitted, in any container's log, saved page or `test.log`
 
-`scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log.
+`scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log. One-time codes reach the browser on its standard input, never on a command line, so they're not in the log either.
 
 Screenshots, page HTML and a full log go to `test-results/`. [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
 
@@ -246,9 +273,9 @@ scripts/setup.sh --rotate     # new random value for every secret in .env; certi
 scripts/test.sh --fresh       # recreate the lab with them, then prove it still works
 ```
 
-`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `OIDC_PROXIED_CLIENT_SECRET`, `OIDC_EGRESS_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET`, `EGRESS_PROXY_PASSWORD` and the two apps' session keys. It prints none of them.
+`--rotate` replaces `KC_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `DEMO_PASSWORD`, `OIDC_CLIENT_SECRET`, `OIDC_PROXIED_CLIENT_SECRET`, `OIDC_EGRESS_CLIENT_SECRET`, `LDAP_ADMIN_PASSWORD`, `LDAP_BIND_PASSWORD`, `RADIUS_LDAP_BIND_PASSWORD`, `RADIUS_SECRET`, `EGRESS_PROXY_PASSWORD`, grace's `GRACE_TOTP_SECRET` and the two apps' session keys. It prints none of them.
 
-The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secrets and the directory's passwords only receive their values when the databases are first created, and the NAS stores its copy of the RADIUS secret when its volume is first created. `--fresh` deletes the Keycloak, LDAP and NAS volumes, re-imports the realm, re-seeds the directory and the NAS. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again.
+The second step matters. Postgres, the Keycloak admin account, the demo users, the OIDC client secrets and the directory's passwords only receive their values when the databases are first created, and the NAS stores its copy of the RADIUS secret when its volume is first created. `--fresh` deletes the Keycloak, LDAP and NAS volumes, re-imports the realm, re-seeds the directory and the NAS. That also discards anything you changed by hand in the admin console. Afterwards, look up the new demo password with `grep '^DEMO_PASSWORD=' .env | cut -d= -f2`. Existing browser sessions will no longer work, so sign in again. If you added grace to your phone, add her again: the old entry's codes no longer work.
 
 When you'd do it:
 
