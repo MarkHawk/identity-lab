@@ -5,6 +5,19 @@
 
 A Docker lab that reproduces real single sign-on and network login failures on demand: SAML, OIDC, LDAP, RADIUS, proxies and APIs. Each failure has a support runbook: the symptom, where to look, the fix and what to ask the customer. An automated test breaks every scenario, checks the user sees the right error, fixes it and proves the login works again.
 
+<table>
+<tr>
+<td width="58%"><img src="docs/images/clock-skew-error.png" alt="The SAML app's error page: Could not validate timestamp: expired. Check system clock. SP clock minus IssueInstant: +600 s."></td>
+<td>
+<b><a href="runbooks/02-clock-skew.md">Runbook 02: clock skew</a></b><br><br>
+<b>Symptom:</b> the user signs in at the IdP, then the app refuses the assertion as expired.<br><br>
+<b>Where to look:</b> the app's clock against real UTC.<br><code>date -u; docker compose exec saml-sp date -u</code><br><br>
+<b>Fix:</b> correct the clock on the app's host. Don't widen the tolerance to hide it.
+</td>
+</tr>
+<tr><td colspan="2"><i>A broken login from a real <code>scripts/test.sh</code> run, beside the start of its runbook.</i></td></tr>
+</table>
+
 **New here?** Read the [walkthrough](docs/walkthrough.md): real support tickets followed from the first message to the fix.
 
 ## How it fits together
