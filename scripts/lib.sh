@@ -181,6 +181,15 @@ app_url()   {
 }
 app_title() { case "$1" in saml|saml-proxy) echo "SAML" ;; oidc*) echo "OIDC" ;; esac; }
 
+# user_has_totp <user> -- the user has an authenticator (a <USER>_TOTP_SECRET in .env).
+# Only plain names can have one: partner-client, for one, would make no variable name.
+user_has_totp() { [[ "$1" =~ ^[a-z]+$ ]] || return 1; local v="${1^^}_TOTP_SECRET"; [[ -n "${!v:-}" ]]; }
+# The extra step for an MFA user, if <user> is one.
+_otp_hint() {
+  user_has_totp "$1" || return 0
+  printf '\n         Then type the code from %s'"'"'s authenticator app:  scripts/authenticator.sh code %s' "$1" "$1"
+}
+
 # How to see the current scenario's failure (after break.sh).
 print_try_it() {
   local t u; t="$(app_title "$SCENARIO_APP")" u="${SCENARIO_USER:-alice}"
@@ -216,7 +225,7 @@ TXT
     Try it:
       1. Open a NEW private/incognito window. An existing app or Keycloak
          session in a normal window can hide the error.
-      2. Go to $(app_url "$SCENARIO_APP") and click "Log in with $t" (sign in as $u if asked).
+      2. Go to $(app_url "$SCENARIO_APP") and click "Log in with $t" (sign in as $u if asked).$(_otp_hint "$u")
       3. Expect, $SCENARIO_SEEN_AT:
            $SCENARIO_EXPECT
     Runbook: $SCENARIO_RUNBOOK
@@ -248,7 +257,7 @@ TXT
   cat <<TXT
 
     Confirm recovery: in a NEW private window, go to $(app_url "$SCENARIO_APP"),
-    click "Log in with $t" and sign in as $u. You should land on the
+    click "Log in with $t" and sign in as $u$(user_has_totp "$u" && printf ' (code: scripts/authenticator.sh code %s)' "$u"). You should land on the
     "$t login succeeded" page. scripts/status.sh should show $1 as healthy.
 TXT
 }

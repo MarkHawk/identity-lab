@@ -140,7 +140,11 @@ radius_login() { # <user> <demo|wrong> <text nas-auth must print>; the password 
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" login_as ...
 login_as()     {
   local user="$1" app="$2"; shift 2
-  [[ "$app" == radius ]] || { browser_as "$user" "$app" "$@"; return; }
+  if [[ "$app" != radius ]]; then
+    # An MFA user also types a fresh code from the authenticator app.
+    if user_has_totp "$user"; then mfa_login "$user" "$app" new "$@"; else browser_as "$user" "$app" "$@"; fi
+    return
+  fi
   case "$1" in
     --expect)       radius_login "$user" demo "nas: Access-Accept" ;;
     --expect-error) radius_login "$user" demo "$2" ;;
