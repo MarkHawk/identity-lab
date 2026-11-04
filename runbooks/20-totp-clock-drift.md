@@ -79,8 +79,8 @@ Then sign in again with a fresh code. If the user hit the lockout while trying, 
 ## Questions I'd ask the customer
 
 1. Does your password get accepted, and then the code is refused? Or does it fail before you're asked for a code?
-2. Does it fail for you only, or for colleagues too? (One user: their device. Everyone: the IdP's clock or its configuration.)
-3. Is automatic date and time turned on on your phone? Can you compare its clock with another clock, to the second?
-4. Have you travelled, changed the time zone by hand, or had the phone off or offline for a long time?
-5. Is it an app on your phone, or a hardware token? If it's a token, how old is it?
-6. How many times have you tried? (Five failures may have locked the account as well.)
+2. How many times have you tried? (Five failures may have locked the account as well.)
+3. Does it fail for you only, or for colleagues too? (One user: their device. Everyone: the IdP's clock or its configuration.)
+4. Is automatic date and time turned on on your phone? Can you compare its clock with another clock, to the second?
+5. Have you travelled, changed the time zone by hand, or had the phone off or offline for a long time?
+6. Is it an app on your phone, or a hardware token? If it's a token, how old is it?
