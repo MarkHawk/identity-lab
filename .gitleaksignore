@@ -1,0 +1,4 @@
+# Per-packet Message-Authenticator digest in a sample RADIUS debug trace in the runbook: not a credential
+76587c040d58d59a5afa90cf03abce2366b96eca:runbooks/05-radius-shared-secret-mismatch.md:generic-api-key:92
+# Made-up base32 TOTP secret planted in the self-test, labelled as such in the script: deliberate test value
+465496491a3fd3d393d14519a6d458c50ccc9dd9:scripts/test.sh:generic-api-key:255
