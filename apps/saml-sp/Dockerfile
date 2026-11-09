@@ -4,7 +4,12 @@
 # libxmlsec1: mixing their binary wheels (each bundling its own libxml2)
 # is a well-known cause of "lxml & xmlsec libxml2 library version mismatch".
 
-ARG PYTHON_IMAGE=python:3.13.15-slim-bookworm@sha256:2325bb286ec344af3e5898cc224b5844e2707ac6e26b1632516fd3edc84a5e26
+ARG PYTHON_IMAGE=python:3.13.18-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+# pip is upgraded in the venv (built here, copied to the runtime stage) and in
+# the runtime stage's own base image. Older pips vendor a certifi that still
+# trusts the compromised eMudhra CA keys, and a vulnerable urllib3 and msgpack;
+# 26.3 is the first release to vendor fixed versions of all three.
+ARG PIP_VERSION=26.3
 
 FROM ${PYTHON_IMAGE} AS build
 RUN apt-get update \
@@ -16,7 +21,9 @@ RUN apt-get update \
       libxslt1-dev \
       libxmlsec1-dev \
  && rm -rf /var/lib/apt/lists/*
-RUN python -m venv /opt/venv
+ARG PIP_VERSION
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/pip install --no-cache-dir "pip==${PIP_VERSION}"
 ENV PATH=/opt/venv/bin:$PATH
 COPY requirements-build.txt requirements.txt /tmp/
 # lxml must be installed before xmlsec is built against it, and build
@@ -27,14 +34,16 @@ RUN pip install --no-cache-dir -r /tmp/requirements-build.txt \
       -r /tmp/requirements.txt
 
 FROM ${PYTHON_IMAGE}
+ARG PIP_VERSION
+RUN pip install --no-cache-dir "pip==${PIP_VERSION}"
 # libfaketime lets the clock-skew scenario shift this container's clock
 # without touching the host clock (see scenarios/clock-skew.sh).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libxml2 \
       libxslt1.1 \
-      libxmlsec1 \
-      libxmlsec1-openssl \
+      libxmlsec1t64 \
+      libxmlsec1t64-openssl \
       libfaketime \
  && rm -rf /var/lib/apt/lists/* \
  && ln -s "$(ls -d /usr/lib/*/faketime)" /usr/local/lib/faketime
