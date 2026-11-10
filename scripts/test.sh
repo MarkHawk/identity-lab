@@ -210,6 +210,60 @@ radius_forged_state() {
   grep -oE 'Received Access-[A-Za-z]+' <<<"$out" || echo "no reply"
   grep -qF 'Received Access-Reject' <<<"$out"
 }
+# radius_replay_concurrent -- a one-time code really is one-time, even when
+# the same code is offered again while other RADIUS requests run alongside.
+# Spend a fresh code, then replay it many times under concurrent load; every
+# replay must be refused. Driven inside the NAS with radclient; the password
+# and code arrive on stdin, never on a command line, so they aren't logged.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_replay_concurrent
+radius_replay_concurrent() {
+  local code out acc valid
+  code="$(totp_for heidi new)" || { echo "$code"; return 1; }
+  # The script runs in the nas container. It reads the password then the code
+  # from stdin, gets a challenge State (round 1), and sends the code back
+  # (round 2). It spends the code once, then replays it 30 times, each replay
+  # fired next to a few concurrent LDAP logins (dave) to churn the server's
+  # request memory. It prints only a count, never a code.
+  # shellcheck disable=SC2016  # $PW/$CODE expand in the nas container, not here
+  local script='
+set -u
+IFS= read -r PW; IFS= read -r CODE
+S=/var/lib/nas/secret; SRV=radius:1812
+r1() { printf "User-Name = \"heidi\"\nUser-Password = \"%s\"\nNAS-Identifier = \"nas\"\nMessage-Authenticator = 0x00\n" "$PW" \
+  | radclient -x -r 3 -t 2 -S "$S" "$SRV" auth 2>/dev/null | sed -n "s/^\tState = //p" | head -1; }
+r2() { printf "User-Name = \"heidi\"\nUser-Password = \"%s\"\nState = %s\nNAS-Identifier = \"nas\"\nMessage-Authenticator = 0x00\n" "$CODE" "$1" \
+  | radclient -r 1 -t 2 -S "$S" "$SRV" auth 2>/dev/null | grep -oE "Access-(Accept|Reject)" | head -1; }
+dave() { printf "User-Name = \"dave\"\nUser-Password = \"%s\"\nNAS-Identifier = \"nas\"\nMessage-Authenticator = 0x00\n" "$PW" \
+  | radclient -r 1 -t 2 -S "$S" "$SRV" auth >/dev/null 2>&1; }
+state() { local s n=0; while [ $n -lt 4 ]; do s=$(r1); [ -n "$s" ] && { printf "%s" "$s"; return; }; n=$((n + 1)); done; }
+spent=0
+for t in 1 2 3 4 5; do s=$(state); [ -n "$s" ] || continue; r=$(r2 "$s")
+  [ "$r" = Access-Accept ] && { spent=1; break; }; [ "$r" = Access-Reject ] && break; done
+[ "$spent" = 1 ] || { echo "spend-failed"; exit 0; }
+acc=0; valid=0
+for i in $(seq 1 30); do
+  res=""
+  for t in 1 2 3; do
+    s=$(state); [ -n "$s" ] || continue
+    for c in 1 2 3; do dave & done
+    res=$(r2 "$s"); wait
+    [ -n "$res" ] && break
+  done
+  [ -n "$res" ] || continue
+  valid=$((valid + 1))
+  [ "$res" = Access-Accept ] && acc=$((acc + 1))
+done
+echo "accepted:$acc valid:$valid"
+'
+  out="$(printf '%s\n%s\n' "$DEMO_PASSWORD" "$code" | compose exec -T nas bash -c "$script" 2>&1)" || true
+  echo "$out"
+  grep -q 'spend-failed' <<<"$out" && { echo "could not spend a code to replay"; return 1; }
+  acc="$(sed -n 's/.*accepted:\([0-9]*\).*/\1/p' <<<"$out")"
+  valid="$(sed -n 's/.*valid:\([0-9]*\).*/\1/p' <<<"$out")"
+  [ "${valid:-0}" -ge 20 ] || { echo "inconclusive: only ${valid:-0} replays got a reply"; return 1; }
+  [ "${acc:-1}" -eq 0 ] || { echo "a spent code was accepted again: $acc of $valid replays"; return 1; }
+  echo "all $valid replays refused"
+}
 # radius_tampered <strip-ma|bad-ma> -- heidi's login through
 # tests/radius-tamper.pl, which removes or changes the Access-Challenge's
 # Message-Authenticator: nas-auth must not answer the challenge, and the
@@ -638,6 +692,7 @@ check "radius mfa: heidi's password gets an Access-Challenge, with Message-Authe
   radius_mfa new "nas: Access-Challenge (Message-Authenticator verified)" "nas: Access-Accept"
 check "radius mfa: the server's log shows the challenge" log_has "$since" radius 'Auth: Challenge sent: \[heidi\]'
 check "radius mfa: rlm_totp refuses the same code a second time: Access-Reject" radius_mfa again "nas: Access-Reject"
+check "radius mfa: a one-time code can't be replayed under concurrent load" radius_replay_concurrent
 check "radius mfa: a wrong code: Access-Reject" radius_mfa wrong "nas: Access-Reject"
 check "radius mfa: a State the server never issued is refused, even with a valid code" radius_forged_state
 check "radius mfa: the NAS discards a challenge without Message-Authenticator, and never answers it" radius_tampered strip-ma
