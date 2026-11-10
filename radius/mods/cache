@@ -11,3 +11,19 @@ cache mfa_state {
 		&control:Tmp-String-1 := &User-Name
 	}
 }
+
+# rlm_cache: spent one-time codes. After a code is accepted, the lab records
+# this (user, code) here and refuses it again for as long as the code stays
+# valid, so a one-time code really is one-time even when offered more than
+# once. ttl 90 covers the code's whole validity (the step either side of now,
+# as mods/totp allows: three 30-second steps). Kept in memory (rbtree), so a
+# restart forgets it, like mfa_state above.
+cache totp_used {
+	driver = "rlm_cache_rbtree"
+	key = "%{User-Name}:%{TOTP-Password}"
+	ttl = 90
+	add_stats = no
+	update {
+		&control:Tmp-String-3 := "used"
+	}
+}

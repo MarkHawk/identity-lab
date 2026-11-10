@@ -99,6 +99,26 @@ server default {
 		}
 		Auth-Type totp {
 			totp
+			# The code checked out. A one-time code is one-time: refuse it
+			# if this (user, code) has already been accepted while it's
+			# still valid. Clear any Cache-TTL left over from the State
+			# handling above first (it would otherwise expire the record
+			# at once), look without writing, reject a repeat, else record.
+			if (ok) {
+				update control {
+					&Cache-TTL !* ANY
+					&Cache-Read-Only := yes
+				}
+				totp_used
+				if (&control:Tmp-String-3) {
+					reject
+				}
+				update control {
+					&Cache-Read-Only !* ANY
+				}
+				totp_used
+				ok
+			}
 		}
 	}
 
