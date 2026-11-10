@@ -401,7 +401,7 @@ services:
     # 1.30.6 was 6 days old when pinned, an exception to the two-week rule:
     # it fixes five CVEs, including CVE-2026-93479 (a buffer overflow when
     # evaluating variables, which affects request logging as used here).
-    image: nginx:1.30.6-alpine@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
+    image: nginx:1.30.6-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
     user: "${LAB_UID}:0"
     # restart: nginx re-resolves upstreams only every 10s, so when compose
     # recreates one (new address) restart the proxy rather than 502 meanwhile.
