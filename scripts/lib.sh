@@ -140,7 +140,10 @@ REALM=idlab
 #                      radius: an Access-Request from the NAS, docker compose exec nas nas-auth;
 #                      mtls: a request to the proxy's mutual-TLS route with the client's certificate;
 #                      oidc-api, oidc-api-late, oidc-cors: the direct OIDC RP calling the API from
-#                      its debug page, itself or (oidc-cors) from the browser)
+#                      its debug page, itself or (oidc-cors) from the browser;
+#                      oidc-stale: the direct OIDC RP, signing in on a Keycloak login page
+#                      that has been open for 30 s; oidc-bookmark: a saved Keycloak login
+#                      URL opened with no cookies)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
@@ -173,7 +176,7 @@ scenario_state() { scenario_detect | cut -f1; }
 app_url()   {
   case "$1" in
     saml)       echo "https://$LAB_HOST:$SAML_SP_PORT/" ;;
-    oidc|oidc-api*|oidc-cors) echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
+    oidc|oidc-api*|oidc-cors|oidc-stale|oidc-bookmark) echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
     saml-proxy) echo "https://$LAB_HOST:$PROXY_SAML_SP_PORT/" ;;
     oidc-proxy) echo "https://$LAB_HOST:$PROXY_OIDC_RP_PORT/" ;;
     oidc-egress) echo "https://$LAB_HOST:$EGRESS_OIDC_RP_PORT/" ;;

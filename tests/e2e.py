@@ -21,6 +21,15 @@ oidc-cors logs in to the direct OIDC RP, then has its debug page call the
 API from the browser (Call the API from the browser), a cross-origin fetch;
 the browser console's messages are part of what it checks, since a CORS
 refusal is only explained there.
+oidc-stale logs in to the direct OIDC RP, but waits STALE_WAIT_SECONDS on
+Keycloak's login page before signing in, longer than the shortened login
+timeout of scenarios/login-timeout.sh and far shorter than the normal one,
+so it passes on a healthy lab. oidc-bookmark opens Keycloak's login page,
+then clears the browser's cookies (as a bookmark opened in another browser,
+or after a restart, would have none) and opens the page's form-action URL
+(what the address bar shows after a wrong password), then the login URL
+itself and signs in. The URLs carry one-time values: they stay in memory and
+are never printed.
 mtls opens the reverse proxy's mutual-TLS route, presenting the client
 certificate in /etc/idlab/mtls-client/ if there is one (the partner
 system's, from .state/mtls-client/), and none if there isn't.
@@ -99,9 +108,14 @@ APPS = {
     "oidc-api-late": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-token": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-cors": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-stale": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-bookmark": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "mtls": (url("PROXY_MTLS_PORT"), None),
 }
 API_LATE_SECONDS = 15
+# Longer than the login timeout scenarios/login-timeout.sh sets (20 s), far
+# shorter than the realm's own (1800 s).
+STALE_WAIT_SECONDS = 30
 OTP_FROM_STDIN = os.environ.get("E2E_OTP") == "stdin"
 ENROL = os.environ.get("E2E_ENROL") == "1"
 # Keys read from a setup page during this run: scrubbed from the evidence,
@@ -302,9 +316,18 @@ def flow(page, app):
     snap("keycloak")
     if page.locator("#username").count() == 0:
         return "keycloak:error", page.inner_text("body")
+    if app == "oidc-bookmark":
+        return bookmark(page, app, base, kc)
+    if app == "oidc-stale":
+        # The user opened the login page and went away.
+        page.wait_for_timeout(STALE_WAIT_SECONDS * 1000)
     page.fill("#username", USER)
     page.fill("#password", PASSWORD)
     page.click("#kc-login")
+    if app == "oidc-stale":
+        timed_out = login_timed_out(page, base)
+        if timed_out is not None:
+            return timed_out
     otp = otp_step(page, base) if OTP_FROM_STDIN else None
     if otp is None and ENROL:
         otp = enrol_step(page, base)
@@ -325,6 +348,50 @@ def flow(page, app):
     if app == "oidc-cors":
         return call_api_from_browser(page, app)
     return f"{app}:login-ok", page.inner_text("body")
+
+
+def login_timed_out(page, base, timeout=20):
+    """After submitting a login page that was open too long: Keycloak shows
+    the login form again with a notice. Returns (where, text) for that, or
+    None when the login went on to the app."""
+    deadline = time.monotonic() + timeout
+    while not page.url.startswith(base + "/"):
+        try:
+            text = page.inner_text("body")
+        except PWError:  # mid-navigation: look again
+            text = ""
+        if "Your login attempt timed out" in text:
+            return "keycloak:login-timed-out", text
+        if time.monotonic() > deadline:
+            return None
+        page.wait_for_timeout(250)
+    return None
+
+
+def bookmark(page, app, base, kc):
+    """A saved Keycloak login URL opened in a browser with no cookies: first
+    the form-action URL, then the login URL itself, signed in as USER."""
+    action = page.get_attribute("#kc-form-login", "action")
+    login_url = page.url
+    page.context.clear_cookies()
+    snap("cookies-cleared")
+    resp = page.goto(action, wait_until="load")
+    text = page.inner_text("body")
+    print(f"[{app}] the form-action URL with no cookies: HTTP {resp.status} at {without_query(page.url)}")
+    snap("form-action-url")
+    # The login URL itself starts a new login; the app has lost its own state.
+    page.goto(login_url, wait_until="load")
+    page.fill("#username", USER)
+    page.fill("#password", PASSWORD)
+    page.click("#kc-login")
+    try:
+        page.wait_for_url(re.compile("^" + re.escape(base)), timeout=20000)
+        page.wait_for_load_state("load")
+    except PWTimeout:
+        pass
+    print(f"[{app}] the login URL with no cookies, then signing in, ended at {without_query(page.url)}: "
+          f"{excerpt(page.inner_text('body'), 160)}")
+    return "keycloak:cookie-not-found", text
 
 
 def otp_step(page, base, timeout=20):
