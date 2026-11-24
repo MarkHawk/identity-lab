@@ -89,9 +89,15 @@ jq -c '.steps[] | select(.step == "back-at-app") | .inferredRefused[] | {name, s
 cat test-results/saml-<time>-console.txt
 ```
 
-The refusal reasons (`refusedByBrowser`) come from Chromium's DevTools protocol, so the lab records them for Chromium only. The comparison in `inferredRefused` (a `Set-Cookie` in the HAR, then no such cookie in the jar) works for a HAR from any browser, and it's the one a support engineer can make from a customer's HAR alone: find the response that sets the app's session cookie, read its attributes, and check whether the next request to the app sends it in its `Cookie` header. Here it doesn't: `GET /debug` goes out with no `saml_sp_session`.
+The refusal reasons (`refusedByBrowser`) come from Chromium's DevTools protocol, so the lab records them for Chromium only. The comparison in `inferredRefused` (a `Set-Cookie` in the HAR, then no such cookie in the jar) works for a HAR from any browser that kept its cookie headers (see below), and it's the one a support engineer can make from such a HAR alone: find the response that sets the app's session cookie, read its attributes, and check whether the next request to the app sends it in its `Cookie` header. Here it doesn't: `GET /debug` goes out with no `saml_sp_session`.
 
-To get the same evidence from a customer: ask for a HAR of one failed attempt (Network tab, **Preserve log** on, then *Export HAR*), a screenshot of the Network tab's **Cookies** view for the `/saml/acs` request, and of the **Issues** tab. A HAR with cookie values holds live session cookies, and a SAML HAR holds the signed assertion: ask for it to be captured in a test account or sanitised, and treat it as a secret. Some recent Chrome versions export a sanitised HAR by default, which can leave out `Cookie` and `Set-Cookie`, the headers this needs. If they're missing, ask for the screenshots instead.
+**A customer's default HAR can't show this fault.** Since Chrome 130, every Chromium-based browser (Chrome, Edge, Brave, Opera) exports a *sanitised* HAR by default: it removes the `Cookie`, `Set-Cookie` and `Authorization` headers and empties the cookie lists, which is exactly the evidence this needs. A HAR with them takes two steps in DevTools: **Settings** (the gear) → **Preferences** → **Network** → *Allow to generate HAR (with sensitive data)*, then **Export HAR (with sensitive data)** in the Network tab. That file holds live session cookies and, for SAML, the signed assertion.
+
+So ask for evidence in this order (the questions below):
+
+1. **A screenshot first.** The **Issues** tab, or the Network tab's **Cookies** view for the `POST /saml/acs` request, shows the refused cookie and why, with no secret in it.
+2. **A HAR with sensitive data only if the screenshot isn't enough,** sent through a secure channel (not the ticket or email), captured in a test account if possible, and treated as a secret. Warn the customer it contains live session cookies, and ask them to **sign out of the app and the IdP straight after capturing it**, so those cookies stop working.
+3. **Don't expect the console to help.** An empty console is normal for this fault: Chromium reports refused cookies under Issues and in the Network tab, not in the console.
 
 ## Diagnosis
 
@@ -155,6 +161,7 @@ Don't fix it by telling users to change browser settings or use another browser,
 1. Which browser and version (Chrome's *About* page or `chrome://version`, Edge's `edge://version`, Firefox's *About Firefox*)? Does it happen in every browser you've tried, or only some? On every device?
 2. Does it fail for every user of this app, or only some? Do other apps that sign in through the same IdP work?
 3. After you sign in, does the app ask you to log in again straight away, and does the second login skip the password?
-4. Can you send a HAR of one failed attempt (Network tab, **Preserve log** on, then *Export HAR*), captured with a test account if possible? If your browser exports a sanitised HAR without cookies, a screenshot of the Network tab's **Cookies** view for the `/saml/acs` request, and of the **Issues** tab, will do.
-5. What changed recently in the app's cookie or session settings, its framework version, or a proxy, load balancer or gateway in front of it (anything that rewrites cookies)?
-6. Is the app served over HTTPS end to end, or does TLS end at a proxy or load balancer in front of it?
+4. Can you send a screenshot of the developer tools (F12) **Issues** tab after one failed attempt, or of the Network tab's **Cookies** view for the `/saml/acs` request (**Preserve log** on)? It shows the cookie the browser refused and why. The **Console** will probably be empty: that's expected for this fault, not a sign that nothing is wrong.
+5. Only if the screenshot isn't enough: can you export a HAR **with sensitive data** (DevTools **Settings** → **Preferences** → **Network** → *Allow to generate HAR (with sensitive data)*, then **Export HAR (with sensitive data)**; the default export since Chrome 130 leaves out the cookies)? Send it through a secure channel, not the ticket, and use a test account if you can. It contains live session cookies: sign out of the app and the IdP straight after capturing it, so they stop working.
+6. What changed recently in the app's cookie or session settings, its framework version, or a proxy, load balancer or gateway in front of it (anything that rewrites cookies)?
+7. Is the app served over HTTPS end to end, or does TLS end at a proxy or load balancer in front of it?
