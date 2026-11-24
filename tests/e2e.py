@@ -30,6 +30,19 @@ or after a restart, would have none) and opens the page's form-action URL
 (what the address bar shows after a wrong password), then the login URL
 itself and signs in. The URLs carry one-time values: they stay in memory and
 are never printed.
+The shared-PC apps model a computer someone else left signed in to Keycloak
+(scenarios/wrong-account.sh). oidc-pc-signin signs E2E_USER in to the direct
+OIDC RP, then "signs out of the app" with its Clear local session button, which
+leaves Keycloak's session alone, keeps only Keycloak's cookies (the ones with a
+path under /realms/) and saves them as the PC's browser state in
+/etc/idlab/browser/shared-pc.json, mode 0600 (cookie values, so it lives in
+the lab's gitignored .state/, never in /results). oidc-shared-pc is the next
+person's login at that PC: it loads that state if there is one, so Keycloak
+signs them in silently as whoever was there, and it reports
+oidc-shared-pc:wrong-identity if the app shows someone other than E2E_USER.
+oidc-pc-signout is the fix: it loads the state, signs out of Keycloak by its
+logout page (clicking through the confirmation, as a user would), checks the
+browser then gets a login form, and deletes the state file.
 mtls opens the reverse proxy's mutual-TLS route, presenting the client
 certificate in /etc/idlab/mtls-client/ if there is one (the partner
 system's, from .state/mtls-client/), and none if there isn't.
@@ -110,6 +123,9 @@ APPS = {
     "oidc-cors": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-stale": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "oidc-bookmark": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-pc-signin": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-shared-pc": (url("OIDC_RP_PORT"), url("KC_PORT")),
+    "oidc-pc-signout": (url("OIDC_RP_PORT"), url("KC_PORT")),
     "mtls": (url("PROXY_MTLS_PORT"), None),
 }
 API_LATE_SECONDS = 15
@@ -134,6 +150,8 @@ PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
 RESULTS = os.environ.get("RESULTS_DIR", "/results")
 MTLS_CLIENT_DIR = "/etc/idlab/mtls-client"
+# The shared PC's browser state (.state/browser/ on the host): cookie values.
+SHARED_PC_STATE = "/etc/idlab/browser/shared-pc.json"
 # What the mutual-TLS route answers when it accepts the client certificate.
 MTLS_OK = '"client_certificate":"accepted"'
 
@@ -150,6 +168,13 @@ def client_certificates(app):
     return [{"origin": APPS["mtls"][0], "certPath": crt, "keyPath": key}]
 
 
+def shared_pc_state(app):
+    """The shared PC's saved browser state, for the apps that sit at that PC."""
+    if app in ("oidc-shared-pc", "oidc-pc-signout") and os.path.exists(SHARED_PC_STATE):
+        return SHARED_PC_STATE
+    return None
+
+
 def run(app, expect_error=None):
     args = ["--disable-dev-shm-usage"]
     if LAB_HOST != "localhost":
@@ -164,6 +189,7 @@ def run(app, expect_error=None):
         har_dir = tempfile.mkdtemp(prefix="e2e-har-")
         try:
             context = browser.new_context(client_certificates=client_certificates(app),
+                                          storage_state=shared_pc_state(app),
                                           record_har_path=f"{har_dir}/raw.har", record_har_content="omit")
             page = context.new_page()
             RECORDER = evidence.Recorder(context, page)
@@ -204,9 +230,11 @@ def run(app, expect_error=None):
     where, text = outcome
     print(f"[{app}] ended at {where}")
     if expect_error is None:
-        marker = MTLS_OK if app == "mtls" else EXPECTED_EMAIL
+        marker = {"mtls": MTLS_OK, "oidc-pc-signout": "You are logged out"}.get(app, EXPECTED_EMAIL)
         if f"{app}:login-ok" == where and marker in text:
-            print(f"[{app}] PASS {'client certificate accepted' if app == 'mtls' else 'login succeeded for ' + EXPECTED_EMAIL}")
+            print(f"[{app}] PASS " + {"mtls": "client certificate accepted",
+                                     "oidc-pc-signout": "signed out of Keycloak; the next login asks for a password"}
+                  .get(app, "login succeeded for " + EXPECTED_EMAIL))
             return 0
         print(f"[{app}] FAIL expected a successful login; page says:\n{excerpt(text)}")
         return 1
@@ -288,6 +316,8 @@ def flow(page, app):
     base, kc = APPS[app]
     if app == "mtls":
         return mtls(page, app, base)
+    if app == "oidc-pc-signout":
+        return pc_signout(page, app, base, kc)
     try:
         page.goto(base + "/", wait_until="load")
     except PWTimeout:
@@ -309,6 +339,8 @@ def flow(page, app):
     while not page.url.startswith(kc + "/"):
         if page.url.startswith(base + "/") and app_error_shown(page):
             return f"{app}:error", page.inner_text("body")
+        if app == "oidc-shared-pc" and page.url.startswith(base + "/") and page.locator("#login-ok").count():
+            return signed_in_silently(page, app)
         if time.monotonic() > deadline:
             raise PWTimeout(f"no Keycloak page after Log in; still at {without_query(page.url)}")
         page.wait_for_timeout(250)
@@ -347,7 +379,82 @@ def flow(page, app):
         return fetch_token(page, app, base)
     if app == "oidc-cors":
         return call_api_from_browser(page, app)
-    return f"{app}:login-ok", page.inner_text("body")
+    text = page.inner_text("body")
+    if app == "oidc-pc-signin":
+        leave_session_open(page, app)
+    return f"{app}:login-ok", text
+
+
+def leave_session_open(page, app):
+    """The person leaves: they sign out of the app (its own cookie goes) but
+    not out of Keycloak, whose cookies stay in the browser. Saved as the shared
+    PC's state, readable only by the lab's user. Never prints a value."""
+    page.click("form[action$='/logout'] button")  # "Clear local session": the app's only
+    page.wait_for_load_state("load")
+    state = page.context.storage_state()
+    state["cookies"] = [c for c in state["cookies"] if c["path"].startswith("/realms/")]
+    names = sorted(c["name"] for c in state["cookies"])
+    if "KEYCLOAK_IDENTITY" not in names:
+        raise RuntimeError("no KEYCLOAK_IDENTITY cookie to leave behind")
+    os.makedirs(os.path.dirname(SHARED_PC_STATE), exist_ok=True)
+    tmp = SHARED_PC_STATE + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(state, fh)
+    os.replace(tmp, SHARED_PC_STATE)
+    print(f"[{app}] {USER} signed out of the app and left Keycloak's session open; the PC keeps: {', '.join(names)}")
+
+
+def page_identity(page):
+    """What the OIDC app's page says about who is signed in: identity fields only."""
+    text = page.inner_text("body")
+    def claim(name):
+        m = re.search(r'"' + name + r'":\s*"([^"]*)"', text)
+        return m.group(1) if m else "-"
+    roles = re.search(r"Realm roles\s+(.*)", text)
+    return {"email": page.inner_text("#email").strip(), "preferred_username": claim("preferred_username"),
+            "sub": claim("sub"), "roles": (roles.group(1).strip() if roles else "")}
+
+
+def signed_in_silently(page, app):
+    """Keycloak sent the browser straight back to the app, with no login form."""
+    page.wait_for_load_state("load")
+    snap("back-at-app")
+    who = page_identity(page)
+    print(f"[{app}] no login form was shown. The app says: email={who['email']} "
+          f"preferred_username={who['preferred_username']} sub={who['sub']} realm roles: {who['roles'] or '(none beyond the defaults)'}")
+    text = page.inner_text("body")
+    if who["email"] != EXPECTED_EMAIL:
+        return f"{app}:wrong-identity", f"Signed in as {who['email']}, not {EXPECTED_EMAIL}\n{text}"
+    return f"{app}:login-ok", text
+
+
+def pc_signout(page, app, base, kc):
+    """Sign out of Keycloak at the shared PC, by its logout page, then check the
+    next login asks for a password, and delete the saved state."""
+    snap("pc")
+    page.goto(f"{kc}/realms/idlab/protocol/openid-connect/logout", wait_until="load")
+    notice = excerpt(page.inner_text("body"), 120)
+    print(f"[{app}] Keycloak's logout page says: {notice}")
+    page.click("#kc-logout")
+    page.wait_for_load_state("load")
+    done = page.inner_text("body")
+    print(f"[{app}] after Logout: {excerpt(done, 120)}")
+    snap("signed-out")
+    left = sorted(c["name"] for c in page.context.cookies() if c["name"] in ("KEYCLOAK_IDENTITY", "KEYCLOAK_SESSION"))
+    if left:
+        return f"{app}:still-signed-in", f"Keycloak's cookies remain after logout: {', '.join(left)}"
+    page.goto(base + "/", wait_until="load")
+    page.click("#login")
+    page.wait_for_url(re.compile("^" + re.escape(kc) + "/"), timeout=15000)
+    page.wait_for_load_state("load")
+    if page.locator("#username").count() == 0:
+        return f"{app}:no-login-form", excerpt(page.inner_text("body"))
+    try:
+        os.remove(SHARED_PC_STATE)
+    except FileNotFoundError:
+        pass
+    return f"{app}:login-ok", done + "\nThe next login shows Keycloak's login form."
 
 
 def login_timed_out(page, base, timeout=20):

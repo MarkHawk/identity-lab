@@ -34,6 +34,8 @@ if (( FORCE )); then
   warn "--force: regenerating CA, certificates and all secrets"
   warn "existing Keycloak data will not match; run 'scripts/test.sh --fresh' afterwards"
   rm -rf "$CERTS_DIR" "$ENV_FILE"
+  # The shared PC's saved Keycloak session belongs to the old database.
+  rm -f "$STATE_DIR/browser/"* 2>/dev/null || true
 fi
 
 LAB_HOST="${LAB_HOST:-$(existing LAB_HOST)}"
@@ -165,6 +167,11 @@ mkdir -p "$STATE_DIR/api"
 # (see scenarios/totp-clock-drift.sh).
 mkdir -p "$STATE_DIR/authenticator"
 [[ -f "$STATE_DIR/authenticator/faketime.rc" ]] || echo "+0" >"$STATE_DIR/authenticator/faketime.rc"
+
+# The shared PC's browser state: cookie values, so private to this user
+# (see scenarios/wrong-account.sh). Empty unless that scenario is broken.
+mkdir -p "$STATE_DIR/browser"
+chmod 700 "$STATE_DIR/browser"
 
 # --- .env ---------------------------------------------------------------------
 # Keep an existing secret, unless rotating.

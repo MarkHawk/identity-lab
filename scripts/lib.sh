@@ -143,7 +143,9 @@ REALM=idlab
 #                      its debug page, itself or (oidc-cors) from the browser;
 #                      oidc-stale: the direct OIDC RP, signing in on a Keycloak login page
 #                      that has been open for 30 s; oidc-bookmark: a saved Keycloak login
-#                      URL opened with no cookies)
+#                      URL opened with no cookies; oidc-shared-pc: the OIDC RP login at a
+#                      computer someone left signed in to Keycloak, see wrong-account.sh;
+#                      oidc-pc-signin, oidc-pc-signout: leaving that session, ending it)
 #   SCENARIO_EXPECT    text the user sees when it is broken (asserted by test.sh)
 #   SCENARIO_SEEN_AT   where that text appears, for break.sh's instructions
 #   SCENARIO_LOG       "<service> <grep -E pattern>" -- log evidence (asserted by test.sh)
@@ -176,7 +178,7 @@ scenario_state() { scenario_detect | cut -f1; }
 app_url()   {
   case "$1" in
     saml)       echo "https://$LAB_HOST:$SAML_SP_PORT/" ;;
-    oidc|oidc-api*|oidc-cors|oidc-stale|oidc-bookmark) echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
+    oidc|oidc-api*|oidc-cors|oidc-stale|oidc-bookmark|oidc-pc-*|oidc-shared-pc) echo "https://$LAB_HOST:$OIDC_RP_PORT/" ;;
     saml-proxy) echo "https://$LAB_HOST:$PROXY_SAML_SP_PORT/" ;;
     oidc-proxy) echo "https://$LAB_HOST:$PROXY_OIDC_RP_PORT/" ;;
     oidc-egress) echo "https://$LAB_HOST:$EGRESS_OIDC_RP_PORT/" ;;
@@ -225,6 +227,23 @@ TXT
 TXT
     return
   fi
+  if [[ "$SCENARIO_APP" == oidc-shared-pc ]]; then
+    cat <<TXT
+
+    Try it (the lab has left carol's Keycloak session open in a saved browser state;
+    scripts/test.sh uses it. In a real browser, do the same by hand):
+      1. In a NEW private window, go to $(app_url oidc), click "Log in with OIDC", sign in
+         as carol, then click "Clear local session" (that signs out of the app, not of Keycloak).
+         Leave the window open: this is the shared PC.
+      2. In the same window go to $(app_url oidc) again, click "Log in with OIDC" and, if you
+         were asked, sign in as alice.
+      3. Expect, $SCENARIO_SEEN_AT:
+           $SCENARIO_EXPECT
+    Runbook: $SCENARIO_RUNBOOK
+    Undo:    scripts/fix.sh $1  (signs carol out of Keycloak, in the lab's saved browser)
+TXT
+    return
+  fi
   cat <<TXT
 
     Try it:
@@ -256,6 +275,16 @@ TXT
     Confirm recovery: docker compose exec nas nas-auth $u, enter the demo
     password, and expect "nas: Access-Accept". scripts/status.sh should show
     $1 as healthy.
+TXT
+    return
+  fi
+  if [[ "$SCENARIO_APP" == oidc-shared-pc ]]; then
+    cat <<TXT
+
+    Confirm recovery: in the browser that was left signed in, sign out of Keycloak
+    (its logout page, or the account console's Sign out), then go to $(app_url oidc),
+    click "Log in with OIDC": Keycloak must now ask for a username and password.
+    scripts/status.sh should show $1 as healthy.
 TXT
     return
   fi

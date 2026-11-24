@@ -3,7 +3,8 @@
 #
 #   scripts/test.sh            build, start (or reuse) the lab, run all checks
 #   scripts/test.sh --fresh    first remove the lab's containers AND its volumes
-#                              (Keycloak database, directory, NAS secret), so
+#                              (Keycloak database, directory, NAS secret) and the
+#                              shared PC's saved browser state (.state/browser/), so
 #                              everything is re-created from the repo and .env
 #   scripts/test.sh --down     stop the lab afterwards (keeps the volume)
 #
@@ -783,7 +784,11 @@ log "LAB_HOST=$LAB_HOST"
 if (( FRESH )); then
   log "--fresh: removing lab containers and the Keycloak database volume"
   compose --profile test down -v --remove-orphans
+  # Keycloak's sessions went with its database: so does the shared PC's saved copy of one.
+  rm -f "$STATE_DIR/browser/"* 2>/dev/null || true
 fi
+# The tests container mounts it; if Docker had to create it, it would be root's.
+mkdir -p "$STATE_DIR/browser"; chmod 700 "$STATE_DIR/browser"
 
 log "building images"
 compose --profile test build >>"$LOG" 2>&1 || { tail -n 30 "$LOG"; die "image build failed"; }

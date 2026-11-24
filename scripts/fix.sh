@@ -14,7 +14,10 @@ fix_one() {
   IFS=$'\t' read -r state detail < <(scenario_detect)
   case "$state" in
     healthy) ok "$name is already healthy -- nothing to do"; [[ -n "$quiet" ]] || print_confirm "$name"; return 0 ;;
-    unknown) die "cannot determine state of $name: $detail" ;;
+    # A detail starting "stale:" means leftovers that scenario_fix clears (a
+    # browser state file or session with nothing to match it), not a lab that
+    # can't be read: go on and fix it.
+    unknown) if [[ "$detail" == stale:* ]]; then warn "$name: $detail"; else die "cannot determine state of $name: $detail"; fi ;;
   esac
   log "fixing $name"
   scenario_fix

@@ -247,7 +247,8 @@ def callback():
     })
     session["login_key"] = key
     log.info(kv(
-        event="oidc_login_ok", sub=claims.get("sub"), email=claims.get("email"), iss=claims.get("iss"),
+        event="oidc_login_ok", sub=claims.get("sub"), preferred_username=claims.get("preferred_username"),
+        email=claims.get("email"), iss=claims.get("iss"),
         elapsed=f"{time.monotonic() - started:.2f}s",
     ))
     return redirect(url_for("debug"))
