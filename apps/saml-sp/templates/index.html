@@ -9,6 +9,9 @@
     <p>Signed in as <b>{{ login.name_id }}</b>.</p>
     <p><a class="btn" href="{{ url_for('debug') }}">View assertion</a></p>
   {% else %}
+    {% if request.args.get("session") == "expired" %}
+      <p class="error" id="session-expired">Your session has expired. Please log in again.</p>
+    {% endif %}
     <p><a class="btn" id="login" href="{{ url_for('login') }}">Log in with SAML</a></p>
   {% endif %}
   <p class="muted">SP metadata: <a href="{{ url_for('metadata') }}">/saml/metadata</a></p>

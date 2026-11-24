@@ -226,6 +226,9 @@ services:
       SAML_SP_SECRET_KEY: ${SAML_SP_SECRET_KEY}
       # IdP signing certificate(s) the SP trusts; written by scripts/pin-idp-cert.sh.
       IDP_CERT_FILE: /var/lib/idlab/state/idp-signing.pem
+      # The session cookie's SameSite and Secure, re-read on every response
+      # (scenarios/cookie-dropped.sh). The proxied copy keeps the defaults.
+      SAML_SP_COOKIE_FILE: /var/lib/idlab/state/session-cookie.conf
       # libfaketime: the offset in faketime.rc ("+0" normally) is re-read on
       # every clock call, so scenarios/clock-skew.sh can shift this
       # container's wall clock without a restart. The host clock is untouched.
@@ -324,6 +327,8 @@ services:
       <<: *saml-sp-env
       KC_PORT: ${PROXY_KC_PORT}
       SAML_SP_PORT: ${PROXY_SAML_SP_PORT}
+      # Its own cookie settings: the built-in defaults, not the direct SP's file.
+      SAML_SP_COOKIE_FILE: ""
     volumes: *saml-sp-volumes
     networks:
       - proxy

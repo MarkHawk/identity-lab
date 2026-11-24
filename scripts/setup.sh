@@ -126,6 +126,9 @@ chmod 600 "$CERTS_DIR"/*.key
 # --- Scenario state -----------------------------------------------------------
 # libfaketime offset read by the SAML SP (see scenarios/clock-skew.sh).
 [[ -f "$STATE_DIR/saml-sp/faketime.rc" ]] || echo "+0" >"$STATE_DIR/saml-sp/faketime.rc"
+# The SAML SP's session cookie settings (see scenarios/cookie-dropped.sh).
+[[ -f "$STATE_DIR/saml-sp/session-cookie.conf" ]] \
+  || install -m 644 "$LAB_ROOT/apps/saml-sp/session-cookie.conf" "$STATE_DIR/saml-sp/session-cookie.conf"
 # Extra seconds the OIDC RP behind the proxy takes to answer its callback
 # (see scenarios/proxy-gateway-timeout.sh).
 mkdir -p "$STATE_DIR/oidc-rp-proxied"

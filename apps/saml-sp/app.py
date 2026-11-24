@@ -17,6 +17,7 @@ from collections import OrderedDict
 
 from cryptography import x509
 from flask import Flask, redirect, render_template, request, session, url_for
+from flask.sessions import SecureCookieSessionInterface
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.constants import OneLogin_Saml2_Constants as C
 from onelogin.saml2.errors import OneLogin_Saml2_Error, OneLogin_Saml2_ValidationError
@@ -35,13 +36,51 @@ IDP_CERT_FILE = os.environ.get("IDP_CERT_FILE", "/var/lib/idlab/state/idp-signin
 SP_CERT = open(os.environ.get("SP_CERT_FILE", "/etc/idlab/sp-signing.crt")).read()
 SP_KEY = open(os.environ.get("SP_KEY_FILE", "/etc/idlab/sp-signing.key")).read()
 
+# The session cookie's SameSite and Secure settings, from a file re-read on
+# every response, as a config reload would apply them. Only the direct SP
+# sets it (scenarios/cookie-dropped.sh); without one, the defaults below.
+COOKIE_FILE = os.environ.get("SAML_SP_COOKIE_FILE") or None
+COOKIE_DEFAULTS = {"SESSION_COOKIE_SAMESITE": "Lax", "SESSION_COOKIE_SECURE": True}
+
 app = Flask(__name__)
 app.secret_key = os.environ["SAML_SP_SECRET_KEY"]
-app.config.update(
-    SESSION_COOKIE_NAME="saml_sp_session",
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-)
+app.config.update(SESSION_COOKIE_NAME="saml_sp_session", **COOKIE_DEFAULTS)
+
+
+def cookie_settings():
+    """SameSite and Secure for the session cookie. A file replaces the
+    defaults as a whole: a setting it leaves out takes Flask's own default
+    (no SameSite attribute, not Secure), as deleting the line from an app's
+    config would."""
+    if not COOKIE_FILE:
+        return dict(COOKIE_DEFAULTS)
+    try:
+        with open(COOKIE_FILE) as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return dict(COOKIE_DEFAULTS)
+    out = {"SESSION_COOKIE_SAMESITE": None, "SESSION_COOKIE_SECURE": False}
+    for line in lines:
+        key, eq, value = line.strip().partition("=")
+        if not eq or key.startswith("#") or key not in out:
+            continue
+        value = value.strip()
+        if key == "SESSION_COOKIE_SECURE":
+            out[key] = value.lower() in ("1", "true", "yes", "on")
+        else:
+            out[key] = value if value in ("Lax", "Strict", "None") else None
+    return out
+
+
+class FileCookieSessionInterface(SecureCookieSessionInterface):
+    def get_cookie_samesite(self, app):
+        return cookie_settings()["SESSION_COOKIE_SAMESITE"]
+
+    def get_cookie_secure(self, app):
+        return cookie_settings()["SESSION_COOKIE_SECURE"]
+
+
+app.session_interface = FileCookieSessionInterface()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s saml-sp %(message)s")
 log = logging.getLogger("saml-sp")
@@ -257,7 +296,10 @@ def login():
     auth = OneLogin_Saml2_Auth(saml_request_data(), saml_settings(pinned_idp_certs()))
     target = auth.login(return_to=url_for("debug", _external=False))
     session["authn_request_id"] = auth.get_last_request_id()
-    log.info(kv(event="saml_authn_request", request_id=auth.get_last_request_id()))
+    # The user agent tells a status probe (scripts/status.sh sends
+    # "idlab-status") from a browser's login.
+    log.info(kv(event="saml_authn_request", request_id=auth.get_last_request_id(),
+                user_agent=request.headers.get("User-Agent", "-")))
     return redirect(target)
 
 
@@ -308,7 +350,11 @@ def consume_response():
 def debug():
     login = _logins.get(session.get("login_key", ""))
     if not login:
-        return redirect(url_for("index"))
+        # Whether the browser sent the session cookie at all, never its value.
+        # Absent straight after saml_login_ok: the browser didn't keep it.
+        log.info(kv(event="saml_session_missing", path=request.path,
+                    session_cookie="present" if app.config["SESSION_COOKIE_NAME"] in request.cookies else "absent"))
+        return redirect(url_for("index", session="expired"))
     return render_template("debug.html", login=login, sp_clock=now_utc())
 
 
