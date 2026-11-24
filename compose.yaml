@@ -172,6 +172,11 @@ services:
       KC_TRUSTSTORE_PATHS: /etc/idlab/ca.crt
       # Health endpoints on the (unpublished) management port, plain HTTP so
       # the healthcheck works without curl in the image.
+      # Successful logins (type="LOGIN" and the like) at info, not debug, so
+      # the log shows them next to the failures: a browser that loses its
+      # session after a good login (scenarios/cookie-dropped.sh) looks like
+      # success from here.
+      KC_SPI_EVENTS_LISTENER__JBOSS_LOGGING__SUCCESS_LEVEL: info
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_MANAGEMENT_SCHEME: http
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}

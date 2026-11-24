@@ -701,6 +701,23 @@ cookie_values_not_in_logs() { # no cookie value the browser held in any containe
   echo "checked $(sort -u "$SEEN_FILE" | grep -c .) cookie value(s) against $(wc -l <<<"$logs") log lines: $n line(s) with one"
   (( n == 0 ))
 }
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" kc_login_events_clean
+kc_login_events_clean() { # Keycloak's successful LOGIN lines: there are some, and they hold no secret
+  # (one-time codes in them are covered by codes_nowhere, over every log)
+  local lines v n=0 bad=""
+  lines="$(compose logs --no-log-prefix keycloak 2>&1 | grep -F 'type="LOGIN"' || true)"
+  n="$(grep -c . <<<"$lines" || true)"
+  (( n > 0 )) || { echo "Keycloak logged no successful LOGIN event"; return 1; }
+  for v in "${SECRETS[@]}"; do grep -qF -- "$v" <<<"$lines" && { bad+="a secret from .env; "; break; }; done
+  grep -qE -- "$JWT_RE" <<<"$lines" && bad+="a JWT; "
+  grep -qE -- "$AUTH_CODE_RE" <<<"$lines" && bad+="an authorisation code; "
+  grep -qE -- "$STATE_RE|$ONE_TIME_RE" <<<"$lines" && bad+="a state or one-time login value; "
+  if [[ -s "$SEEN_FILE" ]] && grep -qFf "$SEEN_FILE" <<<"$lines"; then bad+="a cookie value; "; fi
+  # Field names only, from the first line: what a LOGIN event carries.
+  echo "$n successful LOGIN line(s) in Keycloak's log; fields: $(head -n1 <<<"$lines" | grep -oE '[a-zA-Z_]+="' | tr -d '="' | paste -sd' ')"
+  [[ -z "$bad" ]] || { echo "  found: ${bad%; }"; return 1; }
+}
+
 # The browser evidence scanner's self-test: a made-up HAR and cookie summary
 # as e2e.py writes them, and (planted) the same with values left in. Nothing
 # from .env or the lab; the values are assembled here so that no file holds them.
@@ -938,6 +955,7 @@ check "secrets: browser evidence scanner passes the same evidence redacted" brow
 check "secrets: every browser run saved a HAR, a cookie summary and its console" browser_evidence_complete
 check "secrets: no secret, token, code, SAML message or cookie value in any saved HAR, cookie summary or console log" browser_evidence_clean
 check "secrets: no cookie value the browser held in any container's log" cookie_values_not_in_logs
+check "secrets: Keycloak's successful LOGIN events hold no secret, token, code or cookie value" kc_login_events_clean
 
 # --- Summary ----------------------------------------------------------------------
 echo
