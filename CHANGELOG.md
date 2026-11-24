@@ -7,9 +7,19 @@ What each phase added, and why an existing lab needs `scripts/setup.sh` then `sc
 **Added:**
 
 - Scenario 25, `login-timeout`, with runbook 25: the realm's login timeout is cut to 20 s, so a Keycloak login page left open longer shows its form again with "Your login attempt timed out. Login will start from the beginning." The password is never checked. The runbook also covers the bookmarked login page, which fails whatever the timeout is ("Restart login cookie not found", or the app's "State not equal" error), and why starting from the app's URL is usually the answer.
-- `tests/e2e.py`: `oidc-stale` (waits 30 s on the login page, then signs in) and `oidc-bookmark` (opens a saved Keycloak URL with no cookies).
+- Scenario 26, `wrong-account`, with runbook 26: a shared PC's browser holds carol's Keycloak session (she signed out of the app, not of Keycloak), so alice's login there is silent and shows carol. Nothing on any server changes; the lab keeps the shared PC as a saved browser state, `.state/browser/shared-pc.json` (Keycloak's cookies only, mode 0600, gitignored). `scenario_detect` is broken only when that state and Keycloak's live session for carol agree, and reports `unknown` with `stale:` and a reason when they don't. Fix signs carol out through Keycloak's logout page, as a user would (it asks *Do you want to log out?* when no `id_token_hint` is sent), and deletes the state file.
+- `tests/e2e.py`: `oidc-stale` (waits 30 s on the login page, then signs in), `oidc-bookmark` (opens a saved Keycloak URL with no cookies), and `oidc-pc-signin`, `oidc-shared-pc` and `oidc-pc-signout` for scenario 26.
 
-**Why the upgrade steps:** none. The scenario changes a realm setting through the Admin API at runtime, so there is no `--fresh`, and `scripts/test.sh` rebuilds the tests image.
+- Tests: each scenario's break, check, fix, check cycle, with the browser evidence checks above; 391 checks in all, and no new secret in any saved HAR, cookie summary or console log.
+
+**Changed:**
+
+- The OIDC app's `oidc_login_ok` log line also carries `preferred_username`.
+- `scripts/fix.sh` goes on to fix a scenario that reports `unknown` with a detail starting `stale:`, instead of stopping.
+- `scripts/test.sh --fresh` and `scripts/setup.sh --force` delete `.state/browser/`'s contents.
+- `compose.yaml` mounts `.state/browser/` into the tests container.
+
+**Why the upgrade steps:** `scripts/setup.sh` creates `.state/browser/` (mode 0700); `scripts/test.sh` also creates it, so Docker never makes it as root. Then `scripts/test.sh` rebuilds the tests and OIDC app images. No `--fresh`: scenario 25 changes a realm setting through the Admin API at runtime, and scenario 26 uses users that already exist (alice and carol).
 
 ## One-time codes over RADIUS are refused when reused (2026-11-24)
 

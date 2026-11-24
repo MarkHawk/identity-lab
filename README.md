@@ -107,6 +107,7 @@ No Linux machine? [Run it in GitHub Codespaces](docs/codespaces.md), step by ste
 | 23 | `radius-challenge-unsupported` | NAS, MFA users only: `nas: Access-Reject` straight after the password, never asked for a code. dave still logs in. | [23-radius-challenge-unsupported](runbooks/23-radius-challenge-unsupported.md) |
 | 24 | `cookie-dropped` | SAML SP, after a successful Keycloak login: `Your session has expired. Please log in again.`, every time. The browser refused the SP's cookie; every server logs success. | [24-cookie-dropped](runbooks/24-cookie-dropped.md) |
 | 25 | `login-timeout` | Keycloak, after a login page has been open past the realm's login timeout: the login form again with `Your login attempt timed out. Login will start from the beginning.` The password was never checked. A saved login URL fails differently, and at any timeout. | [25-login-timeout](runbooks/25-login-timeout.md) |
+| 26 | `wrong-account` | OIDC app, at a shared PC: no login form, and the page shows someone else (`carol@idlab.example`) instead of the user. The previous person left their Keycloak session open; no server is faulty. | [26-wrong-account](runbooks/26-wrong-account.md) |
 
 ## Go deeper
 
