@@ -574,6 +574,8 @@ services:
       # Playwright presents client certificates from Node, not Chromium:
       # make Node trust the lab CA too.
       NODE_EXTRA_CA_CERTS: /etc/idlab/ca.crt
+      # 1 from scripts/evidence-packs.sh: record the decoded tokens (e2e.py).
+      E2E_TOKENS: ${E2E_TOKENS:-}
     volumes:
       - ./certs/ca.crt:/etc/idlab/ca.crt:ro
       - ./test-results:/results

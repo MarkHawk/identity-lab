@@ -62,6 +62,17 @@ removed from the page before the screenshot and HTML are saved, and the
 saved HTML is checked for it. It never appears on the command line, in the output or
 in the saved page.
 
+With E2E_TOKENS=1 (scripts/evidence-packs.sh), the run also records the
+tokens it was issued, decoded, for the pack's token inspector: an OIDC
+login's ID token header and claims (from the debug page) and access token
+header and claims (fetched in the page from /debug/access-token, decoded in
+memory); a SAML login's response, read from the POST to /saml/acs in memory:
+issuer, destination, status, conditions, audience, subject, authentication
+and attributes, and the signing certificate (public; the host decodes it).
+Never a token, a signature or the raw response, and never nonce, at_hash or
+c_hash. One JSON line per run goes to tokens.jsonl next to E2E_SEEN_FILE,
+outside /results; a run that got no token says so.
+
 Each run uses a fresh browser context (no Keycloak SSO session carried
 over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
 dave work the same way), and checks where the flow ends up. Exit
@@ -145,6 +156,11 @@ RECORDER = None
 # Set by scripts/test.sh: where to append the run's cookie values, so it can
 # search the containers' logs for them. Outside /results; never printed.
 SEEN_FILE = os.environ.get("E2E_SEEN_FILE")
+TOKENS = os.environ.get("E2E_TOKENS") == "1" and SEEN_FILE is not None
+# What this run was issued, decoded (see E2E_TOKENS above).
+ISSUED = {}
+# Claims that are one-time values or hashes of the token: never recorded.
+DROP_CLAIMS = {"nonce", "at_hash", "c_hash", "s_hash"}
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
@@ -193,6 +209,9 @@ def run(app, expect_error=None):
                                           record_har_path=f"{har_dir}/raw.har", record_har_content="omit")
             page = context.new_page()
             RECORDER = evidence.Recorder(context, page)
+            if TOKENS:
+                ISSUED.clear()
+                page.on("request", record_saml_response)
             try:
                 outcome = flow(page, app)
             finally:
@@ -220,6 +239,8 @@ def run(app, expect_error=None):
                 if problem:
                     print(f"[{app}] browser evidence not saved: {problem}")
                     outcome = (f"{app}:evidence-error", problem)
+                if TOKENS:
+                    write_issued(app)
                 SETUP_KEYS.clear()
                 TYPED_CODES.clear()
                 RECORDER = None
@@ -243,6 +264,102 @@ def run(app, expect_error=None):
         return 0
     print(f"[{app}] FAIL expected error {expect_error!r}; page says:\n{excerpt(text)}")
     return 1
+
+
+def jwt_parts(token):
+    """Header and claims of a JWT, decoded; the signature is never looked at."""
+    def part(i):
+        seg = token.split(".")[i]
+        return json.loads(base64.urlsafe_b64decode(seg + "=" * (-len(seg) % 4)))
+    claims = {k: v for k, v in part(1).items() if k not in DROP_CLAIMS}
+    return {"header": part(0), "claims": claims}
+
+
+def record_oidc_tokens(page, base):
+    """The ID token as the debug page shows it, and the access token fetched
+    in the page and decoded here. Neither token is kept."""
+    try:
+        pres = page.locator("pre").all_inner_texts()
+        heads = page.locator("h2").all_inner_texts()
+        # The debug page's sections, in order: ID token header, ID token claims, ...
+        shown = dict(zip([h for h in heads if h.startswith(("ID token", "UserInfo"))], pres))
+        idt = {"header": json.loads(shown.get("ID token header", "{}")),
+               "claims": {k: v for k, v in json.loads(shown.get("ID token claims (validated)", "{}")).items()
+                          if k not in DROP_CLAIMS}}
+        ISSUED["oidc_id_token"] = idt
+    except (PWError, ValueError) as exc:
+        ISSUED["oidc_id_token"] = {"error": type(exc).__name__}
+    try:
+        resp = page.evaluate(
+            """async (url) => { const r = await fetch(url, {credentials: "same-origin"});
+                               return {status: r.status, body: await r.text()}; }""",
+            base + "/debug/access-token")
+        token = resp.pop("body").strip()
+        if resp["status"] == 200 and token.count(".") == 2:
+            ISSUED["oidc_access_token"] = jwt_parts(token)
+        else:
+            ISSUED["oidc_access_token"] = {"error": f"HTTP {resp['status']}"}
+        del token
+    except (PWError, ValueError, IndexError) as exc:
+        ISSUED["oidc_access_token"] = {"error": type(exc).__name__}
+
+
+SAML = {"p": "urn:oasis:names:tc:SAML:2.0:protocol", "a": "urn:oasis:names:tc:SAML:2.0:assertion",
+        "ds": "http://www.w3.org/2000/09/xmldsig#"}
+
+
+def record_saml_response(request):
+    """The SAML response the browser posts to the SP's ACS, summarised in
+    memory: never the response itself, its signature or its IDs."""
+    if request.method != "POST" or not urlsplit(request.url).path.endswith("/saml/acs"):
+        return
+    try:
+        from urllib.parse import parse_qs
+        import xml.etree.ElementTree as ET
+        raw = parse_qs(request.post_data or "").get("SAMLResponse", [""])[0]
+        root = ET.fromstring(base64.b64decode(raw))
+        del raw
+
+        def text(path, el=root):
+            found = el.find(path, SAML)
+            return found.text.strip() if found is not None and found.text else None
+
+        def attrs(path, names, el=root):
+            found = el.find(path, SAML)
+            return {n: found.get(n) for n in names if found is not None and found.get(n)} if found is not None else {}
+
+        a = root.find("a:Assertion", SAML)
+        out = {"destination": root.get("Destination"), "issue_instant": root.get("IssueInstant"),
+               "issuer": text("a:Issuer"),
+               "status": attrs("p:Status/p:StatusCode", ["Value"]).get("Value"),
+               "response_signed": root.find("ds:Signature", SAML) is not None}
+        if a is not None:
+            out["assertion"] = {
+                "issue_instant": a.get("IssueInstant"),
+                "issuer": text("a:Issuer", a),
+                "signed": a.find("ds:Signature", SAML) is not None,
+                "subject_name_id": text("a:Subject/a:NameID", a),
+                "subject_confirmation": attrs("a:Subject/a:SubjectConfirmation/a:SubjectConfirmationData", ["NotOnOrAfter", "Recipient"], a),
+                "conditions": attrs("a:Conditions", ["NotBefore", "NotOnOrAfter"], a),
+                "audience": text("a:Conditions/a:AudienceRestriction/a:Audience", a),
+                "authn": attrs("a:AuthnStatement", ["AuthnInstant", "SessionNotOnOrAfter"], a),
+                "attributes": {at.get("Name"): [v.text for v in at.findall("a:AttributeValue", SAML)]
+                               for at in a.findall("a:AttributeStatement/a:Attribute", SAML)},
+            }
+        # The signing certificate: public, decoded on the host (no openssl here).
+        cert = root.find(".//ds:X509Certificate", SAML)
+        if cert is not None and cert.text:
+            out["signing_certificate_b64"] = "".join(cert.text.split())
+        ISSUED["saml_response"] = out
+    except Exception as exc:  # noqa: BLE001 - the login goes on; say what broke, never the value
+        ISSUED["saml_response"] = {"error": type(exc).__name__}
+
+
+def write_issued(app):
+    """One line per run in tokens.jsonl, next to the seen-values file."""
+    path = os.path.join(os.path.dirname(SEEN_FILE), "tokens.jsonl")
+    with open(path, "a") as fh:
+        fh.write(json.dumps({"app": app, "issued": dict(ISSUED) or None}) + "\n")
 
 
 def snap(step):
@@ -373,6 +490,8 @@ def flow(page, app):
     snap("back-at-app")
     if not page.locator("#login-ok").count():
         return f"{app}:error", page.inner_text("body")
+    if TOKENS and app.startswith("oidc"):
+        record_oidc_tokens(page, base)
     if app.startswith("oidc-api"):
         return call_api(page, app)
     if app == "oidc-token":
@@ -420,6 +539,8 @@ def signed_in_silently(page, app):
     """Keycloak sent the browser straight back to the app, with no login form."""
     page.wait_for_load_state("load")
     snap("back-at-app")
+    if TOKENS:
+        record_oidc_tokens(page, APPS[app][0])
     who = page_identity(page)
     print(f"[{app}] no login form was shown. The app says: email={who['email']} "
           f"preferred_username={who['preferred_username']} sub={who['sub']} realm roles: {who['roles'] or '(none beyond the defaults)'}")
