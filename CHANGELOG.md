@@ -2,6 +2,12 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](docs/operating.md#upgrading-an-existing-lab).
 
+## One-time codes over RADIUS are refused when reused (2026-11-24)
+
+**Fixed:** `rlm_totp` in FreeRADIUS 3.2.4 to 3.2.10, the lab's version, could accept a one-time code it had already accepted. That is an upstream bug, fixed on the v3.2.x branch in commit [3e3f261](https://github.com/FreeRADIUS/freeradius-server/commit/3e3f26119a14a2f9bb7c5c6dfbcd1a19c86164f5) ("duplicate key / passwd in the dedup structure"); no 3.2.x release includes the fix yet. FreeRADIUS v4 isn't affected. The lab now records each accepted `(user, code)` in `rlm_cache` (`radius/mods/cache`, `radius/sites/default`) and refuses it for as long as the code stays valid, whatever `rlm_totp` does. `scripts/test.sh` checks that a spent code is refused when replayed 30 times alongside other RADIUS logins.
+
+**Why the upgrade steps:** none beyond the usual: `scripts/test.sh` rebuilds the RADIUS image.
+
 ## Browser evidence, and scenario 24: cookie dropped (2026-11-24)
 
 **Added:**

@@ -104,6 +104,8 @@ server default {
 			# still valid. Clear any Cache-TTL left over from the State
 			# handling above first (it would otherwise expire the record
 			# at once), look without writing, reject a repeat, else record.
+			# rlm_totp 3.2.4 to 3.2.10 could accept a repeat itself (fixed
+			# on the v3.2.x branch in commit 3e3f261): see mods/cache.
 			if (ok) {
 				update control {
 					&Cache-TTL !* ANY

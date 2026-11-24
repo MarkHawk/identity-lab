@@ -18,6 +18,10 @@ cache mfa_state {
 # once. ttl 90 covers the code's whole validity (the step either side of now,
 # as mods/totp allows: three 30-second steps). Kept in memory (rbtree), so a
 # restart forgets it, like mfa_state above.
+# Why the lab does this itself: rlm_totp in FreeRADIUS 3.2.4 to 3.2.10 could
+# accept a code it had already accepted. That is fixed upstream on the
+# v3.2.x branch in commit 3e3f261 (no 3.2.x release includes it yet, and this
+# image is 3.2.10); v4 isn't affected. See CHANGELOG.md.
 cache totp_used {
 	driver = "rlm_cache_rbtree"
 	key = "%{User-Name}:%{TOTP-Password}"

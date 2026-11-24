@@ -227,6 +227,10 @@ radius_forged_state() {
 # Spend a fresh code, then replay it many times under concurrent load; every
 # replay must be refused. Driven inside the NAS with radclient; the password
 # and code arrive on stdin, never on a command line, so they aren't logged.
+# The regression test for rlm_totp in FreeRADIUS 3.2.4 to 3.2.10, which could
+# accept a spent code again; fixed upstream on the v3.2.x branch in commit
+# 3e3f261, not yet in a release (v4 isn't affected). It passes because the
+# lab records spent codes itself (radius/mods/cache), whatever rlm_totp does.
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_replay_concurrent
 radius_replay_concurrent() {
   local code out acc valid
