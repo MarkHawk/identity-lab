@@ -93,8 +93,16 @@ redact_log() {
 # One-time codes submitted during the run, one per line, for the leak check.
 # Outside test-results/, mode 0600, deleted on exit. Never printed.
 CODES_FILE="$(umask 077; mktemp)"
+# Cookie values the browser held during the run, one per line, appended by
+# e2e.py (E2E_SEEN_FILE), for the leak checks. A 0700 folder outside
+# test-results/, deleted on exit. Never printed.
+SEEN_DIR="$(umask 077; mktemp -d)"
+SEEN_FILE="$SEEN_DIR/cookie-values"
+# Evidence newer than this was saved by this run.
+RUN_MARK="$SEEN_DIR/run-start"
+: >"$RUN_MARK"
 # shellcheck disable=SC2329  # invoked by the EXIT trap
-on_exit() { redact_log; rm -f "$CODES_FILE"; }
+on_exit() { redact_log; rm -f "$CODES_FILE"; rm -rf "$SEEN_DIR"; }
 trap on_exit EXIT
 
 # check <description> <command...> -- run, record, show output on failure.
@@ -120,10 +128,14 @@ check() {
 
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" expect_state ...
 expect_state() { [[ "$("$LAB_ROOT/scripts/status.sh" "$1")" == "$2" ]] || { echo "state is not $2"; "$LAB_ROOT/scripts/status.sh" | tail -n 6; return 1; }; }
+# tests_run [compose run options...] tests <e2e.py args> -- the browser, with
+# the folder e2e.py appends the run's cookie values to.
+# shellcheck disable=SC2329  # invoked by the browser helpers, themselves invoked indirectly
+tests_run()    { compose run --rm -v "$SEEN_DIR:/seen" -e E2E_SEEN_FILE=/seen/cookie-values "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser ...
-browser()      { compose run --rm tests "$@"; }
+browser()      { tests_run tests "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_as ...
-browser_as()   { local user="$1"; shift; compose run --rm -e E2E_USER="$user" tests "$@"; }
+browser_as()   { local user="$1"; shift; tests_run -e E2E_USER="$user" tests "$@"; }
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" radius_login ...
 radius_login() { # <user> <demo|wrong> <text nas-auth must print>; the password goes in on stdin
   local out pw code=""
@@ -177,7 +189,7 @@ totp_for() {
 mfa_login() {
   local user="$1" app="$2" kind="$3" code; shift 3
   code="$(totp_for "$user" "$kind")" || { echo "$code"; return 1; }
-  printf '%s\n' "$code" | compose run --rm -T -e E2E_USER="$user" -e E2E_OTP=stdin tests "$app" "$@"
+  printf '%s\n' "$code" | tests_run -T -e E2E_USER="$user" -e E2E_OTP=stdin tests "$app" "$@"
 }
 # enrol_login <user> <app> --expect ok | --expect-error <text> -- a new
 # starter's first login: the setup page, with an app that ignores the
@@ -186,7 +198,7 @@ mfa_login() {
 enrol_login() {
   local user="$1" app="$2"; shift 2
   new_starter_reset "$user" || return 1
-  compose run --rm -T -e E2E_USER="$user" -e E2E_ENROL=1 tests "$app" "$@" </dev/null
+  tests_run -T -e E2E_USER="$user" -e E2E_ENROL=1 tests "$app" "$@" </dev/null
 }
 # radius_mfa <new|wrong|again> <text>... -- heidi over RADIUS: the demo
 # password, then the code for the Access-Challenge. nas-auth must print
@@ -602,6 +614,145 @@ issuer_ok()    { # <port> [curl args...] -- discovery at that port reports it as
   [[ "$iss" == "https://$LAB_HOST:$port/realms/$REALM" ]] || { echo "expected https://$LAB_HOST:$port/realms/$REALM"; return 1; }
 }
 
+# --- Browser evidence ------------------------------------------------------------
+# e2e.py saves a redacted HAR, a cookie summary and the console with every run
+# (tests/evidence.py). These check that none of them holds a secret, with the
+# same patterns as the logs and pages, plus what only a HAR can leak: cookie
+# values, Authorization values, form fields, response bodies, SAML messages.
+# Base64 of "<samlp:" and "<saml:": the start of a SAML message, unmasked.
+SAML_B64_RE='PHNhbWxwO|PHNhbWw6'
+SAML_PARAM_RE='(SAMLRequest|SAMLResponse|RelayState)=[^*&[:space:]"]'
+# jq: the number of places in a HAR where a value survived redaction.
+# shellcheck disable=SC2016  # jq, not shell
+HAR_UNREDACTED_JQ='[.log.entries[] |
+  (.request.cookies[]?, .response.cookies[]? | select(.value != "<redacted>")),
+  (.request.headers[]?, .response.headers[]? | select(.name | ascii_downcase | . == "cookie" or . == "set-cookie")
+     | .value | split("\n")[] | split(";")[] | ltrimstr(" ") | select(test("^[^=]+=") and (test("^[^=]+=<redacted>$") | not))
+     | select(test("^(Path|Domain|Expires|Max-Age|SameSite|Priority|Partitioned|Version|Comment)="; "i") | not)),
+  (.request.headers[]? | select(.name | ascii_downcase | . == "authorization" or . == "proxy-authorization")
+     | select(.value | endswith("<redacted>") | not)),
+  (.request.postData.params[]? | select((.name | ascii_downcase | IN("username", "login", "credentialid", "rememberme") | not) and .value != "***")),
+  (.response.content | select(has("text")))
+] | length'
+
+# scan_browser_evidence <seen-values-file> <test.log> [file...] -- 0 when no
+# saved HAR, cookie summary or console log holds a secret. Prints counts and
+# file names, never a value.
+# shellcheck disable=SC2329  # invoked by the checks below
+scan_browser_evidence() {
+  local seen="$1" log="$2" f v n=0 bad=0 values=0 hars=0 sums=0 out; shift 2
+  for f in "$@"; do
+    [[ -f "$f" ]] || continue
+    n=$((n + 1)) out=""
+    for v in "${SECRETS[@]}"; do grep -qF -- "$v" "$f" && out+="a secret from .env; " && break; done
+    grep -qE -- "$JWT_RE" "$f" && out+="a JWT; "
+    grep -qE -- "$AUTH_CODE_RE" "$f" && out+="an authorisation code; "
+    grep -qE -- "$STATE_RE" "$f" && out+="an OAuth state value; "
+    grep -qE -- "$ONE_TIME_RE" "$f" && out+="an unmasked ${ONE_TIME_NAMES[*]}; "
+    grep -qE -- "$SAML_PARAM_RE|$SAML_B64_RE" "$f" && out+="a SAML message or RelayState; "
+    if [[ -s "$seen" ]] && grep -qFf "$seen" "$f"; then out+="a cookie value the browser held; "; fi
+    case "$f" in
+      *.har)
+        hars=$((hars + 1))
+        v="$(jq -r "$HAR_UNREDACTED_JQ" "$f" 2>/dev/null || echo unreadable)"
+        [[ "$v" == 0 ]] || out+="unredacted HAR fields: $v; " ;;
+      *-cookies.json)
+        sums=$((sums + 1))
+        jq -e '[paths | .[-1] | select(. == "value")] | length == 0' "$f" >/dev/null || out+="a cookie value field; "
+        jq -e '.selfCheck.filesWithAValue == 0' "$f" >/dev/null || out+="no clean self-check from e2e.py; " ;;
+    esac
+    if [[ -n "$out" ]]; then bad=$((bad + 1)); echo "  ${f##*/}: ${out%; }"; fi
+  done
+  [[ -s "$seen" ]] && values="$(sort -u "$seen" | grep -c .)"
+  if [[ -s "$seen" ]] && grep -qFf "$seen" "$log"; then bad=$((bad + 1)); echo "  ${log##*/}: a cookie value the browser held"; fi
+  echo "checked $n browser evidence file(s) ($hars HAR, $sums cookie summaries) and ${log##*/} against $values cookie value(s): $bad with a secret"
+  (( bad == 0 ))
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_evidence_clean
+browser_evidence_clean() {
+  local files=()
+  mapfile -t files < <(find "$RESULTS" -maxdepth 1 \( -name '*.har' -o -name '*-cookies.json' -o -name '*-console.txt' \) | sort)
+  (( ${#files[@]} > 0 )) || { echo "no browser evidence in $RESULTS"; return 1; }
+  scan_browser_evidence "$SEEN_FILE" "$LOG" "${files[@]}"
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_evidence_complete
+browser_evidence_complete() { # every browser run of this test.sh saved all three files
+  # A run is its <app>-<time> stamp, from any file it saved: a browser error
+  # page (ERR_TOO_MANY_REDIRECTS) can't be screenshotted, so not every run has a .png.
+  local s n=0 missing=()
+  while read -r s; do
+    [[ -n "$s" ]] || continue
+    n=$((n + 1))
+    [[ -f "$RESULTS/$s.har" && -f "$RESULTS/$s-cookies.json" && -f "$RESULTS/$s-console.txt" ]] || missing+=("$s")
+  done < <(find "$RESULTS" -maxdepth 1 -newer "$RUN_MARK" -regextype posix-extended \
+             -regex '.*/[a-z-]+-[0-9]+(\.png|\.html|\.har|-cookies\.json|-console\.txt)' -printf '%f\n' \
+           | sed -E 's/(\.png|\.html|\.har|-cookies\.json|-console\.txt)$//' | sort -u)
+  echo "this run: $n browser run(s), $(find "$RESULTS" -maxdepth 1 -name '*.png' -newer "$RUN_MARK" | wc -l) with a screenshot;" \
+    "missing a HAR, cookie summary or console log: ${#missing[@]}"
+  (( ${#missing[@]} == 0 )) || printf '  %s\n' "${missing[@]}"
+  (( n > 0 && ${#missing[@]} == 0 ))
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" cookie_values_not_in_logs
+cookie_values_not_in_logs() { # no cookie value the browser held in any container's log
+  local logs n
+  [[ -s "$SEEN_FILE" ]] || { echo "e2e.py recorded no cookie values, so nothing to check"; return 1; }
+  logs="$(compose logs --no-log-prefix 2>&1)"
+  n="$(grep -cFf "$SEEN_FILE" <<<"$logs" || true)"
+  echo "checked $(sort -u "$SEEN_FILE" | grep -c .) cookie value(s) against $(wc -l <<<"$logs") log lines: $n line(s) with one"
+  (( n == 0 ))
+}
+# The browser evidence scanner's self-test: a made-up HAR and cookie summary
+# as e2e.py writes them, and (planted) the same with values left in. Nothing
+# from .env or the lab; the values are assembled here so that no file holds them.
+# shellcheck disable=SC2329  # invoked by browser_evidence_selftest
+evidence_selftest_dir() { # <dir> <clean|planted>
+  local d="$1" cv="sel""ftest-cookie-$RANDOM$RANDOM" sv sb
+  printf '%s\n' "$cv" >"$d/seen"
+  sv="$(printf 'not a real SAML response' | base64 -w0)"
+  sb="$(printf '<samlp:Response ID="selftest"/>' | base64 -w0)"
+  if [[ "$2" == clean ]]; then
+    cat >"$d/run.har" <<HAR
+{"log": {"entries": [{"request": {"method": "POST", "url": "https://idlab.example:8181/saml/acs?code=***&state=***",
+  "headers": [{"name": "Cookie", "value": "saml_sp_session=<redacted>"}, {"name": "Authorization", "value": "Bearer <redacted>"}],
+  "cookies": [{"name": "saml_sp_session", "value": "<redacted>"}],
+  "postData": {"mimeType": "application/x-www-form-urlencoded", "text": "SAMLResponse=***&RelayState=***&username=alice",
+    "params": [{"name": "SAMLResponse", "value": "***"}, {"name": "username", "value": "alice"}]}},
+ "response": {"status": 302, "headers": [{"name": "Set-Cookie", "value": "saml_sp_session=<redacted>; HttpOnly; Path=/; SameSite=None"}],
+  "cookies": [{"name": "saml_sp_session", "value": "<redacted>"}], "content": {"size": 0}}}]}}
+HAR
+    printf '{"steps": [{"cookies": [{"name": "saml_sp_session", "secure": false}]}], "selfCheck": {"filesWithAValue": 0}}\n' >"$d/run-cookies.json"
+  else
+    cat >"$d/run.har" <<HAR
+{"log": {"entries": [{"request": {"method": "POST", "url": "https://idlab.example:8181/saml/acs",
+  "headers": [{"name": "Cookie", "value": "saml_sp_session=$cv"}, {"name": "Authorization", "value": "Bearer abc"}],
+  "cookies": [{"name": "saml_sp_session", "value": "$cv"}],
+  "postData": {"mimeType": "application/x-www-form-urlencoded", "text": "SAMLResponse=$sb&password=x",
+    "params": [{"name": "SAMLResponse", "value": "$sv"}, {"name": "password", "value": "x"}]}},
+ "response": {"status": 200, "headers": [{"name": "Set-Cookie", "value": "saml_sp_session=$cv; HttpOnly; Path=/"}],
+  "cookies": [], "content": {"size": 9, "text": "selftest"}}}]}}
+HAR
+    printf '{"steps": [{"cookies": [{"name": "saml_sp_session", "value": "%s"}]}]}\n' "$cv" >"$d/run-cookies.json"
+  fi
+  printf 'info: nothing here\n' >"$d/run-console.txt"
+  printf '=== selftest\n' >"$d/test.log"
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" browser_evidence_selftest ...
+browser_evidence_selftest() { # <clean|planted> -- clean passes; planted is reported in both files
+  local d out rc=0
+  d="$(mktemp -d)"
+  evidence_selftest_dir "$d" "$1"
+  out="$(scan_browser_evidence "$d/seen" "$d/test.log" "$d/run.har" "$d/run-cookies.json" "$d/run-console.txt")" || rc=$?
+  rm -rf "$d"
+  printf 'scanner (exit %d):\n%s\n' "$rc" "$out"
+  if [[ "$1" == clean ]]; then
+    (( rc == 0 ))
+  else
+    (( rc != 0 )) \
+      && grep -qE 'run\.har: .*a SAML message.*a cookie value the browser held; unredacted HAR fields: [1-9]' <<<"$out" \
+      && grep -qE 'run-cookies\.json: a cookie value the browser held; a cookie value field; no clean self-check' <<<"$out"
+  fi
+}
+
 # --- Bring the lab up -----------------------------------------------------------
 [[ -f "$ENV_FILE" ]] || "$LAB_ROOT/scripts/setup.sh"
 load_env
@@ -780,6 +931,13 @@ check "secrets: leak scanners pass the same evidence without them (near misses o
 check "secrets: no authorisation code, OAuth state or other one-time login value in test.log" testlog_free_of_login_values
 check "secrets: no TOTP secret in any container's log, saved page or test.log" totp_secret_nowhere
 check "secrets: no submitted one-time code in any container's log, saved page or test.log" codes_nowhere
+check "secrets: the browser evidence redactor removes made-up cookie values, tokens, codes, SAML messages, passwords and one-time codes" \
+  compose run --rm -T --entrypoint python3 tests /tests/evidence.py selftest
+check "secrets: browser evidence scanner reports a planted cookie value, SAML message and unredacted HAR fields" browser_evidence_selftest planted
+check "secrets: browser evidence scanner passes the same evidence redacted" browser_evidence_selftest clean
+check "secrets: every browser run saved a HAR, a cookie summary and its console" browser_evidence_complete
+check "secrets: no secret, token, code, SAML message or cookie value in any saved HAR, cookie summary or console log" browser_evidence_clean
+check "secrets: no cookie value the browser held in any container's log" cookie_values_not_in_logs
 
 # --- Summary ----------------------------------------------------------------------
 echo

@@ -246,7 +246,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 350 checks cover:
+The 357 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -274,10 +274,17 @@ The 350 checks cover:
   - `proxy-bypass`: the fix saved the broken container's log, with its `backchannel_failed` line, before recreating it
 - that brute-force protection, which is on for the whole realm, has recorded no failed login for alice or dave
 - last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, no JWT (access or ID token) in any container's log, saved page or `test.log`, no private key in any container's log or `test.log`, and no TOTP secret, or one-time code that was submitted, in any container's log, saved page or `test.log`. Those last two scanners first prove themselves on a temporary directory: they must report a made-up secret and code planted where a leak would show, and pass the same directory without them.
+- the browser evidence (below): that every browser run saved a HAR, a cookie summary and its console; that none of them holds a secret from `.env`, a JWT, an authorisation code, OAuth state, one-time login value, SAML message, `RelayState` or any cookie value the browser held during the run, and that no HAR field survived redaction (cookie values, `Authorization`, form fields, response bodies); that `e2e.py`'s own check of each run found nothing; and that no cookie value the browser held appears in any container's log. The redactor proves itself on a made-up HAR, and the scanner reports a planted HAR and cookie summary and passes the same files redacted.
 
 `scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log. One-time codes reach the browser on its standard input, never on a command line, so they're not in the log either.
 
-Screenshots, page HTML and a full log go to `test-results/`. [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
+Screenshots, page HTML and a full log go to `test-results/`. Every browser run also saves, next to its screenshot:
+
+- `<app>-<time>.har`: the login's HTTP traffic, redacted by `tests/evidence.py`. URLs, methods, status codes, redirects, header names, `Set-Cookie` attributes and timings are kept; cookie values, `Authorization` values, one-time values in URLs (`code`, `state`, `SAMLRequest`, `Signature`, `session_code`, `client_data`, ...) and form fields other than the username are masked, and response bodies are never recorded. The unredacted HAR Playwright records stays in a temporary folder inside the browser's container and is deleted when the run ends, however it ends.
+- `<app>-<time>-cookies.json`: the cookie jar at the app, at Keycloak, back at the app and at the end: each cookie's name, domain, path, `Secure`, `HttpOnly`, `SameSite` and expiry, never its value. `refusedByBrowser` lists the cookies the browser refused and why (for example `SameSiteNoneInsecure`). Those reasons come from Chromium's DevTools protocol, so they're Chromium only; `inferredRefused` lists cookies a `Set-Cookie` header set that never reached the jar, worked out from the HAR, which any browser's HAR allows.
+- `<app>-<time>-console.txt`: the browser console's messages.
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs the same script on `ubuntu-latest` with `LAB_HOST=localhost`.
 
 ## Rotating secrets
 
