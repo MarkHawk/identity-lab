@@ -135,6 +135,12 @@ scenario_also_check() {
   echo "the app's page: email carol@idlab.example, realm roles: $roles"
   grep -qF 'carol@idlab.example' "${har%.har}.html" || { echo "the page should show carol"; return 1; }
   ! grep -qF 'lab-user' <<<"$roles" || { echo "carol's roles should not include lab-user"; return 1; }
+  # The saved state holds cookie values: private to this user, and not among the evidence.
+  [[ "$(stat -c %a "$_wa_state")" == 600 && "$(stat -c %a "${_wa_state%/*}")" == 700 ]] \
+    || { echo "the shared PC's state file should be mode 600 in a 700 folder"; return 1; }
+  [[ -z "$(find "$LAB_ROOT/test-results" -name 'shared-pc*' -print -quit)" ]] \
+    || { echo "the shared PC's state is in test-results/"; return 1; }
+  echo "the saved browser state is mode 600 in a 700 folder, and not in test-results/"
   # 4. Keycloak: carol's session is one the PC left open, and alice has no login here.
   id="$(kc_user_id "$_wa_user")"
   sessions="$(kc_api GET "/$REALM/users/$id/sessions")" || return 1
