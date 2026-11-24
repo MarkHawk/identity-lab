@@ -45,13 +45,31 @@ over), signs in as a demo user (E2E_USER, default alice; LDAP users such as
 dave work the same way), and checks where the flow ends up. Exit
 status 0 means the expectation held. A screenshot and the final page HTML
 are written to /results on every run.
+
+Every run also saves, next to them (tests/evidence.py):
+<app>-<time>.har, the login's HTTP traffic, redacted: no cookie value,
+Authorization value, one-time URL value (code, state, SAMLRequest,
+Signature, ...), form field other than the username, or response body;
+<app>-<time>-cookies.json, the cookie jar's names and attributes (never
+values) at the app, at Keycloak, back at the app and at the end, with the
+cookies Chromium refused and why (from its DevTools protocol, so Chromium
+only) and those a Set-Cookie set that never reached the jar (inferred);
+and <app>-<time>-console.txt, the browser console. Before keeping them,
+e2e.py checks the three files for every secret value it knew during the
+run (cookie values, the password, typed codes, setup keys): a file that
+still holds one is replaced, and the run fails. The unredacted HAR
+Playwright records stays in a temporary folder inside the container and is
+deleted when the run ends, however it ends.
 """
 
 import argparse
 import base64
+import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 from urllib.parse import urlsplit
 
@@ -60,6 +78,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
 import authenticator  # the lab's authenticator app (apps/authenticator), for its TOTP code
+import evidence  # the HAR, cookie and console evidence (tests/evidence.py)
 
 LAB_HOST = os.environ["LAB_HOST"]
 
@@ -88,6 +107,14 @@ ENROL = os.environ.get("E2E_ENROL") == "1"
 # Keys read from a setup page during this run: scrubbed from the evidence,
 # and the saved HTML checked for them. Never printed.
 SETUP_KEYS = []
+# One-time codes typed during this run, for the same check on the browser
+# evidence (save_browser_evidence). Never printed.
+TYPED_CODES = []
+# The run's evidence.Recorder: console, cookie jar snapshots, refused cookies.
+RECORDER = None
+# Set by scripts/test.sh: where to append the run's cookie values, so it can
+# search the containers' logs for them. Outside /results; never printed.
+SEEN_FILE = os.environ.get("E2E_SEEN_FILE")
 USER = os.environ.get("E2E_USER", "alice")
 PASSWORD = os.environ["DEMO_PASSWORD"]
 EXPECTED_EMAIL = f"{USER}@idlab.example"
@@ -114,30 +141,50 @@ def run(app, expect_error=None):
     if LAB_HOST != "localhost":
         # Resolve LAB_HOST to this machine without relying on LAN DNS.
         args.append(f"--host-resolver-rules=MAP {LAB_HOST} 127.0.0.1")
+    global RECORDER
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=args)
-        page = browser.new_context(client_certificates=client_certificates(app)).new_page()
+        # The raw HAR is unredacted: it goes to a folder inside this
+        # container, never to the mounted /results, and is deleted below
+        # whatever happens. Response bodies aren't recorded at all.
+        har_dir = tempfile.mkdtemp(prefix="e2e-har-")
         try:
-            outcome = flow(page, app)
-        finally:
-            stamp = f"{app}-{int(time.time())}"
-            os.makedirs(RESULTS, exist_ok=True)
+            context = browser.new_context(client_certificates=client_certificates(app),
+                                          record_har_path=f"{har_dir}/raw.har", record_har_content="omit")
+            page = context.new_page()
+            RECORDER = evidence.Recorder(context, page)
             try:
-                scrub_setup_key(page)
-                page.screenshot(path=f"{RESULTS}/{stamp}.png", full_page=True)
-                html = page.content()
-                leaked = any(k in html or k.lower() in html for k in SETUP_KEYS)
-                if leaked:
-                    html = "<!-- not saved: it still held an authenticator setup key -->"
-                with open(f"{RESULTS}/{stamp}.html", "w") as fh:
-                    fh.write(html)
-                if SETUP_KEYS:
-                    print(f"[{app}] authenticator setup key kept out of the saved page: {not leaked}")
+                outcome = flow(page, app)
+            finally:
+                stamp = f"{app}-{int(time.time())}"
+                os.makedirs(RESULTS, exist_ok=True)
+                try:
+                    scrub_setup_key(page)
+                    page.screenshot(path=f"{RESULTS}/{stamp}.png", full_page=True)
+                    html = page.content()
+                    leaked = any(k in html or k.lower() in html for k in SETUP_KEYS)
                     if leaked:
-                        outcome = (f"{app}:evidence-error", "setup key still on the page after scrubbing")
-            except Exception:  # noqa: BLE001 - evidence capture is best effort
-                pass
-            SETUP_KEYS.clear()
+                        html = "<!-- not saved: it still held an authenticator setup key -->"
+                    with open(f"{RESULTS}/{stamp}.html", "w") as fh:
+                        fh.write(html)
+                    if SETUP_KEYS:
+                        print(f"[{app}] authenticator setup key kept out of the saved page: {not leaked}")
+                        if leaked:
+                            outcome = (f"{app}:evidence-error", "setup key still on the page after scrubbing")
+                except Exception:  # noqa: BLE001 - evidence capture is best effort
+                    pass
+                try:
+                    problem = save_browser_evidence(context, f"{har_dir}/raw.har", stamp)
+                except Exception as exc:  # noqa: BLE001 - say so, but never with a value
+                    problem = f"capturing it failed: {type(exc).__name__}"
+                if problem:
+                    print(f"[{app}] browser evidence not saved: {problem}")
+                    outcome = (f"{app}:evidence-error", problem)
+                SETUP_KEYS.clear()
+                TYPED_CODES.clear()
+                RECORDER = None
+        finally:
+            shutil.rmtree(har_dir, ignore_errors=True)
             browser.close()
 
     where, text = outcome
@@ -156,6 +203,72 @@ def run(app, expect_error=None):
     return 1
 
 
+def snap(step):
+    """A cookie jar snapshot for the run's -cookies.json, after a step that matters."""
+    if RECORDER is not None:
+        RECORDER.snapshot(step)
+
+
+def save_browser_evidence(context, raw_har, stamp):
+    """Write <stamp>.har (redacted), <stamp>-cookies.json and
+    <stamp>-console.txt to /results, then check them for every secret value
+    this run knew: cookie values, the password, typed codes and setup keys.
+    Returns None, or what went wrong. Never prints a value."""
+    rec = RECORDER
+    if rec is None:
+        return "no recorder"
+    rec.snapshot("end")
+    context.close()  # Playwright writes the HAR on close
+    try:
+        with open(raw_har) as fh:
+            har = json.load(fh)
+    except (OSError, ValueError) as exc:
+        har = None
+        missing = type(exc).__name__
+    else:
+        missing = None
+    paths = {"har": f"{RESULTS}/{stamp}.har", "cookies": f"{RESULTS}/{stamp}-cookies.json",
+             "console": f"{RESULTS}/{stamp}-console.txt"}
+    redacted = evidence.redact_har(har) if har is not None else None
+    del har
+    if redacted is not None:
+        with open(paths["har"], "w") as fh:
+            json.dump(redacted, fh, indent=1)
+    summary = rec.summary(redacted)
+    with open(paths["cookies"], "w") as fh:
+        json.dump(summary, fh, indent=1)
+    with open(paths["console"], "w") as fh:
+        fh.write("".join(line + "\n" for line in rec.console))
+    # The leak check: plain values, then the six-digit codes as a value
+    # (after = or in quotes), since six digits alone are too common.
+    values = set(rec.values) | set(SETUP_KEYS) | {k.lower() for k in SETUP_KEYS} | {PASSWORD}
+    hits = set(evidence.leaked(paths.values(), values))
+    for p in paths.values():
+        try:
+            text = open(p, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        if any(re.search(r'["=]' + re.escape(c) + r'(["&;]|$)', text, re.M) for c in TYPED_CODES):
+            hits.add(p)
+    summary["selfCheck"] = {"valuesChecked": len(values) + len(TYPED_CODES), "filesWithAValue": len(hits)}
+    if paths["cookies"] not in hits:
+        with open(paths["cookies"], "w") as fh:
+            json.dump(summary, fh, indent=1)
+    for p in hits:
+        with open(p, "w") as fh:
+            fh.write("not saved: it still held a secret value after redaction\n")
+    if SEEN_FILE:
+        # For scripts/test.sh's own scan of the containers' logs: a 0600 file
+        # in a 0700 folder outside test-results/, deleted when the run ends.
+        with open(SEEN_FILE, "a") as fh:
+            fh.write("".join(v + "\n" for v in sorted(rec.values)))
+    if hits:
+        return f"{len(hits)} evidence file(s) still held a secret value after redaction"
+    if missing:
+        return f"Playwright wrote no HAR ({missing})"
+    return None
+
+
 def flow(page, app):
     """Drive the login and report (where-we-ended-up, visible text)."""
     base, kc = APPS[app]
@@ -169,6 +282,7 @@ def flow(page, app):
         # The browser gave up before showing any page, e.g.
         # net::ERR_TOO_MANY_REDIRECTS from a redirect loop.
         return f"{app}:error", str(exc)
+    snap("app")
     # An error page in front of the app (e.g. a 502 from the reverse proxy).
     if page.locator("#login").count() == 0:
         return f"{app}:error", page.inner_text("body")
@@ -185,6 +299,7 @@ def flow(page, app):
             raise PWTimeout(f"no Keycloak page after Log in; still at {without_query(page.url)}")
         page.wait_for_timeout(250)
     page.wait_for_load_state("load")
+    snap("keycloak")
     if page.locator("#username").count() == 0:
         return "keycloak:error", page.inner_text("body")
     page.fill("#username", USER)
@@ -200,6 +315,7 @@ def flow(page, app):
         page.wait_for_load_state("load")
     except PWTimeout:
         return f"stuck:{without_query(page.url)}", page.inner_text("body")
+    snap("back-at-app")
     if not page.locator("#login-ok").count():
         return f"{app}:error", page.inner_text("body")
     if app.startswith("oidc-api"):
@@ -230,6 +346,7 @@ def otp_step(page, base, timeout=20):
     code = sys.stdin.readline().strip()
     if not code:
         return "keycloak:otp-asked", "Keycloak asked for a one-time code, but none was given\n" + page.inner_text("body")
+    TYPED_CODES.append(code)
     page.fill("#otp", code)
     del code
     page.click("#kc-login")
@@ -266,6 +383,7 @@ def enrol_step(page, base, timeout=20):
     print(f"[enrol] the setup page asks for: {', '.join(asked)}")
     code = authenticator.totp(base64.b32decode(key.upper() + "=" * (-len(key) % 8)), time.time())
     del key
+    TYPED_CODES.append(code)
     page.fill("#totp", code)
     del code
     page.fill("#userLabel", "Lab authenticator")
