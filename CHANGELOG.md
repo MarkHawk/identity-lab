@@ -2,6 +2,15 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](docs/operating.md#upgrading-an-existing-lab).
 
+## Scenarios 25 and 26: browser-side faults (2026-11-24)
+
+**Added:**
+
+- Scenario 25, `login-timeout`, with runbook 25: the realm's login timeout is cut to 20 s, so a Keycloak login page left open longer shows its form again with "Your login attempt timed out. Login will start from the beginning." The password is never checked. The runbook also covers the bookmarked login page, which fails whatever the timeout is ("Restart login cookie not found", or the app's "State not equal" error), and why starting from the app's URL is usually the answer.
+- `tests/e2e.py`: `oidc-stale` (waits 30 s on the login page, then signs in) and `oidc-bookmark` (opens a saved Keycloak URL with no cookies).
+
+**Why the upgrade steps:** none. The scenario changes a realm setting through the Admin API at runtime, so there is no `--fresh`, and `scripts/test.sh` rebuilds the tests image.
+
 ## One-time codes over RADIUS are refused when reused (2026-11-24)
 
 **Fixed:** `rlm_totp` in FreeRADIUS 3.2.4 to 3.2.10, the lab's version, could accept a one-time code it had already accepted. That is an upstream bug, fixed on the v3.2.x branch in commit [3e3f261](https://github.com/FreeRADIUS/freeradius-server/commit/3e3f26119a14a2f9bb7c5c6dfbcd1a19c86164f5) ("duplicate key / passwd in the dedup structure"); no 3.2.x release includes the fix yet. FreeRADIUS v4 isn't affected. The lab now records each accepted `(user, code)` in `rlm_cache` (`radius/mods/cache`, `radius/sites/default`) and refuses it for as long as the code stays valid, whatever `rlm_totp` does. `scripts/test.sh` checks that a spent code is refused when replayed 30 times alongside other RADIUS logins.
