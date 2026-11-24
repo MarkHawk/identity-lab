@@ -218,6 +218,8 @@ Every scenario, what it breaks and the exact error and log line. The [README](..
 
 | 23 | `radius-challenge-unsupported` | RADIUS (NAS), MFA user heidi | heidi is in the directory's `mfa-required` group, so after her password the server answers Access-Challenge. The NAS's challenge-response setting is off, so, as RFC 2865 requires of a NAS that can't prompt, it treats the challenge as a reject. dave, without MFA, still logs in. | NAS: `nas: Access-Reject`, with no prompt for a code. Server log: `Auth: Challenge sent: [heidi] (from client nas port 0)` and then nothing for that attempt: no second Access-Request | [23-radius-challenge-unsupported](../runbooks/23-radius-challenge-unsupported.md) |
 
+| 24 | `cookie-dropped` | SAML | The direct SP's session cookie becomes `SameSite=None` without `Secure` (its settings file loses the Secure line), and browsers refuse it. Keycloak and the SP both log a successful login. The SAML SP behind the proxy has its own settings and still works. | SP, straight after the password: `Your session has expired. Please log in again.`, and again on every retry. SP log: `event=saml_login_ok`, then `event=saml_session_missing path=/debug session_cookie=absent`. Keycloak log: `type="LOGIN"`. Browser (DevTools Issues; not the console): `SameSiteNoneInsecure` | [24-cookie-dropped](../runbooks/24-cookie-dropped.md) |
+
 ## How the scenarios work
 
 Every scenario is:
@@ -231,6 +233,8 @@ The proxy scenarios change one setting file each in `.state/proxy/` (healthy def
 `proxy-maintenance` is a proxy scenario too, on `.state/proxy/kc-maintenance.conf`, included in the Keycloak locations of the `:8183` server but not in `/nginx-healthz`. The OIDC app behind the proxy fails in one of two ways: if it hasn't cached Keycloak's discovery document since it started, its own back-channel request gets the 503 and it shows `503 Server Error: Service Temporarily Unavailable for url: https://proxy:8183/...`; otherwise the browser gets the maintenance page.
 
 The client-cert scenarios change the client, not the proxy: they remove the partner's certificate and key from `.state/mtls-client/`, or replace them with a lab-CA certificate that expired yesterday. `cors-blocked` changes the API's `.state/api/cors-allow-origin`, which it re-reads on every request.
+
+`cookie-dropped` changes the direct SAML SP's `.state/saml-sp/session-cookie.conf`, which it re-reads on every response (healthy default in `apps/saml-sp/session-cookie.conf`); the SP behind the proxy doesn't read it. It is detected from the `Set-Cookie` the SP really sends on `/login`, fetched with the user agent `idlab-status`, which the SP logs on its `saml_authn_request` line so that status checks can be told from real logins.
 
 `totp-clock-drift` shifts the authenticator container's clock through `.state/authenticator/faketime.rc`, as `clock-skew` does the SAML SP's. `otp-policy-changed` changes the realm's OTP policy through the Admin REST API, sending the whole realm back with the policy changed, as the admin console does: Keycloak ignores a partial update without `otpPolicyType`. Its evidence is a silence: `scripts/test.sh` checks that Keycloak logged no `*_ERROR` event for the refused setup. `radius-challenge-unsupported` changes the NAS, not the server, like `radius-shared-secret-mismatch`: its challenge-response setting is a file in the NAS's volume, `/var/lib/nas/challenge` (`yes` or `no`). `mfa-lockout` signs in through Keycloak's login forms with curl five times, with the demo password and a wrong code, and is detected from the account's brute-force record in the Admin REST API; fix is the admin's *Unlock*.
 
@@ -246,7 +250,7 @@ scripts/test.sh --fresh    # also delete the volumes first (Keycloak database, d
 scripts/test.sh --down     # stop the lab afterwards
 ```
 
-The 357 checks cover:
+The 369 checks cover:
 
 - container health, the OIDC issuer directly and through the proxy, the apps over TLS verified against the lab CA (directly, through the reverse proxy, and the egress proxy's OIDC app), and an `ldapwhoami` bind as Keycloak's service account over LDAPS
 - that the OIDC app behind the egress proxy has no route to Keycloak without it
@@ -272,9 +276,10 @@ The 357 checks cover:
   - the client-cert scenarios: curl gets the same 400 and the proxy's error log gives nginx's reason
   - `cors-blocked`: the server-side API call still works, and the API logged the browser's preflight and its successful `GET`
   - `proxy-bypass`: the fix saved the broken container's log, with its `backchannel_failed` line, before recreating it
+  - `cookie-dropped`: alice still logs in to the SAML SP behind the proxy; Keycloak logged a successful `LOGIN` and the SP `saml_login_ok`; and the browser evidence shows the `Set-Cookie` with `SameSite=None` and no `Secure` on the `/saml/acs` response, Chromium's refusal (`SameSiteNoneInsecure`), and the cookie missing from the jar back at the app
 - that brute-force protection, which is on for the whole realm, has recorded no failed login for alice or dave
 - last, that no password or secret from `.env`, authorisation code, OAuth state or other one-time login value (`nonce`, `code_challenge`, `Signature`, `session_code`, `client_data`) appears in any container's log, that the proxy's log has each of those five masked as `***`, no JWT (access or ID token) in any container's log, saved page or `test.log`, no private key in any container's log or `test.log`, and no TOTP secret, or one-time code that was submitted, in any container's log, saved page or `test.log`. Those last two scanners first prove themselves on a temporary directory: they must report a made-up secret and code planted where a leak would show, and pass the same directory without them.
-- the browser evidence (below): that every browser run saved a HAR, a cookie summary and its console; that none of them holds a secret from `.env`, a JWT, an authorisation code, OAuth state, one-time login value, SAML message, `RelayState` or any cookie value the browser held during the run, and that no HAR field survived redaction (cookie values, `Authorization`, form fields, response bodies); that `e2e.py`'s own check of each run found nothing; and that no cookie value the browser held appears in any container's log. The redactor proves itself on a made-up HAR, and the scanner reports a planted HAR and cookie summary and passes the same files redacted.
+- the browser evidence (below): that every browser run saved a HAR, a cookie summary and its console; that none of them holds a secret from `.env`, a JWT, an authorisation code, OAuth state, one-time login value, SAML message, `RelayState` or any cookie value the browser held during the run, and that no HAR field survived redaction (cookie values, `Authorization`, form fields, response bodies); that `e2e.py`'s own check of each run found nothing; and that no cookie value the browser held appears in any container's log, nor in Keycloak's successful `LOGIN` events (at info level since this change, with session IDs and `code_id`, which are kept), which must also hold no secret, token or code. The redactor proves itself on a made-up HAR, and the scanner reports a planted HAR and cookie summary and passes the same files redacted.
 
 `scripts/test.sh` never writes a secret to `test-results/`: the value of every password and secret from `.env` is replaced with `<redacted>` in its log. One-time codes reach the browser on its standard input, never on a command line, so they're not in the log either.
 

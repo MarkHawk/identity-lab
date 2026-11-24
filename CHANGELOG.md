@@ -2,6 +2,24 @@
 
 What each phase added, and why an existing lab needs `scripts/setup.sh` then `scripts/test.sh --fresh` after it. See [Upgrading an existing lab](docs/operating.md#upgrading-an-existing-lab).
 
+## Browser evidence, and scenario 24: cookie dropped (2026-11-24)
+
+**Added:**
+
+- Browser evidence with every `scripts/test.sh` login, next to the screenshot and page HTML (`tests/evidence.py`): a redacted HAR of the login (`<app>-<time>.har`), the cookie jar's names and attributes after each step, never values, with the cookies the browser refused (`<app>-<time>-cookies.json`), and the browser console (`<app>-<time>-console.txt`). Refused-cookie reasons come from Chromium's DevTools protocol, so they're Chromium-only; cookies a `Set-Cookie` set that never reached the jar are also inferred from the HAR. The unredacted HAR never leaves a temporary folder inside the browser's container.
+- Scenario 24, `cookie-dropped`, with runbook 24: the direct SAML SP's session cookie becomes `SameSite=None` without `Secure`, browsers refuse it, and every login ends on "Your session has expired. Please log in again." while Keycloak and the SP log success.
+- Tests: the redactor and the evidence scanner prove themselves on made-up values; every browser run saved all three files; no saved HAR, cookie summary or console log holds a secret, token, code, SAML message or cookie value; no cookie value the browser held is in any container's log; and Keycloak's successful `LOGIN` events hold no secret. 369 checks in all.
+
+**Changed:**
+
+- Keycloak logs successful events (`type="LOGIN"` and the like) at info instead of debug, so its log shows good logins next to failures.
+- The SAML SP reads its session cookie's `SameSite` and `Secure` from `.state/saml-sp/session-cookie.conf` on every response (the SP behind the proxy keeps the built-in defaults); logs `event=saml_session_missing` with whether a session cookie was sent, never its value, when a protected page has no session, and then shows "Your session has expired"; and logs the user agent on `saml_authn_request`, so `scripts/status.sh`'s probes (`idlab-status`) can be told from logins.
+
+**Why the upgrade steps:**
+
+- `scripts/setup.sh` writes `.state/saml-sp/session-cookie.conf`. Without it the SP uses the same healthy defaults, so nothing breaks, but run it anyway.
+- No `--fresh` needed: the Keycloak change is an environment variable, so `scripts/test.sh` (or `docker compose up -d`) recreates the container with its database intact.
+
 ## Phase 4: multi-factor authentication with one-time codes (2026-11-03)
 
 **Added:**
