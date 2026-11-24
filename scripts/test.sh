@@ -39,7 +39,7 @@
 # are replaced with <redacted> in test.log.
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
-require docker curl jq openssl
+require docker curl jq openssl python3
 
 FRESH=0 DOWN=0
 for arg in "$@"; do
@@ -706,6 +706,78 @@ browser_evidence_selftest() { # <clean|planted> -- clean passes; planted is repo
   fi
 }
 
+# --- Evidence packs ------------------------------------------------------------
+# evidence-packs/ (scripts/evidence-packs.sh) is committed, so the checks
+# below read what's in the repository: no pack or answer key may hold a
+# secret or a real address or name, no pack may give its answer away, and
+# normalising time must keep every clock offset and expiry true.
+PACKS_DIR="$LAB_ROOT/evidence-packs"
+PRIVATE_IP_RE='(^|[^0-9.])(10\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])|192\.168)\.[0-9]{1,3}\.[0-9]{1,3}([^0-9.]|$)'
+# scan_packs <file>... -- 0 when none holds a secret, a token, a one-time value,
+# a SAML message, a key, LAB_HOST, a private address, a home folder or the
+# host user's or host's name (whole words only: "bookmark" is not "mark").
+# Prints file names and what was found, never a value.
+# shellcheck disable=SC2329  # invoked by the checks below
+scan_packs() {
+  local f v out bad=0 n=0 me host
+  me="$(id -un)" host="$(hostname)"
+  for f in "$@"; do
+    [[ -f "$f" ]] || continue
+    n=$((n + 1)) out=""
+    for v in "${SECRETS[@]}" "${TOTP_SECRETS[@]}"; do grep -qF -- "$v" "$f" && { out+="a secret from .env; "; break; }; done
+    grep -qE -- "$JWT_RE" "$f" && out+="a JWT; "
+    grep -qE -- "$AUTH_CODE_RE" "$f" && out+="an authorisation code; "
+    grep -qE -- "$STATE_RE|$ONE_TIME_RE" "$f" && out+="a state or one-time login value; "
+    grep -qE -- "$SAML_PARAM_RE|$SAML_B64_RE" "$f" && out+="a SAML message; "
+    grep -qE -- "$PEM_KEY_RE|-----BEGIN CERTIFICATE-----" "$f" && out+="a PEM block; "
+    if [[ "$LAB_HOST" != localhost ]] && grep -qiwF -- "$LAB_HOST" "$f"; then out+="LAB_HOST; "; fi
+    grep -qE -- "$PRIVATE_IP_RE" "$f" && out+="a private IP address; "
+    grep -oE -- "/home/[A-Za-z0-9_.-]+" "$f" | grep -qvx /home/user && out+="a home folder; "
+    { grep -qF -- "/home/$me" "$f" || grep -qF -- "$me@" "$f" || grep -qw -- "$me" "$f"; } && out+="the host user's name; "
+    grep -qw -- "$host" "$f" && out+="the host's name; "
+    if [[ -n "$out" ]]; then bad=$((bad + 1)); echo "  ${f##*/}: ${out%; }"; fi
+  done
+  echo "checked $n pack and answer file(s): $bad with something that must not be there"
+  (( n > 0 && bad == 0 ))
+}
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_clean
+evidence_packs_clean() { scan_packs "$PACKS_DIR"/packs/*.json "$PACKS_DIR"/answers/*.json; }
+# The scanner's self-test: a made-up pack, clean, then with a planted fake JWT,
+# a private address and a home folder. Nothing from .env.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_selftest ...
+evidence_packs_selftest() { # <clean|planted>
+  local d out rc=0
+  d="$(mktemp -d)"
+  if [[ "$1" == clean ]]; then
+    printf '{"tools": [{"lines": [{"text": "bookmark at https://lab.example:8180/ from 192.0.2.10, /home/user, state=***"}]}]}\n' >"$d/case-000000.json"
+  else
+    printf '{"tools": [{"lines": [{"text": "eyJmYWtlLWhlYWRlci0xMjM.eyJmYWtlLXBheWxvYWQtMTIz.sig from 10.20.30.40 in /home/someone"}]}]}\n' >"$d/case-000000.json"
+  fi
+  out="$(scan_packs "$d"/*.json)" || rc=$?
+  rm -rf "$d"
+  echo "$out"
+  if [[ "$1" == clean ]]; then (( rc == 0 ))
+  else (( rc != 0 )) && grep -q 'a JWT; a private IP address; a home folder' <<<"$out"; fi
+}
+# evidence_packs_hide_answers -- no pack names a scenario, a runbook, the fix
+# or a scenario's summary. (The answer keys hold those, and are read apart.)
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_hide_answers
+evidence_packs_hide_answers() {
+  local f name hits=0 found
+  for f in "$PACKS_DIR"/packs/*.json; do
+    found=""
+    for name in $(scenario_names); do
+      load_scenario "$name"
+      grep -qF -- "$name" "$f" && found+="the name $name; "
+      grep -qF -- "$SCENARIO_SUMMARY" "$f" && found+="the summary of $name; "
+    done
+    grep -qiE -- 'runbook|scenario|break\.sh|fix\.sh' "$f" && found+="runbook, scenario, break.sh or fix.sh; "
+    if [[ -n "$found" ]]; then hits=$((hits + 1)); echo "  ${f##*/}: ${found%; }"; fi
+  done
+  echo "checked $(find "$PACKS_DIR/packs" -name '*.json' | wc -l) pack(s): $hits give their answer away"
+  (( hits == 0 ))
+}
+
 # --- Bring the lab up -----------------------------------------------------------
 [[ -f "$ENV_FILE" ]] || "$LAB_ROOT/scripts/setup.sh"
 load_env
@@ -896,6 +968,19 @@ check "secrets: every browser run saved a HAR, a cookie summary and its console"
 check "secrets: no secret, token, code, SAML message or cookie value in any saved HAR, cookie summary or console log" browser_evidence_clean
 check "secrets: no cookie value the browser held in any container's log" cookie_values_not_in_logs
 check "secrets: Keycloak's successful LOGIN events hold no secret, token, code or cookie value" kc_login_events_clean
+
+# --- Evidence packs ----------------------------------------------------------------
+log "evidence packs"
+check "packs: scanner reports a planted fake JWT, private address and home folder" evidence_packs_selftest planted
+check "packs: scanner passes a made-up clean pack (bookmark, placeholders, masked state)" evidence_packs_selftest clean
+check "packs: no secret, token, one-time value, SAML message, key, real address or name in any pack or answer key" evidence_packs_clean
+check "packs: no pack names its scenario, runbook, fix or summary" evidence_packs_hide_answers
+check "packs: every pack has the format, every tool and valid severities, and an answer key" \
+  python3 -I "$LAB_ROOT/tests/packs.py" validate "$PACKS_DIR/packs" "$PACKS_DIR/answers"
+check "packs: the time normaliser shifts every format the lab prints by the same delta (self-test)" \
+  python3 -I "$LAB_ROOT/tests/packs.py" selftest
+check "packs: clock offsets and certificate expiry survive time normalisation (clock-skew, totp-clock-drift, expired-signing-cert, client-cert-*, healthy)" \
+  python3 -I "$LAB_ROOT/tests/packs.py" check-time "$PACKS_DIR/packs" "$PACKS_DIR/answers"
 
 # --- Summary ----------------------------------------------------------------------
 echo
