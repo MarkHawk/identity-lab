@@ -207,7 +207,7 @@ tool_trusted() { # <dir> <login epoch>
       cert_lines "IdP metadata signing certificate $i" "$1/meta.$i.pem" "$2"
     done < <(idp_metadata_certs 2>/dev/null || true)
     kc_curl "https://$LAB_HOST:$KC_PORT/realms/$REALM/protocol/openid-connect/certs" 2>/dev/null \
-      | jq -r '.keys[] | "OIDC JWKS key kid=\(.kid) alg=\(.alg) use=\(.use) kty=\(.kty)"' || echo "OIDC JWKS: not reachable"
+      | jq -r '.keys[] | "OIDC JWKS entry: \(.alg), \(.use), \(.kty), id \(.kid)"' || echo "OIDC JWKS: not reachable"
     if [[ -f "$MTLS_CLIENT_DIR/client.crt" ]]; then
       cert_lines "Partner system's client certificate" "$MTLS_CLIENT_DIR/client.crt" "$2"
       echo "Partner system's client certificate, checked against the lab CA: $(mtls_cert_check | cut -f1)"
