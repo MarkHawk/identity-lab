@@ -761,6 +761,21 @@ evidence_packs_selftest() { # <clean|planted>
 }
 # evidence_packs_hide_answers -- no pack names a scenario, a runbook, the fix
 # or a scenario's summary. (The answer keys hold those, and are read apart.)
+# evidence_packs_no_probes -- no pack holds the lab's own state-detection
+# traffic: status.sh's and the scenarios' HTTP probes carry the user agent
+# idlab-status, or curl's. (The builder never runs detection inside a pack's
+# window, so its probes without a user agent, such as an LDAP connection test,
+# can't be there either; this checks the ones that can be recognised.)
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_no_probes
+evidence_packs_no_probes() {
+  local f n=0 hits=0
+  for f in "$PACKS_DIR"/packs/*.json; do
+    n=$((n + 1))
+    if grep -qE -- 'idlab-status|curl/[0-9]' "$f"; then hits=$((hits + 1)); echo "  ${f##*/}: $(grep -cE -- 'idlab-status|curl/[0-9]' "$f") probe line(s)"; fi
+  done
+  echo "checked $n pack(s): $hits with state-detection probe traffic"
+  (( n > 0 && hits == 0 ))
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_hide_answers
 evidence_packs_hide_answers() {
   local f name hits=0 found
@@ -975,6 +990,7 @@ check "packs: scanner reports a planted fake JWT, private address and home folde
 check "packs: scanner passes a made-up clean pack (bookmark, placeholders, masked state)" evidence_packs_selftest clean
 check "packs: no secret, token, one-time value, SAML message, key, real address or name in any pack or answer key" evidence_packs_clean
 check "packs: no pack names its scenario, runbook, fix or summary" evidence_packs_hide_answers
+check "packs: no pack holds the lab's state-detection probe traffic (idlab-status or curl user agents)" evidence_packs_no_probes
 check "packs: every pack has the format, every tool and valid severities, and an answer key" \
   python3 -I "$LAB_ROOT/tests/packs.py" validate "$PACKS_DIR/packs" "$PACKS_DIR/answers"
 check "packs: the time normaliser shifts every format the lab prints by the same delta (self-test)" \

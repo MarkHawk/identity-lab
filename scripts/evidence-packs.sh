@@ -51,6 +51,8 @@ jq -n --arg lab_host "$LAB_HOST" --arg lab_root "$LAB_ROOT" --arg home "$HOME" -
 compose config --format json >"$COMMON/compose.json"
 
 LDAP_USERS=" dave erin frank heidi "
+declare -A USER_IDS=()
+for u in alice bob carol grace ivan; do USER_IDS[$u]="$(kc_user_id "$u")"; done
 CLOCKS=(keycloak saml-sp oidc-rp api radius ldap authenticator)
 LOG_SERVICES=(keycloak ldap radius proxy squid saml-sp saml-sp-proxied oidc-rp oidc-rp-proxied oidc-rp-egress oidc-rp-edge api)
 
@@ -93,12 +95,14 @@ snapshot() { # <dir>
         echo
       done | sort >"$dir/keycloak__keys"
   : >"$dir/keycloak__users"
-  for u in alice bob carol dave grace heidi ivan; do
-    id="$(kc_user_id "$u" 2>/dev/null || true)"
+  # Keycloak's own users only, by IDs looked up once before any window: a
+  # username search, or a directory user, makes Keycloak query LDAP.
+  for u in alice bob carol grace ivan; do
+    id="${USER_IDS[$u]:-}"
     [[ -n "$id" ]] || continue
     kc_api GET "/$REALM/users/$id" | jq -r --arg u "$u" '"\($u) enabled: \(.enabled)", "\($u) requiredActions: \(.requiredActions // [] | join(","))"' >>"$dir/keycloak__users"
     kc_api GET "/$REALM/users/$id/credentials" | jq -r --arg u "$u" '.[] | "\($u) credential \(.type) \(.userLabel // "") \(.credentialData // "")"' >>"$dir/keycloak__users"
-    bf_status "$u" 2>/dev/null | jq -r --arg u "$u" '"\($u) brute-force: disabled=\(.disabled) failures=\(.numFailures)"' >>"$dir/keycloak__users" || true
+    kc_api GET "/$REALM/attack-detection/brute-force/users/$id" 2>/dev/null | jq -r --arg u "$u" '"\($u) brute-force: disabled=\(.disabled) failures=\(.numFailures)"' >>"$dir/keycloak__users" || true
   done
   {
     printf 'challenge-response: %s\n' "$(compose exec -T nas cat /var/lib/nas/challenge 2>/dev/null || echo unset)"
@@ -167,9 +171,8 @@ tool_ldap() { # <dir> <user>
 tool_token() { # <dir> <app> <login epoch>
   local t="$1/tokens.json" pem="$1/saml-signing.pem"
   {
-    if [[ "$2" == radius ]]; then echo "No token: a RADIUS login is an Access-Request and its reply"; return; fi
-    if [[ "$2" == mtls ]]; then echo "No token: the partner system authenticates with a client certificate"; return; fi
-    if [[ ! -s "$t" ]] || jq -e '.issued == null' "$t" >/dev/null; then echo "No token reached the app in this login"; return; fi
+    # One marker for every flow without a token: packs.py writes the same line for all of them.
+    if [[ "$2" == radius || "$2" == mtls ]] || [[ ! -s "$t" ]] || jq -e '.issued == null' "$t" >/dev/null; then echo NO_TOKEN; return; fi
     jq -r --argjson login "$3" '
       def times: if type == "number" then "\(.) (\(todate), \(. - $login | floor) s from the login)" else tostring end;
       .issued | (to_entries[] | select(.key | startswith("oidc")) | .key as $k
@@ -239,10 +242,15 @@ capture() { # <name>  (healthy, or a scenario)
   fi
   dir="$WORK/$id"; mkdir -p "$dir/logs"
   log "capturing ${name} -> $id"
-  since="$(date -u -d '-1 second' +%Y-%m-%dT%H:%M:%SZ)"
+  # break.sh is not used: its state detection probes the lab (status requests,
+  # LDAP connection tests, ...), and each scenario's probes would hint at the
+  # answer. The window holds the break itself and the failing login; the
+  # after-snapshot and the check that it broke come once the window is closed.
   snapshot "$dir/before"
+  sleep 1
+  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [[ "$name" != healthy ]]; then
-    "$LAB_ROOT/scripts/break.sh" "$name" >"$dir/break.log" 2>&1 || { tail -n 20 "$dir/break.log" >&2; die "could not break $name"; }
+    scenario_break >"$dir/break.log" 2>&1 || { tail -n 20 "$dir/break.log" >&2; die "could not break $name"; }
   fi
   snapshot "$dir/after"
   mark="$dir/mark"; : >"$mark"; : >"$SEEN_DIR/tokens.jsonl"
@@ -264,6 +272,13 @@ capture() { # <name>  (healthy, or a scenario)
     cp "$RESULTS/$stamp.html" "$dir/page.html" 2>/dev/null || true
   fi
   tail -n 1 "$SEEN_DIR/tokens.jsonl" >"$dir/tokens.json" 2>/dev/null || true
+  if [[ "$name" != healthy ]]; then
+    # A second clear of the window's end (--until is in whole seconds), so the
+    # detection's own probes are never in the pack.
+    sleep 1
+    local state; state="$(scenario_state)"
+    [[ "$state" == broken ]] || die "$name: detected as $state after the break, not broken; no pack"
+  fi
   local login_s="${login_at%.*}"
   tool_token "$dir" "$app" "$login_s"
   tool_trusted "$dir" "$login_s"

@@ -90,19 +90,24 @@ An answer key:
 | `browser-cookies` | Browser cookies | The cookie jar after each step, names and attributes only; cookies set but missing from the jar; cookies the browser said it refused, and why |
 | `browser-console` | Browser console | The console's messages |
 
-For a RADIUS or partner-system case the browser tools and the token inspector each say there was no browser or no token.
+A flow with no browser (RADIUS) gives the browser tools one line, `No browser in this flow`, and a flow with no token (RADIUS, the partner system, or a login that failed before one was issued) gives the token inspector one line, `No token in this flow`: the same words in every pack, so the wording never hints at which kind of flow it was.
 
 ### Severity rules
 
-Applied to each line after redaction (`tests/packs.py`, `severity()`):
+Applied to each line after redaction (`tests/packs.py`, `severity()`), in this order:
 
-- `error`: `ERROR`, `FATAL`, `error=`, a `*_ERROR` event, failed, refused, denied, invalid, expired, missing, absent, blocked, mismatch, `Access-Reject`, `not responding`, `Login incorrect`, a non-zero LDAP `err=`, an HTTP status of 500 or more, a clock offset of 100 s or more, a console `error:`
-- `warning`: `WARN`, warning, timed out, timeout, retry, an HTTP status from 400 to 499, a clock offset from 60 s to 99 s, a changed setting in the change record, a console `warning:`
-- `normal`: everything else
+1. A changed setting in the change record: `warning`. A console message: `error:` is an error, `warning:` a warning.
+2. An HTTP request line (an access log's `"GET /x HTTP/1.1" 200`, the HAR summary's `GET https://... -> 302`, Squid's `TCP_TUNNEL/200 ... CONNECT`): **by its status code only**, 500 or more an error, 400 to 499 a warning, anything else normal. Its URL and path are never read for words: `GET /?session=expired -> 200` is normal.
+3. Any other line, with its URLs and paths taken out first:
+   - `error`: `ERROR`, `FATAL`, `error=`, a `*_ERROR` event, failed, refused, denied, invalid, expired, missing, absent, blocked, mismatch, `Access-Reject`, `not responding`, `Login incorrect`, a non-zero LDAP `err=`, a clock offset of 100 s or more
+   - `warning`: `WARN`, warning, timed out, timeout, retry, a clock offset from 60 s to 99 s
+   - `normal`: everything else
 
 ### What is left out of the logs
 
-Health checks (`/healthz`, `/nginx-healthz`, `Python-urllib`, slapd's own `WHOAMI` and loopback connections), `scripts/status.sh`'s probes (user agent `idlab-status`) and other `curl` probes, Keycloak's static resources, its session purge, and the `master` realm's events (the lab's own admin API logins). When a log has more lines than its cap, every warning and error is kept first, then the latest other lines, in their original order.
+**The lab's own state detection never runs inside a pack's window.** `scripts/break.sh` checks a scenario's state before and after breaking it, and each scenario's check probes different things (status requests with the user agent `idlab-status`, `curl` requests to a proxy or the API, LDAP connection tests, ...), which could hint at the answer. So the builder calls the scenario's break directly, takes its "after" snapshot with read-only Admin API calls (by user IDs looked up beforehand, so Keycloak doesn't query LDAP), and checks the scenario is broken only once the window has closed. `scripts/test.sh` checks that no pack holds a recognisable probe (`idlab-status` or a `curl` user agent). Background the lab makes anyway, such as Keycloak's directory sync, stays.
+
+Also left out: health checks (`/healthz`, `/nginx-healthz`, `Python-urllib`, slapd's own `WHOAMI` and loopback connections), `scripts/status.sh`'s probes (user agent `idlab-status`) and other `curl` probes, Keycloak's static resources, its session purge, and the `master` realm's events (the lab's own admin API logins). When a log has more lines than its cap, every warning and error is kept first, then the latest other lines, in their original order.
 
 ## Redaction
 

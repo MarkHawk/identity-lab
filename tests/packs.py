@@ -72,31 +72,47 @@ TOOLS = [
 ]
 SEVERITIES = ("normal", "warning", "error")
 CAP_LOG, CAP = 30, 40
+# The one line every pack uses when its flow has no browser or no token, so
+# the wording never hints at which kind of flow it was.
+NO_BROWSER = "No browser in this flow"
+NO_TOKEN = "No token in this flow"
 
 # --- severity ------------------------------------------------------------------
+# Whole words, then the markers that end in punctuation (so can't take a \b after them).
 ERROR_RE = re.compile(
-    r'\b(ERROR|FATAL|CRITICAL|Error|error=|_ERROR"|FAILED|[Ff]ailed|refused|[Dd]enied|DENIED|[Ii]nvalid|'
-    r'[Ee]xpired|Access-Reject|not responding|Login incorrect|err=[1-9]|offset [+-]?\d{3,} s|'
-    r'mismatch|[Mm]issing|absent|blocked|Unable|unable)\b|\b(5\d\d)\b(?= |$)|-> 5\d\d|/5\d\d ')
-WARN_RE = re.compile(r'\b(WARN|WARNING|[Ww]arning|timed out|timeout|retry|offset [+-]?[6-9]\d s)\b|-> 4\d\d|/4\d\d |" 4\d\d ')
-HTTP_STATUS_RE = re.compile(r'" ([1-5]\d\d) ')
+    r'\b(ERROR|FATAL|CRITICAL|Error|FAILED|[Ff]ailed|refused|[Dd]enied|DENIED|[Ii]nvalid|'
+    r'[Ee]xpired|Access-Reject|not responding|Login incorrect|offset [+-]?\d{3,} s|'
+    r'mismatch|[Mm]issing|absent|blocked|Unable|unable)\b|\berror=|_ERROR"|\berr=[1-9]')
+WARN_RE = re.compile(r'\b(WARN|WARNING|[Ww]arning|timed out|timeout|retry|offset [+-]?[6-9]\d s)\b')
+METHODS = r"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT)"
+# An HTTP request line, and where its status is: an access log ("GET /x HTTP/1.1" 200),
+# the HAR summary (GET https://... -> 302) and Squid (TCP_TUNNEL/200 7077 CONNECT).
+REQUEST_RES = (re.compile(r'"' + METHODS + r' [^"]*" (\d{3})\b'),
+               re.compile(r"^\S+ " + METHODS + r" \S+ -> (\d{3})\b"),
+               re.compile(r"\b[A-Z_]+/(\d{3}) \d+ " + METHODS + r" "))
+# URLs and paths: never matched against the keywords ("/?session=expired" is a path, not an error).
+URL_PATH_RE = re.compile(r"[a-z][a-z0-9+.-]*://\S+|\bpath=\S+|(?<![\w.])/[\w./?=&%*:~+-]*")
 
 
 def severity(tool, text):
-    if tool in ("recent-changes",) and text[:2] in ("- ", "+ "):
+    """Severity from fixed rules: a request line by its HTTP status only (5xx
+    error, 4xx warning); a changed setting is a warning; anything else by its
+    log level, event type and wording, with URLs and paths left out."""
+    if tool == "recent-changes" and text[:2] in ("- ", "+ "):
         return "warning"
     if tool == "browser-console":
         return "error" if text.startswith(("error:", "pageerror:")) else "warning" if text.startswith("warning:") else "normal"
-    m = HTTP_STATUS_RE.search(text)
-    if m and tool.startswith("logs-"):
-        code = int(m.group(1))
-        if code >= 500:
-            return "error"
-        if code >= 400:
-            return "warning"
-    if ERROR_RE.search(text):
+    if text.lstrip().startswith("Set-Cookie:"):
+        return "normal"
+    for rx in REQUEST_RES:
+        m = rx.search(text)
+        if m:
+            code = int(m.group(1))
+            return "error" if code >= 500 else "warning" if code >= 400 else "normal"
+    words = URL_PATH_RE.sub(" ", text)
+    if ERROR_RE.search(words):
         return "error"
-    if WARN_RE.search(text):
+    if WARN_RE.search(words):
         return "warning"
     return "normal"
 
@@ -344,8 +360,7 @@ def har_summary(raw):
     try:
         har = json.loads(read(f"{raw['dir']}/browser.har"))
     except ValueError:
-        return ["No browser capture: the user signed in from a network device, not a browser"] \
-            if raw["meta"]["app"] == "radius" else ["(no HAR was saved)"]
+        return [NO_BROWSER]
     out = []
     for e in har["log"]["entries"]:
         url = e["request"]["url"]
@@ -367,8 +382,7 @@ def cookie_summary(raw):
     try:
         j = json.loads(read(f"{raw['dir']}/browser-cookies.json"))
     except ValueError:
-        return ["No browser capture: the user signed in from a network device, not a browser"] \
-            if raw["meta"]["app"] == "radius" else ["(no cookie summary was saved)"]
+        return [NO_BROWSER]
     out = []
     for s in j.get("steps", []):
         out.append(f"{s['step']} at {s['url']}:")
@@ -386,7 +400,7 @@ def cookie_summary(raw):
 
 def console(raw):
     if raw["meta"]["app"] == "radius":
-        return ["No browser capture: the user signed in from a network device, not a browser"]
+        return [NO_BROWSER]
     got = lines_of(f"{raw['dir']}/browser-console.txt")
     return got or ["(the console is empty)"]
 
@@ -446,7 +460,10 @@ def tool_lines(raw, tool):
         return console(raw)
     if tool == "recent-changes":
         return changes(raw)
-    # radius-test, clock, token, trusted-keys, ldap-user: written by the capture script
+    if tool == "token":
+        got = lines_of(f"{d}/token.txt")
+        return got if got and got != ["NO_TOKEN"] else [NO_TOKEN]
+    # radius-test, clock, trusted-keys, ldap-user: written by the capture script
     return lines_of(f"{d}/{tool}.txt") or ["(no output)"]
 
 
