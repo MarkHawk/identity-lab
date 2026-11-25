@@ -251,7 +251,9 @@ capture() { # <name>  (healthy, or a scenario)
   sleep 1
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [[ "$name" != healthy ]]; then
-    scenario_break >"$dir/break.log" 2>&1 || { tail -n 20 "$dir/break.log" >&2; die "could not break $name"; }
+    # In a subshell: a break that calls die then stops only itself, and its
+    # message reaches the terminal instead of vanishing with the log.
+    ( scenario_break ) >"$dir/break.log" 2>&1 || { tail -n 20 "$dir/break.log" >&2; die "could not break $name"; }
   fi
   snapshot "$dir/after"
   mark="$dir/mark"; : >"$mark"; : >"$SEEN_DIR/tokens.jsonl"
