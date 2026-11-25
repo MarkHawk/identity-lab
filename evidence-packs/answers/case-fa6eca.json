@@ -1,0 +1,10 @@
+{
+  "id": "case-fa6eca",
+  "scenario": "mfa-lockout",
+  "runbook": "runbooks/22-mfa-lockout.md",
+  "summary": "grace's account is locked after five wrong one-time codes",
+  "fix": {
+    "command": "scripts/fix.sh mfa-lockout",
+    "first_step": "**Unlock.**"
+  }
+}

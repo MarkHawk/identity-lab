@@ -1,0 +1,10 @@
+{
+  "id": "case-8a3d8d",
+  "scenario": "otp-policy-changed",
+  "runbook": "runbooks/21-otp-policy-changed.md",
+  "summary": "the realm's OTP policy now asks for HmacSHA256 and 8 digits; new starters' apps make SHA1, 6-digit codes",
+  "fix": {
+    "command": "scripts/fix.sh otp-policy-changed",
+    "first_step": "Restore the policy: HmacSHA1, 6 digits, 30 seconds (the RFC 6238 defaults, and what nearly every app supports)."
+  }
+}

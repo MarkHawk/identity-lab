@@ -1,0 +1,10 @@
+{
+  "id": "case-24ce98",
+  "scenario": "wrong-account",
+  "runbook": "runbooks/26-wrong-account.md",
+  "summary": "carol left a Keycloak session open at a shared PC: alice's login there signs her in as carol",
+  "fix": {
+    "command": "scripts/fix.sh wrong-account",
+    "first_step": "**Sign the wrong user out of the identity provider, in that browser.** In the lab:"
+  }
+}

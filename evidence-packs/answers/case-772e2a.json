@@ -1,0 +1,10 @@
+{
+  "id": "case-772e2a",
+  "scenario": "proxy-maintenance",
+  "runbook": "runbooks/17-service-unavailable.md",
+  "summary": "the proxy is left in maintenance mode: 503 for Keycloak, which is healthy",
+  "fix": {
+    "command": "scripts/fix.sh proxy-maintenance",
+    "first_step": "Turn maintenance mode off on the proxy. In the lab:"
+  }
+}

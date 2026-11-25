@@ -1,0 +1,10 @@
+{
+  "id": "case-2b199b",
+  "scenario": "cookie-dropped",
+  "runbook": "runbooks/24-cookie-dropped.md",
+  "summary": "the SAML SP's session cookie is SameSite=None without Secure: browsers refuse it",
+  "fix": {
+    "command": "scripts/fix.sh cookie-dropped",
+    "first_step": "Give the cookie a combination browsers accept. In the lab:"
+  }
+}

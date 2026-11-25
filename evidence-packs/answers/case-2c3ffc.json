@@ -1,0 +1,10 @@
+{
+  "id": "case-2c3ffc",
+  "scenario": "proxy-bad-gateway",
+  "runbook": "runbooks/06-proxy-bad-gateway.md",
+  "summary": "the proxy sends plain HTTP to the OIDC RP's HTTPS port",
+  "fix": {
+    "command": "scripts/fix.sh proxy-bad-gateway",
+    "first_step": "Correct the upstream in the proxy's configuration. In the lab:"
+  }
+}

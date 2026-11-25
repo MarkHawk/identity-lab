@@ -1,0 +1,10 @@
+{
+  "id": "case-c19aec",
+  "scenario": "api-bearer-audience",
+  "runbook": "runbooks/16-api-bearer-401.md",
+  "summary": "oidc-rp's access tokens name another API in their audience",
+  "fix": {
+    "command": "scripts/fix.sh api-bearer-audience",
+    "first_step": "Make the client's tokens name the API again. In the lab:"
+  }
+}

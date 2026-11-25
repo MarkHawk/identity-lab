@@ -1,0 +1,10 @@
+{
+  "id": "case-e639f0",
+  "scenario": "proxy-tls-interception",
+  "runbook": "runbooks/13-proxy-tls-interception.md",
+  "summary": "the egress proxy re-signs TLS with an inspection CA the OIDC RP doesn't trust",
+  "fix": {
+    "command": "scripts/fix.sh proxy-tls-interception",
+    "first_step": "Turn inspection off for this path. In the lab:"
+  }
+}

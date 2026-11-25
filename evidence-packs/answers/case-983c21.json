@@ -1,0 +1,10 @@
+{
+  "id": "case-983c21",
+  "scenario": "proxy-header-too-large",
+  "runbook": "runbooks/10-proxy-header-too-large.md",
+  "summary": "the proxy's header buffer for Keycloak is smaller than Keycloak's cookies",
+  "fix": {
+    "command": "scripts/fix.sh proxy-header-too-large",
+    "first_step": "Give the route enough room for the headers, with headroom. In the lab:"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "case-dc6fed",
+  "scenario": "proxy-auth-required",
+  "runbook": "runbooks/11-proxy-auth-required.md",
+  "summary": "the egress proxy requires a login the OIDC RP doesn't have",
+  "fix": {
+    "command": "scripts/fix.sh proxy-auth-required",
+    "first_step": "Restore the access the app had. In the lab:"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "case-c4673f",
+  "scenario": "cors-blocked",
+  "runbook": "runbooks/19-cors-blocked.md",
+  "summary": "the API's Access-Control-Allow-Origin has a trailing slash: browsers block its answers",
+  "fix": {
+    "command": "scripts/fix.sh cors-blocked",
+    "first_step": "Make the API's `Access-Control-Allow-Origin` match the page's origin exactly. In the lab:"
+  }
+}

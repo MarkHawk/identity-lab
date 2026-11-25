@@ -1,0 +1,10 @@
+{
+  "id": "case-13a5c3",
+  "scenario": "clock-skew",
+  "runbook": "runbooks/02-clock-skew.md",
+  "summary": "SAML SP clock 10 minutes ahead of the IdP",
+  "fix": {
+    "command": "scripts/fix.sh clock-skew",
+    "first_step": ""
+  }
+}

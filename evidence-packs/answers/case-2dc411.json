@@ -1,0 +1,10 @@
+{
+  "id": "case-2dc411",
+  "scenario": "ldap-bind-failure",
+  "runbook": "runbooks/04-ldap-bind-failure.md",
+  "summary": "Keycloak's LDAP bind credential no longer matches the service account",
+  "fix": {
+    "command": "scripts/fix.sh ldap-bind-failure",
+    "first_step": "Confirm the right password works with `ldapwhoami` (above) **before** you change the IdP."
+  }
+}

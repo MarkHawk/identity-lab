@@ -1,0 +1,10 @@
+{
+  "id": "case-997329",
+  "scenario": "proxy-policy-block",
+  "runbook": "runbooks/12-proxy-policy-block.md",
+  "summary": "the egress proxy's policy refuses connections to the IdP",
+  "fix": {
+    "command": "scripts/fix.sh proxy-policy-block",
+    "first_step": "Remove or narrow the rule. In the lab:"
+  }
+}

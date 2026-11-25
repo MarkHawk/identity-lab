@@ -1,0 +1,10 @@
+{
+  "id": "case-5cef42",
+  "scenario": "login-timeout",
+  "runbook": "runbooks/25-login-timeout.md",
+  "summary": "the realm's login timeout is 20 seconds: a login page left open that long expires",
+  "fix": {
+    "command": "scripts/fix.sh login-timeout",
+    "first_step": "**For the user: start from the app, not from the old page.** Close the login tab and open the application's own address (or its bookmark), click **Log in** and sign in without leaving the page. This is the answer for the bookmarked login page too: replace the bookmark with the app's URL. No server change is needed or wanted for a user who left a page open or used a bookmark. The server is behaving as designed."
+  }
+}

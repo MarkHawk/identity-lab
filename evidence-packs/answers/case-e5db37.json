@@ -1,0 +1,10 @@
+{
+  "id": "case-e5db37",
+  "scenario": "api-bearer-expired",
+  "runbook": "runbooks/16-api-bearer-401.md",
+  "summary": "oidc-rp's access tokens expire after 10 seconds; the app never refreshes them",
+  "fix": {
+    "command": "scripts/fix.sh api-bearer-expired",
+    "first_step": "Make the client's tokens name the API again. In the lab:"
+  }
+}

@@ -1,0 +1,955 @@
+{
+ "format": "idlab-evidence-pack/1",
+ "id": "case-24ce98",
+ "login_at": "2026-06-14T02:14:00Z",
+ "captured": "2026-06-14T02:14:04Z",
+ "lab": {
+  "host": "lab.example"
+ },
+ "tools": [
+  {
+   "tool": "user-report",
+   "title": "What the user saw",
+   "command": "(the user's screen, or the network device's output)",
+   "lines": [
+    {
+     "text": "Page title: ID token · identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "identity-lab · OIDC relying party",
+     "severity": "normal"
+    },
+    {
+     "text": "Authlib → Keycloak realm “idlab”",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC login succeeded",
+     "severity": "normal"
+    },
+    {
+     "text": "Subject (sub)",
+     "severity": "normal"
+    },
+    {
+     "text": "<user:carol>",
+     "severity": "normal"
+    },
+    {
+     "text": "Email",
+     "severity": "normal"
+    },
+    {
+     "text": "carol@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "Issuer (iss)",
+     "severity": "normal"
+    },
+    {
+     "text": "https://lab.example:8180/realms/idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "Audience (aud)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp",
+     "severity": "normal"
+    },
+    {
+     "text": "Realm roles",
+     "severity": "normal"
+    },
+    {
+     "text": "default-roles-idlab, offline_access, uma_authorization",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "compose-ps",
+   "title": "Container status",
+   "command": "docker compose ps",
+   "lines": [
+    {
+     "text": "SERVICE           STATE     STATUS",
+     "severity": "normal"
+    },
+    {
+     "text": "api               running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "authenticator     running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak          running   Up 24 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "ldap              running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "nas               running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-egress    running   Up 5 minutes (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "postgres          running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "proxy             running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "radius            running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "squid             running   Up 23 hours (healthy)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-keycloak",
+   "title": "Keycloak log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z keycloak",
+   "lines": [
+    {
+     "text": "2026-06-14T02:13:55.805Z 2026-06-14 02:13:55,805 INFO  [org.keycloak.events] (executor-thread-192) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"openid-connect\", auth_type=\"code\", response_type=\"code\", redirect_uri=\"https://lab.example:8182/auth/callback\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"carol\", response_mode=\"query\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.823Z 2026-06-14 02:13:55,823 INFO  [org.keycloak.events] (executor-thread-192) type=\"CODE_TO_TOKEN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", token_id=\"<id-3>\", grant_type=\"authorization_code\", refresh_token_type=\"Refresh\", scope=\"openid profile email\", refresh_token_id=\"<id-4>\", code_id=\"<id-1>\", client_auth_method=\"client-secret\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.840Z 2026-06-14 02:13:55,840 INFO  [org.keycloak.events] (executor-thread-192) type=\"USER_INFO_REQUEST\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", auth_method=\"validate_access_token\", signature_required=\"false\", username=\"carol\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.422Z 2026-06-14 02:14:01,422 INFO  [org.keycloak.events] (executor-thread-192) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"openid-connect\", auth_type=\"code\", response_type=\"code\", redirect_uri=\"https://lab.example:8182/auth/callback\", consent=\"no_consent_required\", code_id=\"<id-1>\", response_mode=\"query\", username=\"carol\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-5>\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.438Z 2026-06-14 02:14:01,437 INFO  [org.keycloak.events] (executor-thread-192) type=\"CODE_TO_TOKEN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", token_id=\"<id-6>\", grant_type=\"authorization_code\", refresh_token_type=\"Refresh\", scope=\"openid profile email\", refresh_token_id=\"<id-7>\", code_id=\"<id-1>\", client_auth_method=\"client-secret\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.446Z 2026-06-14 02:14:01,446 INFO  [org.keycloak.events] (executor-thread-192) type=\"USER_INFO_REQUEST\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", auth_method=\"validate_access_token\", signature_required=\"false\", username=\"carol\"",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "keycloak-events",
+   "title": "Keycloak events",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z keycloak | grep org.keycloak.events",
+   "lines": [
+    {
+     "text": "2026-06-14T02:13:55.805Z 2026-06-14 02:13:55,805 INFO  [org.keycloak.events] (executor-thread-192) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"openid-connect\", auth_type=\"code\", response_type=\"code\", redirect_uri=\"https://lab.example:8182/auth/callback\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"carol\", response_mode=\"query\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.823Z 2026-06-14 02:13:55,823 INFO  [org.keycloak.events] (executor-thread-192) type=\"CODE_TO_TOKEN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", token_id=\"<id-3>\", grant_type=\"authorization_code\", refresh_token_type=\"Refresh\", scope=\"openid profile email\", refresh_token_id=\"<id-4>\", code_id=\"<id-1>\", client_auth_method=\"client-secret\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.840Z 2026-06-14 02:13:55,840 INFO  [org.keycloak.events] (executor-thread-192) type=\"USER_INFO_REQUEST\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", auth_method=\"validate_access_token\", signature_required=\"false\", username=\"carol\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.422Z 2026-06-14 02:14:01,422 INFO  [org.keycloak.events] (executor-thread-192) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"openid-connect\", auth_type=\"code\", response_type=\"code\", redirect_uri=\"https://lab.example:8182/auth/callback\", consent=\"no_consent_required\", code_id=\"<id-1>\", response_mode=\"query\", username=\"carol\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-5>\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.438Z 2026-06-14 02:14:01,437 INFO  [org.keycloak.events] (executor-thread-192) type=\"CODE_TO_TOKEN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", token_id=\"<id-6>\", grant_type=\"authorization_code\", refresh_token_type=\"Refresh\", scope=\"openid profile email\", refresh_token_id=\"<id-7>\", code_id=\"<id-1>\", client_auth_method=\"client-secret\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.446Z 2026-06-14 02:14:01,446 INFO  [org.keycloak.events] (executor-thread-192) type=\"USER_INFO_REQUEST\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"oidc-rp\", userId=\"<user:carol>\", sessionId=\"<id-1>\", ipAddress=\"192.0.2.15\", auth_method=\"validate_access_token\", signature_required=\"false\", username=\"carol\"",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-ldap",
+   "title": "OpenLDAP log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z ldap",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-radius",
+   "title": "FreeRADIUS log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z radius",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-proxy",
+   "title": "Reverse proxy (nginx) log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z proxy",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-squid",
+   "title": "Egress proxy (Squid) log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z squid",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-saml-sp",
+   "title": "SAML app log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z saml-sp",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-saml-sp-proxied",
+   "title": "SAML app log (behind the proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z saml-sp-proxied",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp",
+   "title": "OIDC app log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z oidc-rp",
+   "lines": [
+    {
+     "text": "2026-06-14T02:13:55.192Z 198.51.100.1 - - [14/Jun/2026:02:13:55 +0000] \"GET / HTTP/1.1\" 200 2548 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.352Z 2026-06-14 02:13:55,352 INFO oidc-rp event=oidc_authorize_redirect redirect_uri=https://lab.example:8182/auth/callback",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.353Z 198.51.100.1 - - [14/Jun/2026:02:13:55 +0000] \"GET /login HTTP/1.1\" 302 927 \"https://lab.example:8182/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.842Z 198.51.100.1 - - [14/Jun/2026:02:13:55 +0000] \"GET /auth/callback?state=***&session_state=***&iss=https%3A%2F%2Flab.example%3A8180%2Frealms%2Fidlab&code=*** HTTP/1.1\" 302 199 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.842Z 2026-06-14 02:13:55,841 INFO oidc-rp event=oidc_login_ok sub=<user:carol> preferred_username=carol email=carol@idlab.example iss=https://lab.example:8180/realms/idlab elapsed=0.03s",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.846Z 198.51.100.1 - - [14/Jun/2026:02:13:55 +0000] \"GET /debug HTTP/1.1\" 200 7883 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.931Z 198.51.100.1 - - [14/Jun/2026:02:13:55 +0000] \"POST /logout HTTP/1.1\" 302 189 \"https://lab.example:8182/debug\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:55.935Z 198.51.100.1 - - [14/Jun/2026:02:13:55 +0000] \"GET / HTTP/1.1\" 200 2548 \"https://lab.example:8182/debug\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.312Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET / HTTP/1.1\" 200 2548 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.405Z 2026-06-14 02:14:01,405 INFO oidc-rp event=oidc_authorize_redirect redirect_uri=https://lab.example:8182/auth/callback",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.407Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /login HTTP/1.1\" 302 927 \"https://lab.example:8182/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.447Z 2026-06-14 02:14:01,447 INFO oidc-rp event=oidc_login_ok sub=<user:carol> preferred_username=carol email=carol@idlab.example iss=https://lab.example:8180/realms/idlab elapsed=0.02s",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.448Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /auth/callback?state=***&session_state=***&iss=https%3A%2F%2Flab.example%3A8180%2Frealms%2Fidlab&code=*** HTTP/1.1\" 302 199 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.452Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /debug HTTP/1.1\" 200 7883 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.542Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /debug/access-token HTTP/1.1\" 200 1499 \"https://lab.example:8182/debug\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-proxied",
+   "title": "OIDC app log (behind the proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z oidc-rp-proxied",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-egress",
+   "title": "OIDC app log (egress proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z oidc-rp-egress",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-edge",
+   "title": "OIDC app log (edge)",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z oidc-rp-edge",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-api",
+   "title": "API log",
+   "command": "docker compose logs --since 2026-06-14T02:13:53Z --until 2026-06-14T02:14:04Z api",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "radius-test",
+   "title": "RADIUS test (radclient)",
+   "command": "docker compose exec -T nas nas-auth dave   (radclient; the password on stdin)",
+   "lines": [
+    {
+     "text": "nas: Access-Request for dave to radius:1812",
+     "severity": "normal"
+    },
+    {
+     "text": "nas: Access-Accept",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "clock",
+   "title": "Clock check",
+   "command": "timedatectl; then, in each container, date -u +%s against the host's",
+   "lines": [
+    {
+     "text": "               Local time:            Sun 2026-06-14 02:14:06 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "           Universal time: Sun 2026-06-14 02:14:06 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "                 RTC time: Sun 2026-06-14 02:14:06",
+     "severity": "normal"
+    },
+    {
+     "text": "                Time zone: Etc/UTC (UTC, +0000)",
+     "severity": "normal"
+    },
+    {
+     "text": "System clock synchronized: yes",
+     "severity": "normal"
+    },
+    {
+     "text": "              NTP service: active",
+     "severity": "normal"
+    },
+    {
+     "text": "          RTC in local TZ: no",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "api 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "radius 2026-06-14T02:14:07Z host 2026-06-14T02:14:06Z offset +1 s",
+     "severity": "normal"
+    },
+    {
+     "text": "ldap 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "authenticator 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "token",
+   "title": "Token inspector",
+   "command": "decoded header and claims of the tokens the app received (never the token or its signature)",
+   "lines": [
+    {
+     "text": "id token header: {\"alg\":\"RS256\",\"kid\":\"2uoP1_4kZL7w924E1L2ClWGJx0_xPXSbhRmJXapsdrs\",\"typ\":\"JWT\"}",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim acr: 0",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim aud: oidc-rp",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim auth_time: 1781403235 (2026-06-14T02:13:55Z, -4 s from the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim azp: oidc-rp",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim email: carol@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim email_verified: true",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim exp: 1781403541 (2026-06-14T02:19:01Z, 302 s from the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim family_name: Chen",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim given_name: Carol",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim iat: 1781403241 (2026-06-14T02:14:01Z, 2 s from the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim iss: https://lab.example:8180/realms/idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim jti: <id-8>",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim name: Carol Chen",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim preferred_username: carol",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim realm_roles: [\"default-roles-idlab\",\"offline_access\",\"uma_authorization\"]",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim sid: <id-1>",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim sub: <user:carol>",
+     "severity": "normal"
+    },
+    {
+     "text": "id token claim typ: ID",
+     "severity": "normal"
+    },
+    {
+     "text": "access token header: {\"alg\":\"RS256\",\"typ\":\"JWT\",\"kid\":\"2uoP1_4kZL7w924E1L2ClWGJx0_xPXSbhRmJXapsdrs\"}",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim exp: 1781403541 (2026-06-14T02:19:01Z, 302 s from the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim iat: 1781403241 (2026-06-14T02:14:01Z, 2 s from the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim auth_time: 1781403235 (2026-06-14T02:13:55Z, -4 s from the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim jti: <id-6>",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim iss: https://lab.example:8180/realms/idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim aud: [\"idlab-api\",\"account\"]",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim sub: <user:carol>",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim typ: Bearer",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim azp: oidc-rp",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim sid: <id-1>",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim acr: 0",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim allowed-origins: [\"https://lab.example:8182\"]",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim realm_access: {\"roles\":[\"default-roles-idlab\",\"offline_access\",\"uma_authorization\"]}",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim resource_access: {\"account\":{\"roles\":[\"manage-account\",\"manage-account-links\",\"view-profile\"]}}",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim scope: openid profile email",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim realm_roles: [\"default-roles-idlab\",\"offline_access\",\"uma_authorization\"]",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim email_verified: true",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim name: Carol Chen",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim preferred_username: carol",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim given_name: Carol",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim family_name: Chen",
+     "severity": "normal"
+    },
+    {
+     "text": "access token claim email: carol@idlab.example",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "trusted-keys",
+   "title": "Trusted keys and certificates",
+   "command": "openssl x509 -noout -subject -issuer -dates -fingerprint -sha256 (the SAML app's pinned IdP certificate, the IdP metadata, the JWKS, the partner client certificate)",
+   "lines": [
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:04:19Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:04:19Z (valid, 31535420 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:04:19Z",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:04:19Z (valid, 31535420 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC JWKS entry: RSA-OAEP, enc, RSA, id tha3aykSPjeL4hDNuqxlgyM4LR9gAx4KZaKnULSt7R4",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id 2uoP1_4kZL7w924E1L2ClWGJx0_xPXSbhRmJXapsdrs",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate subject=CN=partner-client",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate notBefore=2026-05-11T01:51:34Z",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate notAfter=2027-06-12T02:51:34Z (valid, 31365455 s (363.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate SHA-256 fingerprint 90:92:D7:80:50:FD:D7:4C:1D:60:37:53:61:C2:B0:02:86:EF:D9:EF:CA:8B:C4:11:7C:F0:A6:18:6D:A1:B8:9E",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate, checked against the lab CA: valid",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "ldap-user",
+   "title": "LDAP lookup",
+   "command": "ldapsearch -LLL -x -H ldaps://ldap:1636 -D cn=keycloak-svc,ou=services,dc=idlab,dc=example -y <password file> -b ou=people,dc=idlab,dc=example \"(uid=dave)\"",
+   "lines": [
+    {
+     "text": "dn: uid=dave,ou=people,dc=idlab,dc=example",
+     "severity": "normal"
+    },
+    {
+     "text": "uid: dave",
+     "severity": "normal"
+    },
+    {
+     "text": "cn: Dave Dawson",
+     "severity": "normal"
+    },
+    {
+     "text": "sn: Dawson",
+     "severity": "normal"
+    },
+    {
+     "text": "mail: dave@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "entryUUID: <id-9>",
+     "severity": "normal"
+    },
+    {
+     "text": "createTimestamp: 20260523060026Z",
+     "severity": "normal"
+    },
+    {
+     "text": "modifyTimestamp: 20260523060026Z",
+     "severity": "normal"
+    },
+    {
+     "text": "# groups with dave as a member",
+     "severity": "normal"
+    },
+    {
+     "text": "dn: cn=lab-user,ou=groups,dc=idlab,dc=example",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "recent-changes",
+   "title": "Recent changes",
+   "command": "the configuration change record, 2026-06-14T02:13:53Z to 2026-06-14T02:14:04Z",
+   "lines": [
+    {
+     "text": "Change record, 2026-06-14T02:13:53Z to 2026-06-14T02:14:04Z: 0 configuration change(s), 0 admin event(s)",
+     "severity": "normal"
+    },
+    {
+     "text": "No configuration changes recorded in this window.",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-har",
+   "title": "Browser network log (HAR summary)",
+   "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.296Z GET https://lab.example:8182/ -> 200",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.403Z GET https://lab.example:8182/login -> 302 redirect https://lab.example:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp&redirect_uri=https%3A%2F%2Flab.example%3A8182%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: oidc_rp_session=<redacted>; Secure; HttpOnly; Path=/; SameSite=Lax",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.407Z GET https://lab.example:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp&redirect_uri=https%3A%2F%2Flab.example%3A8182%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256 -> 302 redirect https://lab.example:8182/auth/callback?state=***&session_state=***&iss=https%3A%2F%2Flab.example%3A8180%2Frealms%2Fidlab&code=***",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: AUTH_SESSION_ID=<redacted>;Version=1;Path=/realms/idlab/;Secure;HttpOnly;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KC_AUTH_SESSION_HASH=<redacted>;Version=1;Path=/realms/idlab/;Max-Age=60;Secure;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KC_RESTART=<redacted>;Version=1;Path=/realms/idlab/;Secure;HttpOnly;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KEYCLOAK_IDENTITY=<redacted>;Version=1;Path=/realms/idlab/;Secure;HttpOnly;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KEYCLOAK_SESSION=<redacted>;Version=1;Path=/realms/idlab/;Max-Age=36000;Secure;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.424Z GET https://lab.example:8182/auth/callback?state=***&session_state=***&iss=https%3A%2F%2Flab.example%3A8180%2Frealms%2Fidlab&code=*** -> 302 redirect https://lab.example:8182/debug",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: oidc_rp_session=<redacted>; Secure; HttpOnly; Path=/; SameSite=Lax",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.449Z GET https://lab.example:8182/debug -> 200",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.539Z GET https://lab.example:8182/debug/access-token -> 200",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-cookies",
+   "title": "Browser cookies",
+   "command": "the browser's cookies after each step (names and attributes only)",
+   "lines": [
+    {
+     "text": "app at https://lab.example:8182/:",
+     "severity": "normal"
+    },
+    {
+     "text": "    AUTH_SESSION_ID domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_AUTH_SESSION_HASH domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_IDENTITY domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_SESSION domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "back-at-app at https://lab.example:8182/debug:",
+     "severity": "normal"
+    },
+    {
+     "text": "    AUTH_SESSION_ID domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_AUTH_SESSION_HASH domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_SESSION domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_RESTART domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_IDENTITY domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    oidc_rp_session domain=lab.example path=/ secure httpOnly SameSite=Lax",
+     "severity": "normal"
+    },
+    {
+     "text": "end at https://lab.example:8182/debug:",
+     "severity": "normal"
+    },
+    {
+     "text": "    AUTH_SESSION_ID domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_AUTH_SESSION_HASH domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_SESSION domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_RESTART domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_IDENTITY domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    oidc_rp_session domain=lab.example path=/ secure httpOnly SameSite=Lax",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-console",
+   "title": "Browser console",
+   "command": "the browser's developer tools console",
+   "lines": [
+    {
+     "text": "(the console is empty)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  }
+ ]
+}

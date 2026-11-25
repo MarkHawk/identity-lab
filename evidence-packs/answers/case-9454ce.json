@@ -1,0 +1,10 @@
+{
+  "id": "case-9454ce",
+  "scenario": "proxy-rate-limit",
+  "runbook": "runbooks/08-proxy-rate-limit.md",
+  "summary": "the proxy's rate limit on Keycloak is tighter than a login needs",
+  "fix": {
+    "command": "scripts/fix.sh proxy-rate-limit",
+    "first_step": "Set a limit that real logins fit in, with a burst. In the lab:"
+  }
+}

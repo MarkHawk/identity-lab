@@ -1,0 +1,10 @@
+{
+  "id": "case-b8a405",
+  "scenario": "radius-shared-secret-mismatch",
+  "runbook": "runbooks/05-radius-shared-secret-mismatch.md",
+  "summary": "the NAS's RADIUS shared secret no longer matches the server's",
+  "fix": {
+    "command": "scripts/fix.sh radius-shared-secret-mismatch",
+    "first_step": "Decide which side is right. Usually it's the server's client entry. If the secret was rotated deliberately, it's the new value from your secret store."
+  }
+}

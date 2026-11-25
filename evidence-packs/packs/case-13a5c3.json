@@ -1,0 +1,831 @@
+{
+ "format": "idlab-evidence-pack/1",
+ "id": "case-13a5c3",
+ "login_at": "2026-06-14T02:14:00Z",
+ "captured": "2026-06-14T02:14:04Z",
+ "lab": {
+  "host": "lab.example"
+ },
+ "tools": [
+  {
+   "tool": "user-report",
+   "title": "What the user saw",
+   "command": "(the user's screen, or the network device's output)",
+   "lines": [
+    {
+     "text": "Page title: Login failed · identity-lab",
+     "severity": "error"
+    },
+    {
+     "text": "identity-lab · SAML service provider",
+     "severity": "normal"
+    },
+    {
+     "text": "python3-saml → Keycloak realm “idlab”",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML login failed",
+     "severity": "error"
+    },
+    {
+     "text": "Could not validate timestamp: expired. Check system clock.",
+     "severity": "error"
+    },
+    {
+     "text": "Reason code",
+     "severity": "normal"
+    },
+    {
+     "text": "invalid_response",
+     "severity": "normal"
+    },
+    {
+     "text": "Detail",
+     "severity": "normal"
+    },
+    {
+     "text": "errors=invalid_response sp_clock=2026-06-14 02:24:01 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "SP clock (UTC)",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14 02:24:01",
+     "severity": "normal"
+    },
+    {
+     "text": "Assertion timing vs SP clock",
+     "severity": "normal"
+    },
+    {
+     "text": "IssueInstant",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.769Z",
+     "severity": "normal"
+    },
+    {
+     "text": "Conditions NotBefore",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:59.769Z",
+     "severity": "normal"
+    },
+    {
+     "text": "Conditions NotOnOrAfter",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:59.769Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SP clock now",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:24:01Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SP clock − IssueInstant",
+     "severity": "normal"
+    },
+    {
+     "text": "+600 s",
+     "severity": "normal"
+    },
+    {
+     "text": "a few seconds is normal; python3-saml tolerates ±300 s beyond the Conditions window",
+     "severity": "normal"
+    },
+    {
+     "text": "Read from the rejected response before validation, so unverified.",
+     "severity": "normal"
+    },
+    {
+     "text": "The same line is in the SP log:",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "compose-ps",
+   "title": "Container status",
+   "command": "docker compose ps",
+   "lines": [
+    {
+     "text": "SERVICE           STATE     STATUS",
+     "severity": "normal"
+    },
+    {
+     "text": "api               running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "authenticator     running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak          running   Up 24 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "ldap              running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "nas               running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-egress    running   Up 18 minutes (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "postgres          running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "proxy             running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "radius            running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "squid             running   Up 23 hours (healthy)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-keycloak",
+   "title": "Keycloak log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z keycloak",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.783Z 2026-06-14 02:14:01,781 INFO  [org.keycloak.events] (executor-thread-172) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"https://lab.example:8181/saml/metadata\", userId=\"<user:alice>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"saml\", redirect_uri=\"https://lab.example:8181/saml/acs\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"alice\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "keycloak-events",
+   "title": "Keycloak events",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z keycloak | grep org.keycloak.events",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.783Z 2026-06-14 02:14:01,781 INFO  [org.keycloak.events] (executor-thread-172) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"https://lab.example:8181/saml/metadata\", userId=\"<user:alice>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"saml\", redirect_uri=\"https://lab.example:8181/saml/acs\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"alice\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-ldap",
+   "title": "OpenLDAP log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z ldap",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-radius",
+   "title": "FreeRADIUS log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z radius",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-proxy",
+   "title": "Reverse proxy (nginx) log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z proxy",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-squid",
+   "title": "Egress proxy (Squid) log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z squid",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-saml-sp",
+   "title": "SAML app log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z saml-sp",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.347Z 198.51.100.1 - - [14/Jun/2026:02:24:01 +0000] \"GET / HTTP/1.1\" 200 2641 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.435Z 2026-06-14 02:24:01,435 INFO saml-sp event=saml_authn_request request_id=ONELOGIN_<id-3> user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36'",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.436Z 198.51.100.1 - - [14/Jun/2026:02:24:01 +0000] \"GET /login HTTP/1.1\" 302 2509 \"https://lab.example:8181/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.900Z 2026-06-14 02:24:01,900 WARNING saml-sp event=saml_login_failed reason=invalid_response error='Could not validate timestamp: expired. Check system clock.' detail='errors=invalid_response sp_clock=2026-06-14 02:24:01 UTC' sp_clock_minus_issue_instant='+600 s'",
+     "severity": "error"
+    },
+    {
+     "text": "2026-06-14T02:14:01.901Z 198.51.100.1 - - [14/Jun/2026:02:24:01 +0000] \"POST /saml/acs HTTP/1.1\" 401 3591 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "severity": "warning"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-saml-sp-proxied",
+   "title": "SAML app log (behind the proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z saml-sp-proxied",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp",
+   "title": "OIDC app log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-proxied",
+   "title": "OIDC app log (behind the proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp-proxied",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-egress",
+   "title": "OIDC app log (egress proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp-egress",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-edge",
+   "title": "OIDC app log (edge)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp-edge",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-api",
+   "title": "API log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z api",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "radius-test",
+   "title": "RADIUS test (radclient)",
+   "command": "docker compose exec -T nas nas-auth dave   (radclient; the password on stdin)",
+   "lines": [
+    {
+     "text": "nas: Access-Request for dave to radius:1812",
+     "severity": "normal"
+    },
+    {
+     "text": "nas: Access-Accept",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "clock",
+   "title": "Clock check",
+   "command": "timedatectl; then, in each container, date -u +%s against the host's",
+   "lines": [
+    {
+     "text": "               Local time:            Sun 2026-06-14 02:14:06 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "           Universal time: Sun 2026-06-14 02:14:06 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "                 RTC time: Sun 2026-06-14 02:14:06",
+     "severity": "normal"
+    },
+    {
+     "text": "                Time zone: Etc/UTC (UTC, +0000)",
+     "severity": "normal"
+    },
+    {
+     "text": "System clock synchronized: yes",
+     "severity": "normal"
+    },
+    {
+     "text": "              NTP service: active",
+     "severity": "normal"
+    },
+    {
+     "text": "          RTC in local TZ: no",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp 2026-06-14T02:24:06Z host 2026-06-14T02:14:06Z offset +600 s",
+     "severity": "error"
+    },
+    {
+     "text": "oidc-rp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "api 2026-06-14T02:14:07Z host 2026-06-14T02:14:06Z offset +1 s",
+     "severity": "normal"
+    },
+    {
+     "text": "radius 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "ldap 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "authenticator 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "token",
+   "title": "Token inspector",
+   "command": "decoded header and claims of the tokens the app received (never the token or its signature)",
+   "lines": [
+    {
+     "text": "SAML response issuer: https://lab.example:8180/realms/idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response destination: https://lab.example:8181/saml/acs",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response status: urn:oasis:names:tc:SAML:2.0:status:Success",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response issued: 2026-06-14T02:14:01.769Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response signed: true",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion issuer: https://lab.example:8180/realms/idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion signed: true",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion subject NameID: alice@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion subject confirmation: {\"NotOnOrAfter\":\"2026-06-14T02:18:59.769Z\",\"Recipient\":\"https://lab.example:8181/saml/acs\"}",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion conditions: {\"NotBefore\":\"2026-06-14T02:13:59.769Z\",\"NotOnOrAfter\":\"2026-06-14T02:14:59.769Z\"}",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion audience: https://lab.example:8181/saml/metadata",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion authentication: {\"AuthnInstant\":\"2026-06-14T02:14:01.769Z\",\"SessionNotOnOrAfter\":\"2026-06-14T12:14:01.769Z\"}",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion attribute givenName: Alice",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion attribute surname: Anderson",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion attribute email: alice@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "assertion attribute role: offline_access, lab-user, default-roles-idlab, view-profile, manage-account-links, lab-admin, manage-account, uma_authorization",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response signing certificate subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response signing certificate issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response signing certificate notBefore=2026-06-14T01:08:00Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response signing certificate notAfter=2027-06-14T02:08:00Z (valid, 31535641 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML response signing certificate SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "trusted-keys",
+   "title": "Trusted keys and certificates",
+   "command": "openssl x509 -noout -subject -issuer -dates -fingerprint -sha256 (the SAML app's pinned IdP certificate, the IdP metadata, the JWKS, the partner client certificate)",
+   "lines": [
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:08:00Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:08:00Z (valid, 31535641 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:08:00Z",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:08:00Z (valid, 31535641 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC JWKS entry: RSA-OAEP, enc, RSA, id tha3aykSPjeL4hDNuqxlgyM4LR9gAx4KZaKnULSt7R4",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id 4nSleABJgekzk1YhzxiwyfJ15E-Z2J5T7aNM-GsYoJQ",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate subject=CN=partner-client",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate notBefore=2026-05-11T02:02:57Z",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate notAfter=2027-06-12T03:02:57Z (valid, 31366138 s (363.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate SHA-256 fingerprint 90:92:D7:80:50:FD:D7:4C:1D:60:37:53:61:C2:B0:02:86:EF:D9:EF:CA:8B:C4:11:7C:F0:A6:18:6D:A1:B8:9E",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate, checked against the lab CA: valid",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "ldap-user",
+   "title": "LDAP lookup",
+   "command": "ldapsearch -LLL -x -H ldaps://ldap:1636 -D cn=keycloak-svc,ou=services,dc=idlab,dc=example -y <password file> -b ou=people,dc=idlab,dc=example \"(uid=dave)\"",
+   "lines": [
+    {
+     "text": "dn: uid=dave,ou=people,dc=idlab,dc=example",
+     "severity": "normal"
+    },
+    {
+     "text": "uid: dave",
+     "severity": "normal"
+    },
+    {
+     "text": "cn: Dave Dawson",
+     "severity": "normal"
+    },
+    {
+     "text": "sn: Dawson",
+     "severity": "normal"
+    },
+    {
+     "text": "mail: dave@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "entryUUID: <id-4>",
+     "severity": "normal"
+    },
+    {
+     "text": "createTimestamp: 20260523061149Z",
+     "severity": "normal"
+    },
+    {
+     "text": "modifyTimestamp: 20260523061149Z",
+     "severity": "normal"
+    },
+    {
+     "text": "# groups with dave as a member",
+     "severity": "normal"
+    },
+    {
+     "text": "dn: cn=lab-user,ou=groups,dc=idlab,dc=example",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "recent-changes",
+   "title": "Recent changes",
+   "command": "the configuration change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:04Z",
+   "lines": [
+    {
+     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:04Z: 1 configuration change(s), 0 admin event(s)",
+     "severity": "normal"
+    },
+    {
+     "text": "Changed: .state/saml-sp/faketime.rc",
+     "severity": "normal"
+    },
+    {
+     "text": "- +0",
+     "severity": "warning"
+    },
+    {
+     "text": "+ +600",
+     "severity": "warning"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-har",
+   "title": "Browser network log (HAR summary)",
+   "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.331Z GET https://lab.example:8181/ -> 200",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.429Z GET https://lab.example:8181/login -> 302 redirect https://lab.example:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=***&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: saml_sp_session=<redacted>; Secure; HttpOnly; Path=/; SameSite=Lax",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.437Z GET https://lab.example:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=***&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256 -> 200",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: AUTH_SESSION_ID=<redacted>;Version=1;Path=/realms/idlab/;Secure;HttpOnly;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KC_AUTH_SESSION_HASH=<redacted>;Version=1;Path=/realms/idlab/;Max-Age=60;Secure;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KC_RESTART=<redacted>;Version=1;Path=/realms/idlab/;Secure;HttpOnly;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.724Z POST https://lab.example:8180/realms/idlab/login-actions/authenticate?session_code=***&execution=<id-5>&client_id=https%3A%2F%2Flab.example%3A8181%2Fsaml%2Fmetadata&tab_id=***&client_data=*** -> 200",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KC_RESTART=<redacted>;Version=1;Path=/realms/idlab/;Max-Age=0",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KEYCLOAK_IDENTITY=<redacted>;Version=1;Path=/realms/idlab/;Secure;HttpOnly;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    Set-Cookie: KEYCLOAK_SESSION=<redacted>;Version=1;Path=/realms/idlab/;Max-Age=36000;Secure;SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.890Z POST https://lab.example:8181/saml/acs -> 401",
+     "severity": "warning"
+    },
+    {
+     "text": "    Set-Cookie: saml_sp_session=<redacted>; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Secure; HttpOnly; Path=/; SameSite=Lax",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-cookies",
+   "title": "Browser cookies",
+   "command": "the browser's cookies after each step (names and attributes only)",
+   "lines": [
+    {
+     "text": "app at https://lab.example:8181/:",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak at https://lab.example:8180/realms/idlab/protocol/saml:",
+     "severity": "normal"
+    },
+    {
+     "text": "    AUTH_SESSION_ID domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_AUTH_SESSION_HASH domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_RESTART domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    saml_sp_session domain=lab.example path=/ secure httpOnly SameSite=Lax",
+     "severity": "normal"
+    },
+    {
+     "text": "back-at-app at https://lab.example:8181/saml/acs:",
+     "severity": "normal"
+    },
+    {
+     "text": "    AUTH_SESSION_ID domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_AUTH_SESSION_HASH domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_IDENTITY domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_SESSION domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "end at https://lab.example:8181/saml/acs:",
+     "severity": "normal"
+    },
+    {
+     "text": "    AUTH_SESSION_ID domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KC_AUTH_SESSION_HASH domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_IDENTITY domain=lab.example path=/realms/idlab/ secure httpOnly SameSite=None",
+     "severity": "normal"
+    },
+    {
+     "text": "    KEYCLOAK_SESSION domain=lab.example path=/realms/idlab/ secure SameSite=None",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-console",
+   "title": "Browser console",
+   "command": "the browser's developer tools console",
+   "lines": [
+    {
+     "text": "error: Failed to load resource: the server responded with a status of 401 (UNAUTHORIZED)",
+     "severity": "error"
+    }
+   ],
+   "omitted": 0
+  }
+ ]
+}

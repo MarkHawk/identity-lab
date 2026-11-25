@@ -1,0 +1,10 @@
+{
+  "id": "case-168c58",
+  "scenario": "radius-challenge-unsupported",
+  "runbook": "runbooks/23-radius-challenge-unsupported.md",
+  "summary": "the NAS doesn't do challenge-response, so MFA users get Access-Reject",
+  "fix": {
+    "command": "scripts/fix.sh radius-challenge-unsupported",
+    "first_step": "**Turn challenge-response on at the NAS**, if it supports it: often a setting on the RADIUS server entry or the authentication profile (\"challenge-response\", \"RADIUS challenge\", \"allow Access-Challenge\", or a newer VPN connection type). Upgrade firmware if that's what adds it."
+  }
+}

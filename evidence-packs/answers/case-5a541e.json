@@ -1,0 +1,10 @@
+{
+  "id": "case-5a541e",
+  "scenario": "redirect-uri-mismatch",
+  "runbook": "runbooks/03-redirect-uri-mismatch.md",
+  "summary": "oidc-rp client's registered redirect URI no longer matches the app",
+  "fix": {
+    "command": "scripts/fix.sh redirect-uri-mismatch",
+    "first_step": ""
+  }
+}

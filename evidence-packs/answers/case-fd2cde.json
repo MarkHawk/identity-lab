@@ -1,0 +1,10 @@
+{
+  "id": "case-fd2cde",
+  "scenario": "proxy-bypass",
+  "runbook": "runbooks/14-proxy-bypass.md",
+  "summary": "NO_PROXY sends the OIDC RP's calls to the IdP around the egress proxy",
+  "fix": {
+    "command": "scripts/fix.sh proxy-bypass",
+    "first_step": "Take the IdP back out of `NO_PROXY`. In the lab:"
+  }
+}

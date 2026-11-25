@@ -1,0 +1,10 @@
+{
+  "id": "case-5b9b04",
+  "scenario": "proxy-gateway-timeout",
+  "runbook": "runbooks/07-proxy-gateway-timeout.md",
+  "summary": "the OIDC RP behind the proxy answers its callback slower than the proxy waits",
+  "fix": {
+    "command": "scripts/fix.sh proxy-gateway-timeout",
+    "first_step": "**Fix the slowness first.** In the lab:"
+  }
+}

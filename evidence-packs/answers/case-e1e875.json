@@ -1,0 +1,10 @@
+{
+  "id": "case-e1e875",
+  "scenario": "redirect-loop",
+  "runbook": "runbooks/15-redirect-loop.md",
+  "summary": "the proxy stops sending X-Forwarded-Proto to an app that forces HTTPS",
+  "fix": {
+    "command": "scripts/fix.sh redirect-loop",
+    "first_step": "Make the location send the forwarded headers again. In the lab:"
+  }
+}

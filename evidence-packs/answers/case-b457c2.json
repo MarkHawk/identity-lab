@@ -1,0 +1,10 @@
+{
+  "id": "case-b457c2",
+  "scenario": "proxy-forwarded-headers",
+  "runbook": "runbooks/09-proxy-forwarded-headers.md",
+  "summary": "the proxy tells Keycloak the browser used port 443, not 8183",
+  "fix": {
+    "command": "scripts/fix.sh proxy-forwarded-headers",
+    "first_step": "Send the port and scheme the browser really used. In the lab:"
+  }
+}

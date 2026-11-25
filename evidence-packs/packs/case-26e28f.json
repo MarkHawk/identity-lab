@@ -1,0 +1,559 @@
+{
+ "format": "idlab-evidence-pack/1",
+ "id": "case-26e28f",
+ "login_at": "2026-06-14T02:14:00Z",
+ "captured": "2026-06-14T02:14:03Z",
+ "lab": {
+  "host": "lab.example"
+ },
+ "tools": [
+  {
+   "tool": "user-report",
+   "title": "What the user saw",
+   "command": "(the user's screen, or the network device's output)",
+   "lines": [
+    {
+     "text": "Page title: 400 The SSL certificate error",
+     "severity": "normal"
+    },
+    {
+     "text": "400 Bad Request",
+     "severity": "normal"
+    },
+    {
+     "text": "The SSL certificate error",
+     "severity": "normal"
+    },
+    {
+     "text": "nginx",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "compose-ps",
+   "title": "Container status",
+   "command": "docker compose ps",
+   "lines": [
+    {
+     "text": "SERVICE           STATE     STATUS",
+     "severity": "normal"
+    },
+    {
+     "text": "api               running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "authenticator     running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak          running   Up 24 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "ldap              running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "nas               running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-egress    running   Up 18 minutes (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "postgres          running   Up 25 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "proxy             running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "radius            running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "severity": "normal"
+    },
+    {
+     "text": "squid             running   Up 23 hours (healthy)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-keycloak",
+   "title": "Keycloak log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z keycloak",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "keycloak-events",
+   "title": "Keycloak events",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z keycloak | grep org.keycloak.events",
+   "lines": [
+    {
+     "text": "(no events in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-ldap",
+   "title": "OpenLDAP log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z ldap",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-radius",
+   "title": "FreeRADIUS log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z radius",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-proxy",
+   "title": "Reverse proxy (nginx) log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z proxy",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.080Z 2026/06/14 02:14:01 [info] 97958#97958: *16693 client closed connection while waiting for request, client: 198.51.100.250, server: 0.0.0.0:8189",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:14:01.093Z 198.51.100.250 \"GET / HTTP/1.1\" 400 610 host=lab.example:8189 client_dn=\"CN=partner-client\" client_not_after=\"Jun 13 02:13:55 2026 GMT\" ssl_client_verify=FAILED:certificate has expired",
+     "severity": "warning"
+    },
+    {
+     "text": "2026-06-14T02:14:01.093Z 2026/06/14 02:14:01 [info] 97958#97958: *16694 client SSL certificate verify error: (10:certificate has expired) while reading client request headers, client: 198.51.100.250, server: , request: \"GET / HTTP/1.1\", host: \"lab.example:8189\"",
+     "severity": "error"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-squid",
+   "title": "Egress proxy (Squid) log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z squid",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-saml-sp",
+   "title": "SAML app log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z saml-sp",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-saml-sp-proxied",
+   "title": "SAML app log (behind the proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z saml-sp-proxied",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp",
+   "title": "OIDC app log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-proxied",
+   "title": "OIDC app log (behind the proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp-proxied",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-egress",
+   "title": "OIDC app log (egress proxy)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp-egress",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-oidc-rp-edge",
+   "title": "OIDC app log (edge)",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp-edge",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "logs-api",
+   "title": "API log",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z api",
+   "lines": [
+    {
+     "text": "(nothing logged in this window)",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "radius-test",
+   "title": "RADIUS test (radclient)",
+   "command": "docker compose exec -T nas nas-auth dave   (radclient; the password on stdin)",
+   "lines": [
+    {
+     "text": "nas: Access-Request for dave to radius:1812",
+     "severity": "normal"
+    },
+    {
+     "text": "nas: Access-Accept",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "clock",
+   "title": "Clock check",
+   "command": "timedatectl; then, in each container, date -u +%s against the host's",
+   "lines": [
+    {
+     "text": "               Local time:            Sun 2026-06-14 02:14:04 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "           Universal time: Sun 2026-06-14 02:14:04 UTC",
+     "severity": "normal"
+    },
+    {
+     "text": "                 RTC time: Sun 2026-06-14 02:14:04",
+     "severity": "normal"
+    },
+    {
+     "text": "                Time zone: Etc/UTC (UTC, +0000)",
+     "severity": "normal"
+    },
+    {
+     "text": "System clock synchronized: yes",
+     "severity": "normal"
+    },
+    {
+     "text": "              NTP service: active",
+     "severity": "normal"
+    },
+    {
+     "text": "          RTC in local TZ: no",
+     "severity": "normal"
+    },
+    {
+     "text": "keycloak 2026-06-14T02:14:05Z host 2026-06-14T02:14:04Z offset +1 s",
+     "severity": "normal"
+    },
+    {
+     "text": "saml-sp 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "oidc-rp 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "api 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "radius 2026-06-14T02:14:06Z host 2026-06-14T02:14:05Z offset +1 s",
+     "severity": "normal"
+    },
+    {
+     "text": "ldap 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    },
+    {
+     "text": "authenticator 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "token",
+   "title": "Token inspector",
+   "command": "decoded header and claims of the tokens the app received (never the token or its signature)",
+   "lines": [
+    {
+     "text": "No token in this flow",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "trusted-keys",
+   "title": "Trusted keys and certificates",
+   "command": "openssl x509 -noout -subject -issuer -dates -fingerprint -sha256 (the SAML app's pinned IdP certificate, the IdP metadata, the JWKS, the partner client certificate)",
+   "lines": [
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:08:41Z",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:08:41Z (valid, 31535682 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 subject=CN=idlab",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:08:41Z",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:08:41Z (valid, 31535682 s (365.0 d) after the login)",
+     "severity": "normal"
+    },
+    {
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC JWKS entry: RSA-OAEP, enc, RSA, id tha3aykSPjeL4hDNuqxlgyM4LR9gAx4KZaKnULSt7R4",
+     "severity": "normal"
+    },
+    {
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id 4nSleABJgekzk1YhzxiwyfJ15E-Z2J5T7aNM-GsYoJQ",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate subject=CN=partner-client",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate issuer=CN=identity-lab Local CA,O=identity-lab",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate notBefore=2025-05-13T02:13:55Z",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate notAfter=2026-06-13T02:13:55Z (expired, 86404 s (1.0 d) before the login)",
+     "severity": "error"
+    },
+    {
+     "text": "Partner system's client certificate SHA-256 fingerprint 83:8E:6C:89:C2:B8:5E:DB:83:7E:A9:91:B0:70:DB:8F:4A:44:C2:7E:4C:5E:D4:66:83:ED:31:70:C4:95:1E:95",
+     "severity": "normal"
+    },
+    {
+     "text": "Partner system's client certificate, checked against the lab CA: invalid",
+     "severity": "error"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "ldap-user",
+   "title": "LDAP lookup",
+   "command": "ldapsearch -LLL -x -H ldaps://ldap:1636 -D cn=keycloak-svc,ou=services,dc=idlab,dc=example -y <password file> -b ou=people,dc=idlab,dc=example \"(uid=dave)\"",
+   "lines": [
+    {
+     "text": "dn: uid=dave,ou=people,dc=idlab,dc=example",
+     "severity": "normal"
+    },
+    {
+     "text": "uid: dave",
+     "severity": "normal"
+    },
+    {
+     "text": "cn: Dave Dawson",
+     "severity": "normal"
+    },
+    {
+     "text": "sn: Dawson",
+     "severity": "normal"
+    },
+    {
+     "text": "mail: dave@idlab.example",
+     "severity": "normal"
+    },
+    {
+     "text": "entryUUID: <id-1>",
+     "severity": "normal"
+    },
+    {
+     "text": "createTimestamp: 20260523061230Z",
+     "severity": "normal"
+    },
+    {
+     "text": "modifyTimestamp: 20260523061230Z",
+     "severity": "normal"
+    },
+    {
+     "text": "# groups with dave as a member",
+     "severity": "normal"
+    },
+    {
+     "text": "dn: cn=lab-user,ou=groups,dc=idlab,dc=example",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "recent-changes",
+   "title": "Recent changes",
+   "command": "the configuration change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z",
+   "lines": [
+    {
+     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z: 1 configuration change(s), 0 admin event(s)",
+     "severity": "normal"
+    },
+    {
+     "text": "Changed: .state/mtls-client/client.crt",
+     "severity": "normal"
+    },
+    {
+     "text": "- notBefore=May 11 02:03:38 2026 GMT",
+     "severity": "warning"
+    },
+    {
+     "text": "- notAfter=Jun 12 03:03:38 2027 GMT",
+     "severity": "warning"
+    },
+    {
+     "text": "+ notBefore=May 13 02:13:55 2025 GMT",
+     "severity": "warning"
+    },
+    {
+     "text": "+ notAfter=Jun 13 02:13:55 2026 GMT",
+     "severity": "warning"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-har",
+   "title": "Browser network log (HAR summary)",
+   "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
+   "lines": [
+    {
+     "text": "2026-06-14T02:14:01.040Z GET https://lab.example:8189/ -> 400",
+     "severity": "warning"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-cookies",
+   "title": "Browser cookies",
+   "command": "the browser's cookies after each step (names and attributes only)",
+   "lines": [
+    {
+     "text": "end at https://lab.example:8189/:",
+     "severity": "normal"
+    }
+   ],
+   "omitted": 0
+  },
+  {
+   "tool": "browser-console",
+   "title": "Browser console",
+   "command": "the browser's developer tools console",
+   "lines": [
+    {
+     "text": "error: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+     "severity": "error"
+    }
+   ],
+   "omitted": 0
+  }
+ ]
+}
