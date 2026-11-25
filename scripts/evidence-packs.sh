@@ -47,7 +47,8 @@ trap cleanup EXIT
 } >"$COMMON/secrets"
 jq -n --arg lab_host "$LAB_HOST" --arg lab_root "$LAB_ROOT" --arg home "$HOME" --arg hostname "$(hostname)" \
   --arg project "$(compose config --format json | jq -r .name)" \
-  '{lab_host: $lab_host, lab_root: $lab_root, home: $home, hostname: $hostname, project: $project}' >"$COMMON/env.json"
+  --argjson host_ips "$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9.]+$' | jq -R . | jq -s .)" \
+  '{lab_host: $lab_host, lab_root: $lab_root, home: $home, hostname: $hostname, project: $project, host_ips: $host_ips}' >"$COMMON/env.json"
 compose config --format json >"$COMMON/compose.json"
 
 LDAP_USERS=" dave erin frank heidi "

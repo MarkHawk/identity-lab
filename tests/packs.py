@@ -142,7 +142,7 @@ ONELOGIN_RE = re.compile(r"ONELOGIN_[0-9a-f]{40}")
 KC_ID_RE = re.compile(r'((?:sessionId|code_id|authSessionParentId|authSessionTabId|token_id|refresh_token_id|'
                       r'userSessionId|sid|session_state|jti)["\']?\s*[=:]\s*["\']?)([A-Za-z0-9:._-]{8,})')
 IPV4_RE = re.compile(r"(?<![\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\d.])")
-KEEP_IPS = {"127.0.0.1", "0.0.0.0"}
+KEEP_IPS = {"0.0.0.0"}  # and all of 127.0.0.0/8: loopback, inside a container or the host
 
 
 class Placeholders:
@@ -176,13 +176,14 @@ class Placeholders:
 
         def ip(m):
             a = m.group(0)
-            if a in KEEP_IPS or a.startswith(("192.0.2.", "198.51.100.", "203.0.113.")):
+            if a in KEEP_IPS or a.startswith(("127.", "192.0.2.", "198.51.100.", "203.0.113.")):
                 return a
             if a in c["ips"]:
                 return c["ips"][a]
-            unknown = c.setdefault("unknown_ips", {})
+            unknown = c["unknown_ips"]
             if a not in unknown:
                 unknown[a] = f"203.0.113.{len(unknown) + 1}"
+                c["unknown_new"] = True
             return unknown[a]
         return IPV4_RE.sub(ip, text)
 
@@ -214,6 +215,11 @@ class Shifter:
             return f"{prefix}{out:%Y-%m-%d}{m.group('sep')}{out:%H:%M:%S}{frac}{tz}"
         s = re.sub(r"(?P<wd>\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) )?(?P<d>\d{4}-\d{2}-\d{2})(?P<sep>[T ])(?P<t>\d{2}:\d{2}:\d{2})"
                    r"(?P<frac>[.,]\d+)?(?P<tz>Z|[+-]\d{2}:?\d{2}| UTC| GMT)?", iso, s)
+
+        def slash(m):  # nginx's error log and Squid's cache log: 2026/11/25 17:18:40
+            out = self.t(dt.datetime.strptime(m.group(1), "%Y/%m/%d %H:%M:%S").replace(tzinfo=dt.timezone.utc))
+            return f"{out:%Y/%m/%d %H:%M:%S}"
+        s = re.sub(r"(?<![\d/])(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})", slash, s)
 
         def clf(m):
             out = self.t(dt.datetime.strptime(m.group(1), "%d/%b/%Y:%H:%M:%S").replace(tzinfo=dt.timezone.utc))
@@ -278,7 +284,7 @@ def raw_date_tokens(t):
     """How the capture's own days would look, to prove none survived."""
     toks = set()
     for d in (t - dt.timedelta(days=1), t, t + dt.timedelta(days=1)):
-        toks |= {f"{d:%Y-%m-%d}", f"{d:%d/%b/%Y}", f"{d:%Y%m%d}", f"{calendar.month_abbr[d.month]} {d.day:2d} ",
+        toks |= {f"{d:%Y-%m-%d}", f"{d:%Y/%m/%d}", f"{d:%d/%b/%Y}", f"{d:%Y%m%d}", f"{calendar.month_abbr[d.month]} {d.day:2d} ",
                  f"{calendar.month_abbr[d.month]} {d.day} "}
     toks.add(str(int(t.timestamp()))[:5])
     toks.add(f"{int(t.timestamp()):08x}"[:4])
@@ -518,9 +524,14 @@ def make_common(raw_dir, common_dir):
         fixed[c["id"]] = f"<component:{c['name']}>"
     if kc.get("realm"):
         fixed[kc["realm"]] = "<realm:idlab>"
+    # The host's own addresses (the LAN's, as Node's TLS proxy reaches the lab
+    # through real DNS): fixed placeholders, the same in every pack.
+    for i, a in enumerate(env.get("host_ips", [])):
+        ips.setdefault(a, f"198.51.100.{250 + i}")
     # longest first, so a container's full ID goes before its 12-character prefix
     containers = dict(sorted(containers.items(), key=lambda kv: -len(kv[0])))
-    return {"fixed": fixed, "containers": containers, "ips": ips, "lab_host": env["lab_host"],
+    return {"fixed": fixed, "containers": containers, "ips": ips,
+            "unknown_ips": json.loads(read(f"{common_dir}/unknown-ips.json", "{}")), "lab_host": env["lab_host"],
             "lab_root": env["lab_root"], "home": env.get("home"), "hostname": env.get("hostname")}
 
 
@@ -560,8 +571,12 @@ def build(raw_dir, common_dir, out_path):
     left = [t for t in raw_date_tokens(login) if t in text]
     if left:
         problems.append(f"{len(left)} unshifted date form(s)")
-    if common.get("unknown_ips"):
-        print(f"note: {len(common['unknown_ips'])} address(es) not from a container became 203.0.113.N", file=sys.stderr)
+    if common.get("unknown_new"):
+        # one map for the whole build, so 203.0.113.N means the same address in every pack
+        with open(f"{common_dir}/unknown-ips.json", "w") as fh:
+            json.dump(common["unknown_ips"], fh)
+    if common["unknown_ips"]:
+        print(f"note: {len(common['unknown_ips'])} address(es) from neither a container nor the host became 203.0.113.N", file=sys.stderr)
     if problems:
         print(f"pack {meta['id']} not written: {', '.join(problems)}", file=sys.stderr)
         return 1
@@ -657,6 +672,19 @@ def check_time(packs_dir, answers_dir):
          "the partner client certificate expired before the login")
     need("client-cert-missing", lambda s, p: any("no client certificate" in ln["text"] for t in p["tools"] if t["tool"] == "trusted-keys" for ln in t["lines"]),
          "the partner system has no client certificate")
+    # Every timestamp in a log (each line's Docker time, and the service's own in
+    # any format the shifter knows) must be within a day of the login.
+    stamp = re.compile(r"\b(\d{4})[-/](\d{2})[-/](\d{2})[T ]\d{2}:\d{2}:\d{2}")
+    for name, p in packs.items():
+        for t in p["tools"]:
+            if not (t["tool"].startswith("logs-") or t["tool"] == "keycloak-events"):
+                continue
+            for ln in t["lines"]:
+                for y, mo, d in stamp.findall(ln["text"]):
+                    when = dt.datetime(int(y), int(mo), int(d), tzinfo=dt.timezone.utc)
+                    if abs((when - anchor.replace(hour=0, minute=0, second=0)).days) > 1:
+                        bad.append(f"{name}: {t['tool']}: a timestamp not within a day of the login: {y}-{mo}-{d}")
+                        break
     need_h = seen.get("healthy", {})
     if any(r == "expired" for _, r in need_h.get("certs", [])) or any(abs(v) > 5 for k, v in need_h.items() if k != "certs"):
         bad.append("healthy: a certificate expired or a clock off")
@@ -685,6 +713,8 @@ def selftest():
         "modifyTimestamp: 20261124183358Z": "modifyTimestamp: 20260614021400Z",
         "Local time: Tue 2026-11-24 18:33:58 UTC": "Local time: Sun 2026-06-14 02:14:00 UTC",
         "expired on 2026-11-23": "expired on 2026-06-13",
+        "2026/11/24 18:33:58 [info] 1437#1437": "2026/06/14 02:14:00 [info] 1437#1437",
+        "2026/11/24 18:33:58| Adding nameserver": "2026/06/14 02:14:00| Adding nameserver",
         "certificate expired on Tue Nov 24 18:33:58 GMT 2026)": "certificate expired on Sun Jun 14 02:14:00 GMT 2026)",
         "idlab-signing-20261124183358 (rsa)": "idlab-signing-20260614021400 (rsa)",
         "port 20261399999999 no": "port 20261399999999 no",
