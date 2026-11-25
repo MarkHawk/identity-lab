@@ -220,6 +220,13 @@ class Shifter:
             return f"{out:%d/%b/%Y:%H:%M:%S} {m.group(2)}"
         s = re.sub(r"(\d{2}/[A-Z][a-z]{2}/\d{4}:\d{2}:\d{2}:\d{2}) ([+-]\d{4})", clf, s)
 
+        def java(m):  # Java's Date.toString(), in Keycloak's log: Wed Nov 25 17:15:09 GMT 2026
+            mon, day, hms, year = m.group("mon"), int(m.group("day")), m.group("hms"), int(m.group("year"))
+            out = self.t(dt.datetime(year, MON[mon], day, *map(int, hms.split(":")), tzinfo=dt.timezone.utc))
+            return f"{DAY[out.weekday()]} {calendar.month_abbr[out.month]} {out.day:02d} {out:%H:%M:%S} {m.group('tz')} {out.year}"
+        s = re.sub(r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?P<mon>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?P<day>\d{2}) "
+                   r"(?P<hms>\d{2}:\d{2}:\d{2}) (?P<tz>GMT|UTC) (?P<year>\d{4})\b", java, s)
+
         def ctime(m):  # Tue Nov 24 18:57:36 2026 (FreeRADIUS) and Nov 24 18:57:36 2026 GMT (openssl)
             mon, day, hms, year = m.group("mon"), int(m.group("day")), m.group("hms"), int(m.group("year"))
             out = self.t(dt.datetime(year, MON[mon], day, *map(int, hms.split(":")), tzinfo=dt.timezone.utc))
@@ -230,10 +237,14 @@ class Shifter:
         s = re.sub(r"(?P<wd>\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) )?\b(?P<mon>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) "
                    r"(?P<day>[ \d]?\d) (?P<hms>\d{2}:\d{2}:\d{2}) (?P<year>\d{4})(?P<gmt> GMT)?", ctime, s)
 
-        def gtime(m):  # LDAP generalised time 20261124183358Z
-            out = self.t(dt.datetime.strptime(m.group(1), "%Y%m%d%H%M%S").replace(tzinfo=dt.timezone.utc))
-            return f"{out:%Y%m%d%H%M%S}{m.group(2) or ''}Z"
-        s = re.sub(r"\b(20\d{12})(\.\d+)?Z\b", gtime, s)
+        def gtime(m):  # LDAP generalised time 20261124183358Z, and the same digits bare in a name
+            try:  # (idlab-signing-20261125171352, a key the lab named after when it made it)
+                base = dt.datetime.strptime(m.group(1), "%Y%m%d%H%M%S").replace(tzinfo=dt.timezone.utc)
+            except ValueError:
+                return m.group(0)
+            out = self.t(base)
+            return f"{out:%Y%m%d%H%M%S}{m.group(2) or ''}{m.group(3) or ''}"
+        s = re.sub(r"(?<!\d)(20\d{12})(\.\d+)?(Z)?(?!\d)", gtime, s)
 
         def hexepoch(m):  # slapd: 6b05e6d8.3785d1dd at the start of a line
             v = int(m.group(1), 16)
@@ -674,6 +685,9 @@ def selftest():
         "modifyTimestamp: 20261124183358Z": "modifyTimestamp: 20260614021400Z",
         "Local time: Tue 2026-11-24 18:33:58 UTC": "Local time: Sun 2026-06-14 02:14:00 UTC",
         "expired on 2026-11-23": "expired on 2026-06-13",
+        "certificate expired on Tue Nov 24 18:33:58 GMT 2026)": "certificate expired on Sun Jun 14 02:14:00 GMT 2026)",
+        "idlab-signing-20261124183358 (rsa)": "idlab-signing-20260614021400 (rsa)",
+        "port 20261399999999 no": "port 20261399999999 no",
         "notAfter=Nov  4 18:33:58 2026 GMT": "notAfter=May 25 02:14:00 2026 GMT",
         "port 8180 pid 12345 id 1234567": "port 8180 pid 12345 id 1234567",
     }
