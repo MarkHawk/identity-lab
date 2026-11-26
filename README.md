@@ -109,6 +109,10 @@ No Linux machine? [Run it in GitHub Codespaces](docs/codespaces.md), step by ste
 | 25 | `login-timeout` | Keycloak, after a login page has been open past the realm's login timeout: the login form again with `Your login attempt timed out. Login will start from the beginning.` The password was never checked. A saved login URL fails differently, and at any timeout. | [25-login-timeout](runbooks/25-login-timeout.md) |
 | 26 | `wrong-account` | OIDC app, at a shared PC: no login form, and the page shows someone else (`carol@idlab.example`) instead of the user. The previous person left their Keycloak session open; no server is faulty. | [26-wrong-account](runbooks/26-wrong-account.md) |
 
+## Evidence packs
+
+For the support-training game, `evidence-packs/` holds 29 packs: the healthy lab and each of the 28 scenarios, with what a support engineer would see from each tool, captured from the real lab and redacted. Each case's answer key is kept separately, so a pack never names its own answer. See [FORMAT.md](evidence-packs/FORMAT.md), and [Operating the lab](docs/operating.md#evidence-packs) to rebuild them.
+
 ## Go deeper
 
 - [Walkthrough](docs/walkthrough.md): support tickets from first message to fix, with every tool. [Start with chapters 1 and 2](docs/walkthrough.md#start-here-chapters-1-and-2).

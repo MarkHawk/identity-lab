@@ -248,6 +248,17 @@ The API scenarios change Keycloak, not the API, through the Admin REST API like 
 
 The egress proxy scenarios 11 to 13 work the same way on Squid: one include file each in `.state/squid/` (healthy defaults in `squid/defaults/`), applied with `squid -k parse && squid -k reconfigure`. `proxy-bypass` changes the app instead: its `HTTPS_PROXY` and `NO_PROXY` are in `.state/oidc-rp-egress/proxy.env`, and as with any environment variable the container is recreated to pick them up. For 11 to 13 the app fails after the password, at the token request, because it already has Keycloak's discovery document; if it has restarted since its last login, the same error appears straight after **Log in**.
 
+## Evidence packs
+
+`evidence-packs/` holds what a support engineer would see from each tool while a scenario is happening: one pack for the healthy lab and one for each of the 28 scenarios, as redacted JSON for the support-training game. The answer keys (`evidence-packs/answers/`) are separate from the packs and are never shown with them. [FORMAT.md](../evidence-packs/FORMAT.md) describes the files.
+
+```bash
+scripts/evidence-packs.sh             # healthy, then every scenario: break, capture, fix
+scripts/evidence-packs.sh <name>...   # only these (healthy, or scenario names)
+```
+
+A full build breaks and fixes every scenario in turn and takes about 15 minutes; the lab ends healthy. After any change to the builder or the redaction, rebuild all 29, so every pack comes from the same builder.
+
 ## Tests
 
 ```bash
