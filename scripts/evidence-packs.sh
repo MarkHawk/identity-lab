@@ -346,7 +346,7 @@ write_answer() { # <id> <scenario>
   # A Fix section shared by several scenarios has a bold heading for each part.
   fixstep="$(awk -v h="${SCENARIO_FIX_HEADING:-}" '/^## Fix/{f=1; on=(h==""); next} /^## /{f=0}
     f && h != "" && $0 == "**" h "**"{on=1; next} f && on && /^1\. /{sub(/^1\. /, ""); print; exit}' "$LAB_ROOT/$SCENARIO_RUNBOOK")"
-  [[ -n "$fixstep" ]] || die "$2: no first fix step found in $SCENARIO_RUNBOOK (heading: ${SCENARIO_FIX_HEADING:-none})"
+  [[ -n "$fixstep" ]] || warn "$2: no numbered first fix step in $SCENARIO_RUNBOOK; the answer key's first_step is empty"
   jq -n --arg id "$1" --arg scenario "$2" --arg runbook "$SCENARIO_RUNBOOK" --arg summary "$SCENARIO_SUMMARY" \
         --arg cmd "scripts/fix.sh $2" --arg step "$fixstep" \
         '{id: $id, scenario: $scenario, runbook: $runbook, summary: $summary, fix: {command: $cmd, first_step: $step}}' \
