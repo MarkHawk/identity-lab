@@ -1,0 +1,17 @@
+# Trivy ignore list. Every entry is scoped to named paths with a reason, so a
+# new Dockerfile without USER is still flagged. Use with:
+#   trivy fs --ignorefile .trivyignore.yaml ...
+misconfigurations:
+  # DS-0002: Dockerfile has no USER instruction. The api, authenticator, oidc-rp
+  # and saml-sp images now set USER 10001:10001. These five still don't.
+  # Why they still run as root: no USER is set in any of the five Dockerfiles. In
+  # the lab, compose.yaml runs each as LAB_UID at runtime, but the
+  # images themselves default to root. Converting them is on the backlog.
+  - id: DS-0002
+    paths:
+      - ldap/Dockerfile
+      - nas/Dockerfile
+      - radius/Dockerfile
+      - squid/Dockerfile
+      - tests/Dockerfile
+    statement: Still runs as root in the image; conversion is on the backlog.
