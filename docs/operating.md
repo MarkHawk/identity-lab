@@ -114,7 +114,7 @@ Start with the lab up, the IdP certificate pinned, and `scripts/status.sh` showi
 **1. OIDC as alice (≈3 min)**
 
 1. Open **https://idlab.home:8182** and click **Log in with OIDC**.
-2. You're sent to Keycloak at `:8180`, realm *Identity Lab*. Sign in as `alice` with the [demo password](#demo-users).
+2. You're sent to Keycloak at `:8180`, realm *Northgate Supplies*. Sign in as `alice` with the [demo password](#demo-users).
 3. You land on **OIDC login succeeded**. Look at:
 
 | Claim | What it tells you |

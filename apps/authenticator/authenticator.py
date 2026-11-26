@@ -33,7 +33,7 @@ import sys
 import time
 
 ALGORITHM, DIGITS, PERIOD = "sha1", 6, 30
-ISSUER = "Identity Lab"
+ISSUER = "Northgate Supplies"
 # The time steps whose codes --new has shown, per user, so it never repeats
 # one (the IdP refuses a code that has already been used).
 STATE_DIR = "/tmp/authenticator"
