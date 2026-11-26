@@ -343,7 +343,10 @@ write_commands() { # <dir> <since> <app> <user> <until> -- the command each tool
 
 write_answer() { # <id> <scenario>
   local fixstep
-  fixstep="$(awk '/^## Fix/{f=1; next} /^## /{f=0} f && /^1\. /{sub(/^1\. /, ""); print; exit}' "$LAB_ROOT/$SCENARIO_RUNBOOK")"
+  # A Fix section shared by several scenarios has a bold heading for each part.
+  fixstep="$(awk -v h="${SCENARIO_FIX_HEADING:-}" '/^## Fix/{f=1; on=(h==""); next} /^## /{f=0}
+    f && h != "" && $0 == "**" h "**"{on=1; next} f && on && /^1\. /{sub(/^1\. /, ""); print; exit}' "$LAB_ROOT/$SCENARIO_RUNBOOK")"
+  [[ -n "$fixstep" ]] || die "$2: no first fix step found in $SCENARIO_RUNBOOK (heading: ${SCENARIO_FIX_HEADING:-none})"
   jq -n --arg id "$1" --arg scenario "$2" --arg runbook "$SCENARIO_RUNBOOK" --arg summary "$SCENARIO_SUMMARY" \
         --arg cmd "scripts/fix.sh $2" --arg step "$fixstep" \
         '{id: $id, scenario: $scenario, runbook: $runbook, summary: $summary, fix: {command: $cmd, first_step: $step}}' \

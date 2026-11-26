@@ -6,6 +6,7 @@
 # and "The access token expired". A call straight after login still works.
 SCENARIO_SUMMARY="oidc-rp's access tokens expire after 10 seconds; the app never refreshes them"
 SCENARIO_RUNBOOK="runbooks/16-api-bearer-401.md"
+SCENARIO_FIX_HEADING="Expired token."   # runbook 16's Fix has a part for each of its two scenarios
 SCENARIO_APP=oidc-api-late
 SCENARIO_UNAFFECTED="oidc-api alice"
 SCENARIO_EXPECT="The access token expired at"

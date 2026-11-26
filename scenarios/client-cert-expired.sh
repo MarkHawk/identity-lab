@@ -5,7 +5,7 @@
 # the lab CA, rejects it: 400 "The SSL certificate error", which nginx
 # calls 495 internally. A request without any certificate fails the same
 # way to the user (400), for a different reason (client-cert-missing).
-SCENARIO_SUMMARY="the mTLS client's certificate has expired (nginx 495)"
+SCENARIO_SUMMARY="the mTLS client's certificate has expired (nginx logs 495 inside; the client gets 400)"
 SCENARIO_RUNBOOK="runbooks/18-client-cert.md"
 SCENARIO_APP=mtls
 SCENARIO_USER=partner-client

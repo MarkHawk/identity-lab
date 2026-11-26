@@ -5,7 +5,7 @@
 # without one. nginx completes the TLS handshake anyway, then refuses the
 # request: 400 "No required SSL certificate was sent", which nginx calls
 # 496 internally. Every other route through the proxy is unaffected.
-SCENARIO_SUMMARY="the mTLS client lost its certificate and connects without one (nginx 496)"
+SCENARIO_SUMMARY="the mTLS client lost its certificate and connects without one (nginx logs 496 inside; the client gets 400)"
 SCENARIO_RUNBOOK="runbooks/18-client-cert.md"
 SCENARIO_APP=mtls
 SCENARIO_USER=partner-client

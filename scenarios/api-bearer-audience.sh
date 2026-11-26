@@ -6,6 +6,7 @@
 # with 401 and WWW-Authenticate error="invalid_token".
 SCENARIO_SUMMARY="oidc-rp's access tokens name another API in their audience"
 SCENARIO_RUNBOOK="runbooks/16-api-bearer-401.md"
+SCENARIO_FIX_HEADING="Wrong audience."   # runbook 16's Fix has a part for each of its two scenarios
 SCENARIO_APP=oidc-api
 SCENARIO_UNAFFECTED="oidc alice"
 SCENARIO_EXPECT="audience (idlab-api-staging account) does not include idlab-api"

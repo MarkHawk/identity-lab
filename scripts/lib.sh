@@ -153,6 +153,9 @@ REALM=idlab
 #                      NOT appear, for a failure the software doesn't log
 #   SCENARIO_USER      optional: demo user who sees the failure (default alice)
 #   SCENARIO_UNAFFECTED optional: "<app> <user>" who must still log in while broken
+#   SCENARIO_FIX_HEADING optional: for a runbook whose Fix section serves several scenarios, the bold
+#                      line (without the **) that heads this scenario's steps; the answer key takes the
+#                      first step after it
 #   SCENARIO_ALSO      optional: what scenario_also_check proves; test.sh runs it while broken
 #   scenario_detect    print "broken|healthy|unknown<TAB>detail", from live lab state
 #   scenario_break / scenario_fix
@@ -168,7 +171,7 @@ load_scenario() {
   [[ "$name" =~ ^[a-z0-9-]+$ && -f "$SCENARIOS_DIR/$name.sh" ]] \
     || die "unknown scenario '$name' (available: $(scenario_names | tr '\n' ' '))"
   unset -f scenario_detect scenario_break scenario_fix scenario_also_check
-  unset SCENARIO_USER SCENARIO_UNAFFECTED SCENARIO_ALSO SCENARIO_LOG SCENARIO_LOG_ABSENT
+  unset SCENARIO_USER SCENARIO_UNAFFECTED SCENARIO_FIX_HEADING SCENARIO_ALSO SCENARIO_LOG SCENARIO_LOG_ABSENT
   # shellcheck disable=SC1090
   source "$SCENARIOS_DIR/$name.sh"
 }
