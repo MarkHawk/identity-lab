@@ -60,6 +60,9 @@ LOG_SERVICES=(keycloak ldap radius proxy squid saml-sp saml-sp-proxied oidc-rp o
 # --- recent changes: snapshots before and after the break ---------------------------
 # One file per object, one setting per line, comments and blank lines dropped,
 # volatile values (timestamps, counters other than failures) left out.
+# Stand-ins for a user's or partner's own device are not on the server side, so
+# a real change log would never show them: the authenticator ("her phone": its
+# clock) and the partner system's client certificate.
 cert_summary() { # <pem file> -- subject and validity of each certificate in it
   awk '/-----BEGIN CERTIFICATE-----/{n++} {print > (f "." n)}' f="$1.split" "$1" 2>/dev/null
   local c
@@ -77,7 +80,8 @@ snapshot() { # <dir>
       *.crt|*.pem) cert_summary "$LAB_ROOT/$f" >"$dir/$name" ;;
       *) grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$LAB_ROOT/$f" >"$dir/$name" || true ;;
     esac
-  done < <(cd "$LAB_ROOT" && find .state -type f ! -path '.state/browser/*' ! -path '*/logs/*' \
+  done < <(cd "$LAB_ROOT" && find .state -type f ! -path '.state/browser/*' ! -path '.state/authenticator/*' \
+             ! -path '.state/mtls-client/*' ! -path '*/logs/*' \
              ! -name '*.key' ! -name '*.prev' ! -name '.*' ! -name '*.tmp' | sort)
   kc_api GET "/$REALM" | jq -r 'to_entries[] | select(.value | type != "object" and type != "array")
       | select(.key | test("^(id|notBefore)$") | not) | "\(.key): \(.value)"' >"$dir/keycloak__realm-settings"
