@@ -84,6 +84,9 @@ ERROR_RE = re.compile(
     r'[Ee]xpired|Access-Reject|not responding|Login incorrect|offset [+-]?\d{3,} s|'
     r'mismatch|[Mm]issing|absent|blocked|Unable|unable)\b|\berror=|_ERROR"|\berr=[1-9]')
 WARN_RE = re.compile(r'\b(WARN|WARNING|[Ww]arning|timed out|timeout|retry|offset [+-]?[6-9]\d s)\b')
+# nginx's error log: 2026/06/14 02:14:01 [error] 99583#99583: ... The level it
+# writes is the severity, whatever the message says.
+NGINX_LEVEL_RE = re.compile(r"\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \[(error|crit|alert|emerg|warn)\] ")
 METHODS = r"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT)"
 # An HTTP request line, and where its status is: an access log ("GET /x HTTP/1.1" 200),
 # the HAR summary (GET https://... -> 302) and Squid (TCP_TUNNEL/200 7077 CONNECT).
@@ -104,6 +107,9 @@ def severity(tool, text):
         return "error" if text.startswith(("error:", "pageerror:")) else "warning" if text.startswith("warning:") else "normal"
     if text.lstrip().startswith("Set-Cookie:"):
         return "normal"
+    m = NGINX_LEVEL_RE.search(text)
+    if m:
+        return "warning" if m.group(1) == "warn" else "error"
     for rx in REQUEST_RES:
         m = rx.search(text)
         if m:
@@ -738,8 +744,24 @@ def selftest():
     bad_ua = [(i, ph.apply(i), o) for i, o in ua.items() if ph.apply(i) != o]
     for i, got, want in bad_ua:
         print(f"  {i!r}: got {got!r}, want {want!r}")
+    sev = {
+        "2026/06/14 02:14:01 [error] 99583#99583: *1 upstream prematurely closed connection": "error",
+        "2026/06/14 02:14:01 [crit] 1#1: *2 SSL_do_handshake() failed": "error",
+        "2026/06/14 02:14:01 [alert] 1#1: worker process exited": "error",
+        "2026/06/14 02:14:01 [emerg] 1#1: bind() failed": "error",
+        "2026/06/14 02:14:01 [warn] 1#1: *3 a client request body is buffered": "warning",
+        "2026/06/14 02:14:01 [warn] 1#1: *3 error page missing": "warning",
+        "2026/06/14 02:14:01 [notice] 1#1: signal process started": "normal",
+        "2026/06/14 02:14:01 [info] 1#1: *4 client sent no required SSL certificate": "normal",
+        '2026/06/14 02:14:01 [error] 1#1: *5 x, request: "GET / HTTP/1.1"': "error",
+        '10.0.0.1 - - [14/Jun/2026:02:14:01 +0000] "GET /?x=[error] HTTP/1.1" 200 5': "normal",
+    }
+    bad_sev = [(i, severity("logs-proxy", i), o) for i, o in sev.items() if severity("logs-proxy", i) != o]
+    for i, got, want in bad_sev:
+        print(f"  {i!r}: got {got!r}, want {want!r}")
+    print(f"severity self-test: {len(sev)} cases, {len(bad_sev)} wrong")
     print(f"user agent self-test: {len(ua)} cases, {len(bad_ua)} wrong")
-    return 1 if bad or bad_ua else 0
+    return 1 if bad or bad_ua or bad_sev else 0
 
 
 def main():

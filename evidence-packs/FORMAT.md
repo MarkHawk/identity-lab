@@ -98,7 +98,8 @@ Applied to each line after redaction (`tests/packs.py`, `severity()`), in this o
 
 1. A changed setting in the change record: `warning`. A console message: `error:` is an error, `warning:` a warning.
 2. An HTTP request line (an access log's `"GET /x HTTP/1.1" 200`, the HAR summary's `GET https://... -> 302`, Squid's `TCP_TUNNEL/200 ... CONNECT`): **by its status code only**, 500 or more an error, 400 to 499 a warning, anything else normal. Its URL and path are never read for words: `GET /?session=expired -> 200` is normal.
-3. Any other line, with its URLs and paths taken out first:
+3. An nginx error-log line (`2026/06/14 02:14:01 [error] ...`): **by the level nginx wrote**, whatever the message says: `[error]`, `[crit]`, `[alert]` and `[emerg]` are an error, `[warn]` a warning, other levels fall through to the next rule.
+4. Any other line, with its URLs and paths taken out first:
    - `error`: `ERROR`, `FATAL`, `error=`, a `*_ERROR` event, failed, refused, denied, invalid, expired, missing, absent, blocked, mismatch, `Access-Reject`, `not responding`, `Login incorrect`, a non-zero LDAP `err=`, a clock offset of 100 s or more
    - `warning`: `WARN`, warning, timed out, timeout, retry, a clock offset from 60 s to 99 s
    - `normal`: everything else

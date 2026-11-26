@@ -788,6 +788,16 @@ evidence_packs_no_headless() {
   echo "checked $n pack(s): $hits mention HeadlessChrome"
   (( n > 0 && hits == 0 ))
 }
+# evidence_packs_nginx_levels -- every nginx error-log line in a pack is rated by
+# its level: [error], [crit], [alert], [emerg] error; [warn] warning.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_nginx_levels
+evidence_packs_nginx_levels() {
+  local n
+  n="$(jq -rs '[.[] | .tools[] | .lines[] | select(.text | test("[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9:]{8} \\[(error|crit|alert|emerg|warn)\\] "))
+      | select((.text | test("\\[warn\\]")) as $w | (if $w then .severity != "warning" else .severity != "error" end))] | length' "$PACKS_DIR"/packs/*.json)"
+  echo "$n nginx error-log line(s) with the wrong severity"
+  (( n == 0 ))
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_hide_answers
 evidence_packs_hide_answers() {
   local f name hits=0 found
@@ -1004,6 +1014,7 @@ check "packs: no secret, token, one-time value, SAML message, key, real address 
 check "packs: no pack names its scenario, runbook, fix or summary" evidence_packs_hide_answers
 check "packs: no pack holds the lab's state-detection probe traffic (idlab-status or curl user agents)" evidence_packs_no_probes
 check "packs: no pack shows the browser's HeadlessChrome user agent" evidence_packs_no_headless
+check "packs: nginx error-log lines are rated by their level ([error] error, [warn] warning)" evidence_packs_nginx_levels
 check "packs: every pack has the format, every tool and valid severities, and an answer key" \
   python3 -I "$LAB_ROOT/tests/packs.py" validate "$PACKS_DIR/packs" "$PACKS_DIR/answers"
 check "packs: the time normaliser shifts every format the lab prints by the same delta (self-test)" \
