@@ -53,6 +53,11 @@ WORKDIR /app
 COPY app.py accesslog.py ./
 COPY templates ./templates
 ENV PYTHONUNBUFFERED=1
+# Fixed non-root user. compose.yaml's user: (LAB_UID) overrides it at run time,
+# which the 0600 key files need; nothing here writes outside /tmp.
+RUN groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
+USER 10001:10001
 EXPOSE 8181
 # --timeout 0: the clock-skew scenario jumps the wall clock; gunicorn's
 # worker heartbeat must not mistake that for a hung worker.
