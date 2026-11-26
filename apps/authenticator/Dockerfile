@@ -15,5 +15,10 @@ RUN apt-get update \
  && ln -s "$(ls -d /usr/lib/*/faketime)" /usr/local/lib/faketime
 COPY --chmod=0755 authenticator.py /usr/local/bin/authenticator
 ENV PYTHONUNBUFFERED=1
+# Fixed non-root user. compose.yaml's user: (LAB_UID) overrides it at run time,
+# which the 0600 key files need; nothing here writes outside /tmp.
+RUN groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
+USER 10001:10001
 # Nothing to serve: codes are read with `docker compose exec authenticator ...`.
 CMD ["sleep", "infinity"]
