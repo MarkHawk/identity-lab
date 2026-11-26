@@ -2,7 +2,7 @@
  "format": "idlab-evidence-pack/1",
  "id": "case-8a3d8d",
  "login_at": "2026-06-14T02:14:00Z",
- "captured": "2026-06-14T02:14:04Z",
+ "captured": "2026-06-14T02:14:05Z",
  "lab": {
   "host": "lab.example"
  },
@@ -13,11 +13,11 @@
    "command": "(the user's screen, or the network device's output)",
    "lines": [
     {
-     "text": "Page title: Sign in to Identity Lab",
+     "text": "Page title: Sign in to Northgate Supplies",
      "severity": "normal"
     },
     {
-     "text": "Identity Lab",
+     "text": "Northgate Supplies",
      "severity": "normal"
     },
     {
@@ -109,63 +109,63 @@
      "severity": "normal"
     },
     {
-     "text": "api               running   Up 25 hours (healthy)",
+     "text": "api               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "authenticator     running   Up 25 hours (healthy)",
+     "text": "authenticator     running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "keycloak          running   Up 24 hours (healthy)",
+     "text": "keycloak          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "ldap              running   Up 25 hours (healthy)",
+     "text": "ldap              running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "nas               running   Up 25 hours (healthy)",
+     "text": "nas               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "text": "oidc-rp           running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "text": "oidc-rp-edge      running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-egress    running   Up 22 minutes (healthy)",
+     "text": "oidc-rp-egress    running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "text": "oidc-rp-proxied   running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "postgres          running   Up 25 hours (healthy)",
+     "text": "postgres          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "proxy             running   Up 23 hours (healthy)",
+     "text": "proxy             running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "radius            running   Up 23 hours (healthy)",
+     "text": "radius            running   Up 43 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "text": "saml-sp           running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "text": "saml-sp-proxied   running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "squid             running   Up 23 hours (healthy)",
+     "text": "squid             running   Up 19 hours (healthy)",
      "severity": "normal"
     }
    ],
@@ -174,7 +174,7 @@
   {
    "tool": "logs-keycloak",
    "title": "Keycloak log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z keycloak",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z keycloak",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -186,7 +186,7 @@
   {
    "tool": "keycloak-events",
    "title": "Keycloak events",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z keycloak | grep org.keycloak.events",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z keycloak | grep org.keycloak.events",
    "lines": [
     {
      "text": "(no events in this window)",
@@ -198,46 +198,50 @@
   {
    "tool": "logs-ldap",
    "title": "OpenLDAP log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z ldap",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z ldap",
    "lines": [
     {
-     "text": "2026-06-14T02:13:59.374Z 6a2e0e68.1656a37c 0x76d6c7fff6c0 conn=19529 fd=13 ACCEPT from IP=192.0.2.11:39202 (IP=0.0.0.0:1636)",
+     "text": "2026-06-14T02:13:59.789Z 6a2e0e67.2f0d3857 0x76d6c50fb6c0 conn=33610 fd=13 ACCEPT from IP=192.0.2.11:50698 (IP=0.0.0.0:1636)",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.418Z 6a2e0e68.18eae205 0x76d6de7fe6c0 conn=19529 fd=13 TLS established tls_ssf=256 ssf=256 tls_proto=TLSv1.3 tls_cipher=TLS_AES_256_GCM_SHA384",
+     "text": "2026-06-14T02:13:59.832Z 6a2e0e67.319eb6ad 0x76d6ccdfa6c0 conn=33610 fd=13 TLS established tls_ssf=256 ssf=256 tls_proto=TLSv1.3 tls_cipher=TLS_AES_256_GCM_SHA384",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.419Z 6a2e0e68.18f09f08 0x76d6c50fb6c0 conn=19529 op=0 BIND dn=\"cn=keycloak-svc,ou=services,dc=idlab,dc=example\" method=128",
+     "text": "2026-06-14T02:13:59.832Z 6a2e0e67.31a34e99 0x76d6c7fff6c0 conn=33610 op=0 BIND dn=\"cn=keycloak-svc,ou=services,dc=idlab,dc=example\" method=128",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.419Z 6a2e0e68.18f286ec 0x76d6c50fb6c0 conn=19529 op=0 BIND dn=\"cn=keycloak-svc,ou=services,dc=idlab,dc=example\" mech=SIMPLE bind_ssf=0 ssf=256",
+     "text": "2026-06-14T02:13:59.832Z 6a2e0e67.31a4ed63 0x76d6c7fff6c0 conn=33610 op=0 BIND dn=\"cn=keycloak-svc,ou=services,dc=idlab,dc=example\" mech=SIMPLE bind_ssf=0 ssf=256",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.419Z 6a2e0e68.18f4bef2 0x76d6c50fb6c0 conn=19529 op=0 RESULT tag=97 err=0 qtime=0.000026 etime=0.000325 text=",
+     "text": "2026-06-14T02:13:59.832Z 6a2e0e67.31a5e729 0x76d6c7fff6c0 conn=33610 op=0 RESULT tag=97 err=0 qtime=0.000013 etime=0.000198 text=",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.419Z 6a2e0e68.1902e75f 0x76d6ceafd6c0 conn=19529 op=1 SRCH base=\"ou=people,dc=idlab,dc=example\" scope=1 deref=3 filter=\"(&(uid=ivan)(objectClass=inetOrgPerson))\"",
+     "text": "2026-06-14T02:13:59.833Z 6a2e0e67.31abf2e8 0x76d6ddffd6c0 conn=33610 op=1 SRCH base=\"ou=people,dc=idlab,dc=example\" scope=1 deref=3 filter=\"(&(uid=ivan)(objectClass=inetOrgPerson))\"",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.419Z 6a2e0e68.19045a8c 0x76d6ceafd6c0 conn=19529 op=1 SRCH attr=entryUUID uid mail givenName sn pwdChangedTime objectclass",
+     "text": "2026-06-14T02:13:59.833Z 6a2e0e67.31ad44d7 0x76d6ddffd6c0 conn=33610 op=1 SRCH attr=entryUUID uid mail givenName sn pwdChangedTime objectclass",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.420Z 6a2e0e68.19074081 0x76d6ceafd6c0 conn=19529 op=1 SEARCH RESULT tag=101 err=0 qtime=0.000033 etime=0.000369 nentries=0 text=",
+     "text": "2026-06-14T02:13:59.834Z 6a2e0e67.31ae7b63 0x76d6ddffd6c0 conn=33610 op=1 SEARCH RESULT tag=101 err=0 qtime=0.000012 etime=0.000200 nentries=0 text=",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.421Z 6a2e0e68.19153676 0x76d6c7fff6c0 conn=19529 op=2 UNBIND",
+     "text": "2026-06-14T02:13:59.834Z 6a2e0e67.31b20c63 0x76d6c50fb6c0 conn=33610 op=2 UNBIND",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.421Z 6a2e0e68.191cc09b 0x76d6c7fff6c0 conn=19529 fd=13 closed",
+     "text": "2026-06-14T02:13:59.834Z 6a2e0e67.31b5520f 0x76d6c50fb6c0 conn=33610 fd=13 closed",
+     "severity": "normal"
+    },
+    {
+     "text": "2026-06-14T02:13:59.834Z 6a2e0e67.31b659d6 0x76d6de7fe6c0 connection_read(13): no connection!",
      "severity": "normal"
     }
    ],
@@ -246,7 +250,7 @@
   {
    "tool": "logs-radius",
    "title": "FreeRADIUS log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z radius",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z radius",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -258,7 +262,7 @@
   {
    "tool": "logs-proxy",
    "title": "Reverse proxy (nginx) log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z proxy",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z proxy",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -270,7 +274,7 @@
   {
    "tool": "logs-squid",
    "title": "Egress proxy (Squid) log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z squid",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z squid",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -282,7 +286,7 @@
   {
    "tool": "logs-saml-sp",
    "title": "SAML app log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z saml-sp",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z saml-sp",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -294,7 +298,7 @@
   {
    "tool": "logs-saml-sp-proxied",
    "title": "SAML app log (behind the proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z saml-sp-proxied",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z saml-sp-proxied",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -306,18 +310,18 @@
   {
    "tool": "logs-oidc-rp",
    "title": "OIDC app log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z oidc-rp",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.299Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET / HTTP/1.1\" 200 2548 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "text": "2026-06-14T02:14:01.570Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET / HTTP/1.1\" 200 2548 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36\"",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.389Z 2026-06-14 02:14:01,389 INFO oidc-rp event=oidc_authorize_redirect redirect_uri=https://lab.example:8182/auth/callback",
+     "text": "2026-06-14T02:14:01.657Z 2026-06-14 02:14:01,656 INFO oidc-rp event=oidc_authorize_redirect redirect_uri=https://lab.example:8182/auth/callback",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.391Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /login HTTP/1.1\" 302 927 \"https://lab.example:8182/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "text": "2026-06-14T02:14:01.657Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /login HTTP/1.1\" 302 927 \"https://lab.example:8182/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36\"",
      "severity": "normal"
     }
    ],
@@ -326,7 +330,7 @@
   {
    "tool": "logs-oidc-rp-proxied",
    "title": "OIDC app log (behind the proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp-proxied",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z oidc-rp-proxied",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -338,7 +342,7 @@
   {
    "tool": "logs-oidc-rp-egress",
    "title": "OIDC app log (egress proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp-egress",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z oidc-rp-egress",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -350,7 +354,7 @@
   {
    "tool": "logs-oidc-rp-edge",
    "title": "OIDC app log (edge)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z oidc-rp-edge",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z oidc-rp-edge",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -362,7 +366,7 @@
   {
    "tool": "logs-api",
    "title": "API log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:04Z api",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:05Z api",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -425,11 +429,11 @@
      "severity": "normal"
     },
     {
-     "text": "saml-sp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "text": "saml-sp 2026-06-14T02:14:07Z host 2026-06-14T02:14:06Z offset +1 s",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "text": "oidc-rp 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
      "severity": "normal"
     },
     {
@@ -445,7 +449,7 @@
      "severity": "normal"
     },
     {
-     "text": "authenticator 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "text": "authenticator 2026-06-14T02:14:08Z host 2026-06-14T02:14:07Z offset +1 s",
      "severity": "normal"
     }
    ],
@@ -477,15 +481,15 @@
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:11:40Z",
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:11:42Z",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:11:40Z (valid, 31535861 s (365.0 d) after the login)",
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:11:42Z (valid, 31535863 s (365.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 72:67:D6:25:61:10:C2:CB:DA:23:32:7B:D4:A5:FF:37:6E:6C:0E:BC:36:35:A8:A1:E7:69:D0:DB:27:23:B4:28",
      "severity": "normal"
     },
     {
@@ -497,15 +501,15 @@
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:11:40Z",
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:11:42Z",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:11:40Z (valid, 31535861 s (365.0 d) after the login)",
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:11:42Z (valid, 31535863 s (365.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 72:67:D6:25:61:10:C2:CB:DA:23:32:7B:D4:A5:FF:37:6E:6C:0E:BC:36:35:A8:A1:E7:69:D0:DB:27:23:B4:28",
      "severity": "normal"
     },
     {
@@ -513,7 +517,7 @@
      "severity": "normal"
     },
     {
-     "text": "OIDC JWKS entry: RS256, sig, RSA, id 2uoP1_4kZL7w924E1L2ClWGJx0_xPXSbhRmJXapsdrs",
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id BOA2zBLQ3eDGjqN1DnG7dUJlSOQNJ53ty0kgtKs0CSg",
      "severity": "normal"
     },
     {
@@ -525,11 +529,11 @@
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notBefore=2026-05-11T01:58:55Z",
+     "text": "Partner system's client certificate notBefore=2026-05-10T06:18:14Z",
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notAfter=2027-06-12T02:58:55Z (valid, 31365896 s (363.0 d) after the login)",
+     "text": "Partner system's client certificate notAfter=2027-06-11T07:18:14Z (valid, 31295055 s (362.2 d) after the login)",
      "severity": "normal"
     },
     {
@@ -573,11 +577,11 @@
      "severity": "normal"
     },
     {
-     "text": "createTimestamp: 20260523060747Z",
+     "text": "createTimestamp: 20260522102706Z",
      "severity": "normal"
     },
     {
-     "text": "modifyTimestamp: 20260523060747Z",
+     "text": "modifyTimestamp: 20260522102706Z",
      "severity": "normal"
     },
     {
@@ -594,10 +598,10 @@
   {
    "tool": "recent-changes",
    "title": "Recent changes",
-   "command": "the configuration change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:04Z",
+   "command": "the configuration change record, 2026-06-14T02:13:56Z to 2026-06-14T02:14:05Z",
    "lines": [
     {
-     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:04Z: 1 configuration change(s), 2 admin event(s)",
+     "text": "Change record, 2026-06-14T02:13:56Z to 2026-06-14T02:14:05Z: 1 configuration change(s), 3 admin event(s)",
      "severity": "normal"
     },
     {
@@ -621,11 +625,15 @@
      "severity": "warning"
     },
     {
-     "text": "admin event: 1781403236640 UPDATE REALM null by an administrator from 198.51.100.1",
+     "text": "admin event: 1781403236810 UPDATE REALM null by an administrator from 198.51.100.1",
      "severity": "normal"
     },
     {
-     "text": "admin event: 1781403240454 UPDATE USER users/<user:ivan> by an administrator from 198.51.100.1",
+     "text": "admin event: 1781403240334 ACTION USER users/<user:ivan>/credentials/<id-2> by an administrator from 198.51.100.1",
+     "severity": "normal"
+    },
+    {
+     "text": "admin event: 1781403240431 UPDATE USER users/<user:ivan> by an administrator from 198.51.100.1",
      "severity": "normal"
     }
    ],
@@ -637,11 +645,11 @@
    "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.284Z GET https://lab.example:8182/ -> 200",
+     "text": "2026-06-14T02:14:01.555Z GET https://lab.example:8182/ -> 200",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.387Z GET https://lab.example:8182/login -> 302 redirect https://lab.example:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp&redirect_uri=https%3A%2F%2Flab.example%3A8182%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256",
+     "text": "2026-06-14T02:14:01.653Z GET https://lab.example:8182/login -> 302 redirect https://lab.example:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp&redirect_uri=https%3A%2F%2Flab.example%3A8182%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256",
      "severity": "normal"
     },
     {
@@ -649,7 +657,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.391Z GET https://lab.example:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp&redirect_uri=https%3A%2F%2Flab.example%3A8182%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256 -> 200",
+     "text": "2026-06-14T02:14:01.659Z GET https://lab.example:8180/realms/idlab/protocol/openid-connect/auth?response_type=code&client_id=oidc-rp&redirect_uri=https%3A%2F%2Flab.example%3A8182%2Fauth%2Fcallback&scope=openid+email+profile&state=***&nonce=***&code_challenge=***&code_challenge_method=S256 -> 200",
      "severity": "normal"
     },
     {
@@ -665,19 +673,19 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.729Z POST https://lab.example:8180/realms/idlab/login-actions/authenticate?session_code=***&execution=<id-2>&client_id=oidc-rp&tab_id=***&client_data=*** -> 302 redirect https://lab.example:8180/realms/idlab/login-actions/required-action?execution=CONFIGURE_TOTP&client_id=oidc-rp&tab_id=***&client_data=***",
+     "text": "2026-06-14T02:14:01.963Z POST https://lab.example:8180/realms/idlab/login-actions/authenticate?session_code=***&execution=<id-3>&client_id=oidc-rp&tab_id=***&client_data=*** -> 302 redirect https://lab.example:8180/realms/idlab/login-actions/required-action?execution=CONFIGURE_TOTP&client_id=oidc-rp&tab_id=***&client_data=***",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.775Z GET https://lab.example:8180/realms/idlab/login-actions/required-action?execution=CONFIGURE_TOTP&client_id=oidc-rp&tab_id=***&client_data=*** -> 200",
+     "text": "2026-06-14T02:14:02.029Z GET https://lab.example:8180/realms/idlab/login-actions/required-action?execution=CONFIGURE_TOTP&client_id=oidc-rp&tab_id=***&client_data=*** -> 200",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.920Z GET https://lab.example:8180/realms/idlab/login-actions/required-action?client_id=oidc-rp&tab_id=***&client_data=***&mode=manual&execution=CONFIGURE_TOTP -> 200",
+     "text": "2026-06-14T02:14:02.268Z GET https://lab.example:8180/realms/idlab/login-actions/required-action?client_id=oidc-rp&tab_id=***&client_data=***&mode=manual&execution=CONFIGURE_TOTP -> 200",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:02.262Z POST https://lab.example:8180/realms/idlab/login-actions/required-action?session_code=***&execution=CONFIGURE_TOTP&client_id=oidc-rp&tab_id=***&client_data=*** -> 200",
+     "text": "2026-06-14T02:14:02.564Z POST https://lab.example:8180/realms/idlab/login-actions/required-action?session_code=***&execution=CONFIGURE_TOTP&client_id=oidc-rp&tab_id=***&client_data=*** -> 200",
      "severity": "normal"
     }
    ],

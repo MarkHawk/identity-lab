@@ -2,7 +2,7 @@
   "id": "case-35bfcb",
   "scenario": "client-cert-missing",
   "runbook": "runbooks/18-client-cert.md",
-  "summary": "the mTLS client lost its certificate and connects without one (nginx 496)",
+  "summary": "the mTLS client lost its certificate and connects without one (nginx logs 496 inside; the client gets 400)",
   "fix": {
     "command": "scripts/fix.sh client-cert-missing",
     "first_step": "Give the client a valid certificate from the CA the server trusts. In the lab, for either scenario:"

@@ -45,7 +45,7 @@
      "severity": "normal"
     },
     {
-     "text": "subject=CN=idlab serial=c5441e95deed580797c363061b790ed6 notAfter=2026-06-14 02:13:53 UTC sp_clock=2026-06-14 02:14:02 UTC",
+     "text": "subject=CN=idlab serial=7d674ac003dba3d073fc9dde2c4fc6c2 notAfter=2026-06-14 02:13:53 UTC sp_clock=2026-06-14 02:14:01 UTC",
      "severity": "normal"
     },
     {
@@ -53,7 +53,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14 02:14:02",
+     "text": "2026-06-14 02:14:01",
      "severity": "normal"
     },
     {
@@ -65,7 +65,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:02.121Z",
+     "text": "2026-06-14T02:14:01.602Z",
      "severity": "normal"
     },
     {
@@ -73,7 +73,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:00.121Z",
+     "text": "2026-06-14T02:13:59.602Z",
      "severity": "normal"
     },
     {
@@ -81,7 +81,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:15:00.121Z",
+     "text": "2026-06-14T02:14:59.602Z",
      "severity": "normal"
     },
     {
@@ -89,7 +89,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:02Z",
+     "text": "2026-06-14T02:14:01Z",
      "severity": "normal"
     },
     {
@@ -125,63 +125,63 @@
      "severity": "normal"
     },
     {
-     "text": "api               running   Up 25 hours (healthy)",
+     "text": "api               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "authenticator     running   Up 25 hours (healthy)",
+     "text": "authenticator     running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "keycloak          running   Up 24 hours (healthy)",
+     "text": "keycloak          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "ldap              running   Up 25 hours (healthy)",
+     "text": "ldap              running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "nas               running   Up 25 hours (healthy)",
+     "text": "nas               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "text": "oidc-rp           running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "text": "oidc-rp-edge      running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-egress    running   Up 20 minutes (healthy)",
+     "text": "oidc-rp-egress    running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "text": "oidc-rp-proxied   running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "postgres          running   Up 25 hours (healthy)",
+     "text": "postgres          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "proxy             running   Up 23 hours (healthy)",
+     "text": "proxy             running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "radius            running   Up 23 hours (healthy)",
+     "text": "radius            running   Up 43 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "text": "saml-sp           running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "text": "saml-sp-proxied   running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "squid             running   Up 23 hours (healthy)",
+     "text": "squid             running   Up 19 hours (healthy)",
      "severity": "normal"
     }
    ],
@@ -193,19 +193,19 @@
    "command": "docker compose logs --since 2026-06-14T02:13:33Z --until 2026-06-14T02:14:04Z keycloak",
    "lines": [
     {
-     "text": "2026-06-14T02:13:56.982Z 2026-06-14 02:13:56,981 WARN  [org.keycloak.keys.KeyNoteUtils] (executor-thread-176) Certificate chain for kid 'tZT-kW5q4YugipqvVgGjy5n7i93MNA8QprAYT2W_2YI' (idlab-expiring-signing-key) is not valid anymore, disabling it (certificate expired on Sun Jun 14 02:13:53 GMT 2026)",
+     "text": "2026-06-14T02:13:56.540Z 2026-06-14 02:13:56,538 WARN  [org.keycloak.keys.KeyNoteUtils] (executor-thread-242) Certificate chain for kid 'RWI5ZD8zAHCJmlLQ590SL1vtBzAaDA7MPIq7iXBdv00' (idlab-expiring-signing-key) is not valid anymore, disabling it (certificate expired on Sun Jun 14 02:13:53 GMT 2026)",
      "severity": "error"
     },
     {
-     "text": "2026-06-14T02:14:02.120Z 2026-06-14 02:14:02,120 WARN  [org.keycloak.keys.KeyNoteUtils] (executor-thread-179) Certificate chain for kid 'tZT-kW5q4YugipqvVgGjy5n7i93MNA8QprAYT2W_2YI' (idlab-expiring-signing-key) is not valid anymore, disabling it (certificate expired on Sun Jun 14 02:13:53 GMT 2026)",
+     "text": "2026-06-14T02:14:01.601Z 2026-06-14 02:14:01,600 WARN  [org.keycloak.keys.KeyNoteUtils] (executor-thread-244) Certificate chain for kid 'RWI5ZD8zAHCJmlLQ590SL1vtBzAaDA7MPIq7iXBdv00' (idlab-expiring-signing-key) is not valid anymore, disabling it (certificate expired on Sun Jun 14 02:13:53 GMT 2026)",
      "severity": "error"
     },
     {
-     "text": "2026-06-14T02:14:02.121Z 2026-06-14 02:14:02,121 INFO  [org.keycloak.keys.DefaultKeyManager] (executor-thread-179) No keys found for realm=idlab and algorithm=RS256 for use=SIG. Generating keys.",
+     "text": "2026-06-14T02:14:01.604Z 2026-06-14 02:14:01,602 INFO  [org.keycloak.keys.DefaultKeyManager] (executor-thread-244) No keys found for realm=idlab and algorithm=RS256 for use=SIG. Generating keys.",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:02.143Z 2026-06-14 02:14:02,142 INFO  [org.keycloak.events] (executor-thread-179) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"https://lab.example:8181/saml/metadata\", userId=\"<user:alice>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"saml\", redirect_uri=\"https://lab.example:8181/saml/acs\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"alice\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
+     "text": "2026-06-14T02:14:01.632Z 2026-06-14 02:14:01,632 INFO  [org.keycloak.events] (executor-thread-244) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"https://lab.example:8181/saml/metadata\", userId=\"<user:alice>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"saml\", redirect_uri=\"https://lab.example:8181/saml/acs\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"alice\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
      "severity": "normal"
     }
    ],
@@ -217,7 +217,7 @@
    "command": "docker compose logs --since 2026-06-14T02:13:33Z --until 2026-06-14T02:14:04Z keycloak | grep org.keycloak.events",
    "lines": [
     {
-     "text": "2026-06-14T02:14:02.143Z 2026-06-14 02:14:02,142 INFO  [org.keycloak.events] (executor-thread-179) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"https://lab.example:8181/saml/metadata\", userId=\"<user:alice>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"saml\", redirect_uri=\"https://lab.example:8181/saml/acs\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"alice\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
+     "text": "2026-06-14T02:14:01.632Z 2026-06-14 02:14:01,632 INFO  [org.keycloak.events] (executor-thread-244) type=\"LOGIN\", realmId=\"<realm:idlab>\", realmName=\"idlab\", clientId=\"https://lab.example:8181/saml/metadata\", userId=\"<user:alice>\", sessionId=\"<id-1>\", ipAddress=\"198.51.100.1\", auth_method=\"saml\", redirect_uri=\"https://lab.example:8181/saml/acs\", consent=\"no_consent_required\", code_id=\"<id-1>\", username=\"alice\", authSessionParentId=\"<id-1>\", authSessionTabId=\"<id-2>\"",
      "severity": "normal"
     }
    ],
@@ -277,23 +277,23 @@
    "command": "docker compose logs --since 2026-06-14T02:13:33Z --until 2026-06-14T02:14:04Z saml-sp",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.407Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET / HTTP/1.1\" 200 2641 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "text": "2026-06-14T02:14:00.851Z 198.51.100.1 - - [14/Jun/2026:02:14:00 +0000] \"GET / HTTP/1.1\" 200 2641 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36\"",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.500Z 2026-06-14 02:14:01,499 INFO saml-sp event=saml_authn_request request_id=ONELOGIN_<id-3> user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36'",
+     "text": "2026-06-14T02:14:00.951Z 2026-06-14 02:14:00,951 INFO saml-sp event=saml_authn_request request_id=ONELOGIN_<id-3> user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.501Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"GET /login HTTP/1.1\" 302 2545 \"https://lab.example:8181/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "text": "2026-06-14T02:14:00.953Z 198.51.100.1 - - [14/Jun/2026:02:14:00 +0000] \"GET /login HTTP/1.1\" 302 2505 \"https://lab.example:8181/\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36\"",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:02.281Z 2026-06-14 02:14:02,280 WARNING saml-sp event=saml_login_failed reason=idp_cert_expired error='IdP signing certificate expired on 2026-06-14 02:13:53 UTC; the SP has no valid IdP certificate pinned' detail='subject=CN=idlab serial=c5441e95deed580797c363061b790ed6 notAfter=2026-06-14 02:13:53 UTC sp_clock=2026-06-14 02:14:02 UTC' sp_clock_minus_issue_instant='+0 s'",
+     "text": "2026-06-14T02:14:01.765Z 2026-06-14 02:14:01,765 WARNING saml-sp event=saml_login_failed reason=idp_cert_expired error='IdP signing certificate expired on 2026-06-14 02:13:53 UTC; the SP has no valid IdP certificate pinned' detail='subject=CN=idlab serial=7d674ac003dba3d073fc9dde2c4fc6c2 notAfter=2026-06-14 02:13:53 UTC sp_clock=2026-06-14 02:14:01 UTC' sp_clock_minus_issue_instant='+0 s'",
      "severity": "error"
     },
     {
-     "text": "2026-06-14T02:14:02.282Z 198.51.100.1 - - [14/Jun/2026:02:14:02 +0000] \"POST /saml/acs HTTP/1.1\" 401 3699 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"",
+     "text": "2026-06-14T02:14:01.769Z 198.51.100.1 - - [14/Jun/2026:02:14:01 +0000] \"POST /saml/acs HTTP/1.1\" 401 3699 \"-\" \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36\"",
      "severity": "warning"
     }
    ],
@@ -425,19 +425,19 @@
      "severity": "normal"
     },
     {
-     "text": "saml-sp 2026-06-14T02:14:07Z host 2026-06-14T02:14:06Z offset +1 s",
+     "text": "saml-sp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "text": "oidc-rp 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "api 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "text": "api 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "radius 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
+     "text": "radius 2026-06-14T02:14:07Z host 2026-06-14T02:14:06Z offset +1 s",
      "severity": "normal"
     },
     {
@@ -445,7 +445,7 @@
      "severity": "normal"
     },
     {
-     "text": "authenticator 2026-06-14T02:14:08Z host 2026-06-14T02:14:07Z offset +1 s",
+     "text": "authenticator 2026-06-14T02:14:07Z host 2026-06-14T02:14:07Z offset +0 s",
      "severity": "normal"
     }
    ],
@@ -469,7 +469,7 @@
      "severity": "normal"
     },
     {
-     "text": "SAML response issued: 2026-06-14T02:14:02.121Z",
+     "text": "SAML response issued: 2026-06-14T02:14:01.602Z",
      "severity": "normal"
     },
     {
@@ -489,11 +489,11 @@
      "severity": "normal"
     },
     {
-     "text": "assertion subject confirmation: {\"NotOnOrAfter\":\"2026-06-14T02:19:00.121Z\",\"Recipient\":\"https://lab.example:8181/saml/acs\"}",
+     "text": "assertion subject confirmation: {\"NotOnOrAfter\":\"2026-06-14T02:18:59.602Z\",\"Recipient\":\"https://lab.example:8181/saml/acs\"}",
      "severity": "normal"
     },
     {
-     "text": "assertion conditions: {\"NotBefore\":\"2026-06-14T02:14:00.121Z\",\"NotOnOrAfter\":\"2026-06-14T02:15:00.121Z\"}",
+     "text": "assertion conditions: {\"NotBefore\":\"2026-06-14T02:13:59.602Z\",\"NotOnOrAfter\":\"2026-06-14T02:14:59.602Z\"}",
      "severity": "normal"
     },
     {
@@ -501,7 +501,7 @@
      "severity": "normal"
     },
     {
-     "text": "assertion authentication: {\"AuthnInstant\":\"2026-06-14T02:14:02.121Z\",\"SessionNotOnOrAfter\":\"2026-06-14T12:14:02.121Z\"}",
+     "text": "assertion authentication: {\"AuthnInstant\":\"2026-06-14T02:14:01.602Z\",\"SessionNotOnOrAfter\":\"2026-06-14T12:14:01.602Z\"}",
      "severity": "normal"
     },
     {
@@ -529,15 +529,15 @@
      "severity": "normal"
     },
     {
-     "text": "SAML response signing certificate notBefore=2026-06-14T02:12:22Z",
+     "text": "SAML response signing certificate notBefore=2026-06-14T02:12:21Z",
      "severity": "normal"
     },
     {
-     "text": "SAML response signing certificate notAfter=2036-06-14T02:14:02Z (valid, 315619203 s (3653.0 d) after the login)",
+     "text": "SAML response signing certificate notAfter=2036-06-14T02:14:01Z (valid, 315619202 s (3653.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "SAML response signing certificate SHA-256 fingerprint EF:B0:8E:57:E3:E9:33:D6:F9:56:4E:57:BB:6D:ED:CF:08:9F:C2:CF:C3:1F:53:69:A8:52:74:04:0D:E5:0D:D4",
+     "text": "SAML response signing certificate SHA-256 fingerprint 9E:CC:F8:00:DF:C9:F2:08:50:FB:DB:B6:98:C2:79:06:77:E4:C0:47:8F:58:2D:71:19:90:1A:89:D1:29:B5:A4",
      "severity": "normal"
     }
    ],
@@ -565,7 +565,7 @@
      "severity": "error"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 74:D3:5D:EB:05:58:9A:00:FC:9F:3E:D5:1A:BF:A9:81:1E:D2:6C:EA:3F:B9:D1:83:05:DD:F0:FB:B9:F6:7F:C7",
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 0A:D2:E6:43:65:7B:80:2F:98:E1:07:6F:AF:32:EB:8E:42:15:07:C1:D4:F2:FD:E8:E7:C1:81:12:92:EC:D0:8C",
      "severity": "normal"
     },
     {
@@ -577,15 +577,15 @@
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T02:12:22Z",
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T02:12:21Z",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notAfter=2036-06-14T02:14:02Z (valid, 315619203 s (3653.0 d) after the login)",
+     "text": "IdP metadata signing certificate 1 notAfter=2036-06-14T02:14:01Z (valid, 315619202 s (3653.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint EF:B0:8E:57:E3:E9:33:D6:F9:56:4E:57:BB:6D:ED:CF:08:9F:C2:CF:C3:1F:53:69:A8:52:74:04:0D:E5:0D:D4",
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 9E:CC:F8:00:DF:C9:F2:08:50:FB:DB:B6:98:C2:79:06:77:E4:C0:47:8F:58:2D:71:19:90:1A:89:D1:29:B5:A4",
      "severity": "normal"
     },
     {
@@ -605,11 +605,11 @@
      "severity": "error"
     },
     {
-     "text": "IdP metadata signing certificate 2 SHA-256 fingerprint 74:D3:5D:EB:05:58:9A:00:FC:9F:3E:D5:1A:BF:A9:81:1E:D2:6C:EA:3F:B9:D1:83:05:DD:F0:FB:B9:F6:7F:C7",
+     "text": "IdP metadata signing certificate 2 SHA-256 fingerprint 0A:D2:E6:43:65:7B:80:2F:98:E1:07:6F:AF:32:EB:8E:42:15:07:C1:D4:F2:FD:E8:E7:C1:81:12:92:EC:D0:8C",
      "severity": "normal"
     },
     {
-     "text": "OIDC JWKS entry: RS256, sig, RSA, id tZT-kW5q4YugipqvVgGjy5n7i93MNA8QprAYT2W_2YI",
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id RWI5ZD8zAHCJmlLQ590SL1vtBzAaDA7MPIq7iXBdv00",
      "severity": "normal"
     },
     {
@@ -617,7 +617,7 @@
      "severity": "normal"
     },
     {
-     "text": "OIDC JWKS entry: RS256, sig, RSA, id nHuUHbtEadUlnjubYCFUFELUJx2rO8e2rEfJyVUVBxo",
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id ENhakzlFa63mVd6DcPDIuEJigvqL1dMRf5duFXHF9oI",
      "severity": "normal"
     },
     {
@@ -629,11 +629,11 @@
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notBefore=2026-05-11T02:01:29Z",
+     "text": "Partner system's client certificate notBefore=2026-05-10T06:20:46Z",
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notAfter=2027-06-12T03:01:29Z (valid, 31366050 s (363.0 d) after the login)",
+     "text": "Partner system's client certificate notAfter=2027-06-11T07:20:46Z (valid, 31295207 s (362.2 d) after the login)",
      "severity": "normal"
     },
     {
@@ -677,11 +677,11 @@
      "severity": "normal"
     },
     {
-     "text": "createTimestamp: 20260523061021Z",
+     "text": "createTimestamp: 20260522102938Z",
      "severity": "normal"
     },
     {
-     "text": "modifyTimestamp: 20260523061021Z",
+     "text": "modifyTimestamp: 20260522102938Z",
      "severity": "normal"
     },
     {
@@ -709,11 +709,11 @@
      "severity": "normal"
     },
     {
-     "text": "- notBefore=Jun 14 01:06:32 2026 GMT",
+     "text": "- notBefore=Jun 13 05:50:47 2026 GMT",
      "severity": "warning"
     },
     {
-     "text": "- notAfter=Jun 14 02:06:32 2027 GMT",
+     "text": "- notAfter=Jun 13 06:50:47 2027 GMT",
      "severity": "warning"
     },
     {
@@ -745,19 +745,19 @@
      "severity": "warning"
     },
     {
-     "text": "- idlab-signing-20260614020632 (rsa) active: [\"true\"]",
+     "text": "- idlab-signing-20260613065047 (rsa) active: [\"true\"]",
      "severity": "warning"
     },
     {
-     "text": "+ idlab-signing-20260614020632 (rsa) active: [\"false\"]",
+     "text": "+ idlab-signing-20260613065047 (rsa) active: [\"false\"]",
      "severity": "warning"
     },
     {
-     "text": "- idlab-signing-20260614020632 (rsa) enabled: [\"true\"]",
+     "text": "- idlab-signing-20260613065047 (rsa) enabled: [\"true\"]",
      "severity": "warning"
     },
     {
-     "text": "+ idlab-signing-20260614020632 (rsa) enabled: [\"false\"]",
+     "text": "+ idlab-signing-20260613065047 (rsa) enabled: [\"false\"]",
      "severity": "warning"
     },
     {
@@ -765,23 +765,23 @@
      "severity": "normal"
     },
     {
-     "text": "- realm key 4nSleABJgekzk1YhzxiwyfJ15E-Z2J5T7aNM-GsYoJQ RS256 RSA ACTIVE priority 100 certificate notAfter=Jun 14 02:06:32 2027 GMT",
+     "text": "- realm key duC6yrWQSnRMA9rta0IRSOjikq96KjTM4GX7BuXagg4 RS256 RSA ACTIVE priority 100 certificate notAfter=Jun 13 06:50:47 2027 GMT",
      "severity": "warning"
     },
     {
-     "text": "+ realm key 4nSleABJgekzk1YhzxiwyfJ15E-Z2J5T7aNM-GsYoJQ RS256 RSA DISABLED priority 100 certificate notAfter=Jun 14 02:06:32 2027 GMT",
+     "text": "+ realm key duC6yrWQSnRMA9rta0IRSOjikq96KjTM4GX7BuXagg4 RS256 RSA DISABLED priority 100 certificate notAfter=Jun 13 06:50:47 2027 GMT",
      "severity": "warning"
     },
     {
-     "text": "+ realm key tZT-kW5q4YugipqvVgGjy5n7i93MNA8QprAYT2W_2YI RS256 RSA PASSIVE priority 1000 certificate notAfter=Jun 14 02:13:53 2026 GMT",
+     "text": "+ realm key RWI5ZD8zAHCJmlLQ590SL1vtBzAaDA7MPIq7iXBdv00 RS256 RSA PASSIVE priority 1000 certificate notAfter=Jun 14 02:13:53 2026 GMT",
      "severity": "warning"
     },
     {
-     "text": "admin event: 1781403214377 CREATE COMPONENT components/<component:idlab-expiring-signing-key> by an administrator from 198.51.100.1",
+     "text": "admin event: 1781403214420 CREATE COMPONENT components/<component:idlab-expiring-signing-key> by an administrator from 198.51.100.1",
      "severity": "normal"
     },
     {
-     "text": "admin event: 1781403214467 UPDATE COMPONENT components/<component:idlab-signing-20260614020632> by an administrator from 198.51.100.1",
+     "text": "admin event: 1781403214532 UPDATE COMPONENT components/<component:idlab-signing-20260613065047> by an administrator from 198.51.100.1",
      "severity": "normal"
     }
    ],
@@ -793,11 +793,11 @@
    "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.391Z GET https://lab.example:8181/ -> 200",
+     "text": "2026-06-14T02:14:00.834Z GET https://lab.example:8181/ -> 200",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.493Z GET https://lab.example:8181/login -> 302 redirect https://lab.example:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=***&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256",
+     "text": "2026-06-14T02:14:00.944Z GET https://lab.example:8181/login -> 302 redirect https://lab.example:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=***&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256",
      "severity": "normal"
     },
     {
@@ -805,7 +805,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.501Z GET https://lab.example:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=***&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256 -> 200",
+     "text": "2026-06-14T02:14:00.953Z GET https://lab.example:8180/realms/idlab/protocol/saml?SAMLRequest=***&RelayState=***&Signature=***&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256 -> 200",
      "severity": "normal"
     },
     {
@@ -821,7 +821,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.802Z POST https://lab.example:8180/realms/idlab/login-actions/authenticate?session_code=***&execution=<id-5>&client_id=https%3A%2F%2Flab.example%3A8181%2Fsaml%2Fmetadata&tab_id=***&client_data=*** -> 200",
+     "text": "2026-06-14T02:14:01.287Z POST https://lab.example:8180/realms/idlab/login-actions/authenticate?session_code=***&execution=<id-5>&client_id=https%3A%2F%2Flab.example%3A8181%2Fsaml%2Fmetadata&tab_id=***&client_data=*** -> 200",
      "severity": "normal"
     },
     {
@@ -837,7 +837,7 @@
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:02.275Z POST https://lab.example:8181/saml/acs -> 401",
+     "text": "2026-06-14T02:14:01.758Z POST https://lab.example:8181/saml/acs -> 401",
      "severity": "warning"
     }
    ],

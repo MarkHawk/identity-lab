@@ -2,7 +2,7 @@
  "format": "idlab-evidence-pack/1",
  "id": "case-168c58",
  "login_at": "2026-06-14T02:14:00Z",
- "captured": "2026-06-14T02:14:01Z",
+ "captured": "2026-06-14T02:14:02Z",
  "lab": {
   "host": "lab.example"
  },
@@ -33,31 +33,31 @@
      "severity": "normal"
     },
     {
-     "text": "api               running   Up 25 hours (healthy)",
+     "text": "api               running   Up 45 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "authenticator     running   Up 25 hours (healthy)",
+     "text": "authenticator     running   Up 45 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "keycloak          running   Up 24 hours (healthy)",
+     "text": "keycloak          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "ldap              running   Up 25 hours (healthy)",
+     "text": "ldap              running   Up 45 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "nas               running   Up 25 hours (healthy)",
+     "text": "nas               running   Up 45 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "text": "oidc-rp           running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "text": "oidc-rp-edge      running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
@@ -65,31 +65,31 @@
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "text": "oidc-rp-proxied   running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "postgres          running   Up 25 hours (healthy)",
+     "text": "postgres          running   Up 45 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "proxy             running   Up 23 hours (healthy)",
+     "text": "proxy             running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "radius            running   Up 23 hours (healthy)",
+     "text": "radius            running   Up 43 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "text": "saml-sp           running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "text": "saml-sp-proxied   running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "squid             running   Up 23 hours (healthy)",
+     "text": "squid             running   Up 19 hours (healthy)",
      "severity": "normal"
     }
    ],
@@ -98,7 +98,7 @@
   {
    "tool": "logs-keycloak",
    "title": "Keycloak log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z keycloak",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z keycloak",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -110,7 +110,7 @@
   {
    "tool": "keycloak-events",
    "title": "Keycloak events",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z keycloak | grep org.keycloak.events",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z keycloak | grep org.keycloak.events",
    "lines": [
     {
      "text": "(no events in this window)",
@@ -122,54 +122,54 @@
   {
    "tool": "logs-ldap",
    "title": "OpenLDAP log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z ldap",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z ldap",
    "lines": [
     {
-     "text": "2026-06-14T02:13:59.667Z 6a2e0e68.27c93fd0 0x76d6ceafd6c0 conn=19409 op=44 SRCH base=\"ou=people,dc=idlab,dc=example\" scope=1 deref=0 filter=\"(uid=heidi)\"",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.15646baa 0x76d6de7fe6c0 conn=33490 op=44 SRCH base=\"ou=people,dc=idlab,dc=example\" scope=1 deref=0 filter=\"(uid=heidi)\"",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.667Z 6a2e0e68.27cb7c88 0x76d6ceafd6c0 conn=19409 op=44 SEARCH RESULT tag=101 err=0 qtime=0.000016 etime=0.000182 nentries=1 text=",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.15678f6b 0x76d6de7fe6c0 conn=33490 op=44 SEARCH RESULT tag=101 err=0 qtime=0.000015 etime=0.000238 nentries=1 text=",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.667Z 6a2e0e68.27cd3647 0x76d6c7fff6c0 conn=19246 op=68 BIND anonymous mech=implicit bind_ssf=0 ssf=256",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.156b6ad0 0x76d6c50fb6c0 conn=19896 op=70 BIND anonymous mech=implicit bind_ssf=0 ssf=256",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.667Z 6a2e0e68.27cdbc6e 0x76d6c7fff6c0 conn=19246 op=68 BIND dn=\"cn=radius-svc,ou=services,dc=idlab,dc=example\" method=128",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.156c696b 0x76d6c50fb6c0 conn=19896 op=70 BIND dn=\"cn=radius-svc,ou=services,dc=idlab,dc=example\" method=128",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.667Z 6a2e0e68.27ce3705 0x76d6c7fff6c0 conn=19246 op=68 BIND dn=\"cn=radius-svc,ou=services,dc=idlab,dc=example\" mech=SIMPLE bind_ssf=0 ssf=256",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.156d1d28 0x76d6c50fb6c0 conn=19896 op=70 BIND dn=\"cn=radius-svc,ou=services,dc=idlab,dc=example\" mech=SIMPLE bind_ssf=0 ssf=256",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.667Z 6a2e0e68.27cf01f6 0x76d6c7fff6c0 conn=19246 op=68 RESULT tag=97 err=0 qtime=0.000010 etime=0.000128 text=",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.156e10d2 0x76d6c50fb6c0 conn=19896 op=70 RESULT tag=97 err=0 qtime=0.000012 etime=0.000185 text=",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.668Z 6a2e0e68.27d0b579 0x76d6c50fb6c0 conn=19246 op=69 SRCH base=\"ou=radius,dc=idlab,dc=example\" scope=1 deref=0 filter=\"(&(cn=mfa-required)(objectClass=groupOfNames)(member=uid=heidi,ou=people,dc=idlab,dc=example))\"",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.15705be1 0x76d6ddffd6c0 conn=19896 op=71 SRCH base=\"ou=radius,dc=idlab,dc=example\" scope=1 deref=0 filter=\"(&(cn=mfa-required)(objectClass=groupOfNames)(member=uid=heidi,ou=people,dc=idlab,dc=example))\"",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.668Z 6a2e0e68.27d25c73 0x76d6c50fb6c0 conn=19246 op=69 SEARCH RESULT tag=101 err=0 qtime=0.000012 etime=0.000141 nentries=1 text=",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.1571c364 0x76d6ddffd6c0 conn=19896 op=71 SEARCH RESULT tag=101 err=0 qtime=0.000010 etime=0.000120 nentries=1 text=",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.668Z 6a2e0e68.27d42b34 0x76d6ddffd6c0 conn=19409 op=45 BIND anonymous mech=implicit bind_ssf=0 ssf=256",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.15739418 0x76d6ccdfa6c0 conn=33490 op=45 BIND anonymous mech=implicit bind_ssf=0 ssf=256",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.668Z 6a2e0e68.27d4d0c8 0x76d6ddffd6c0 conn=19409 op=45 BIND dn=\"uid=heidi,ou=people,dc=idlab,dc=example\" method=128",
+     "text": "2026-06-14T02:14:00.359Z 6a2e0e68.1574099c 0x76d6ccdfa6c0 conn=33490 op=45 BIND dn=\"uid=heidi,ou=people,dc=idlab,dc=example\" method=128",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.668Z 6a2e0e68.27d554aa 0x76d6ddffd6c0 conn=19409 op=45 BIND dn=\"uid=heidi,ou=people,dc=idlab,dc=example\" mech=SIMPLE bind_ssf=0 ssf=256",
+     "text": "2026-06-14T02:14:00.360Z 6a2e0e68.15747e86 0x76d6ccdfa6c0 conn=33490 op=45 BIND dn=\"uid=heidi,ou=people,dc=idlab,dc=example\" mech=SIMPLE bind_ssf=0 ssf=256",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:59.668Z 6a2e0e68.27d62e5e 0x76d6ddffd6c0 conn=19409 op=45 RESULT tag=97 err=0 qtime=0.000017 etime=0.000148 text=",
+     "text": "2026-06-14T02:14:00.360Z 6a2e0e68.15753245 0x76d6ccdfa6c0 conn=33490 op=45 RESULT tag=97 err=0 qtime=0.000019 etime=0.000125 text=",
      "severity": "normal"
     }
    ],
@@ -178,10 +178,10 @@
   {
    "tool": "logs-radius",
    "title": "FreeRADIUS log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z radius",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z radius",
    "lines": [
     {
-     "text": "2026-06-14T02:13:59.668Z Sun Jun 14 02:13:59 2026 : Auth: Challenge sent: [heidi] (from client nas port 0)",
+     "text": "2026-06-14T02:14:00.360Z Sun Jun 14 02:14:00 2026 : Auth: Challenge sent: [heidi] (from client nas port 0)",
      "severity": "normal"
     }
    ],
@@ -190,7 +190,7 @@
   {
    "tool": "logs-proxy",
    "title": "Reverse proxy (nginx) log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z proxy",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z proxy",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -202,7 +202,7 @@
   {
    "tool": "logs-squid",
    "title": "Egress proxy (Squid) log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z squid",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z squid",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -214,7 +214,7 @@
   {
    "tool": "logs-saml-sp",
    "title": "SAML app log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z saml-sp",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z saml-sp",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -226,7 +226,7 @@
   {
    "tool": "logs-saml-sp-proxied",
    "title": "SAML app log (behind the proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z saml-sp-proxied",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z saml-sp-proxied",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -238,7 +238,7 @@
   {
    "tool": "logs-oidc-rp",
    "title": "OIDC app log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z oidc-rp",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z oidc-rp",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -250,7 +250,7 @@
   {
    "tool": "logs-oidc-rp-proxied",
    "title": "OIDC app log (behind the proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z oidc-rp-proxied",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z oidc-rp-proxied",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -262,7 +262,7 @@
   {
    "tool": "logs-oidc-rp-egress",
    "title": "OIDC app log (egress proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z oidc-rp-egress",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z oidc-rp-egress",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -274,7 +274,7 @@
   {
    "tool": "logs-oidc-rp-edge",
    "title": "OIDC app log (edge)",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z oidc-rp-edge",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z oidc-rp-edge",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -286,7 +286,7 @@
   {
    "tool": "logs-api",
    "title": "API log",
-   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:01Z api",
+   "command": "docker compose logs --since 2026-06-14T02:13:56Z --until 2026-06-14T02:14:02Z api",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -317,15 +317,15 @@
    "command": "timedatectl; then, in each container, date -u +%s against the host's",
    "lines": [
     {
-     "text": "               Local time:            Sun 2026-06-14 02:14:03 UTC",
+     "text": "               Local time:            Sun 2026-06-14 02:14:04 UTC",
      "severity": "normal"
     },
     {
-     "text": "           Universal time: Sun 2026-06-14 02:14:03 UTC",
+     "text": "           Universal time: Sun 2026-06-14 02:14:04 UTC",
      "severity": "normal"
     },
     {
-     "text": "                 RTC time: Sun 2026-06-14 02:14:03",
+     "text": "                 RTC time: Sun 2026-06-14 02:14:04",
      "severity": "normal"
     },
     {
@@ -345,31 +345,31 @@
      "severity": "normal"
     },
     {
-     "text": "keycloak 2026-06-14T02:14:03Z host 2026-06-14T02:14:03Z offset +0 s",
+     "text": "keycloak 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "saml-sp 2026-06-14T02:14:03Z host 2026-06-14T02:14:03Z offset +0 s",
+     "text": "saml-sp 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp 2026-06-14T02:14:04Z host 2026-06-14T02:14:03Z offset +1 s",
+     "text": "oidc-rp 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "api 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
+     "text": "api 2026-06-14T02:14:05Z host 2026-06-14T02:14:04Z offset +1 s",
      "severity": "normal"
     },
     {
-     "text": "radius 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
+     "text": "radius 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "ldap 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
+     "text": "ldap 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "authenticator 2026-06-14T02:14:05Z host 2026-06-14T02:14:04Z offset +1 s",
+     "text": "authenticator 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
      "severity": "normal"
     }
    ],
@@ -401,15 +401,15 @@
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:06:34Z",
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:06:41Z",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:06:34Z (valid, 31535555 s (365.0 d) after the login)",
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:06:41Z (valid, 31535562 s (365.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 72:67:D6:25:61:10:C2:CB:DA:23:32:7B:D4:A5:FF:37:6E:6C:0E:BC:36:35:A8:A1:E7:69:D0:DB:27:23:B4:28",
      "severity": "normal"
     },
     {
@@ -421,15 +421,15 @@
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:06:34Z",
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:06:41Z",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:06:34Z (valid, 31535555 s (365.0 d) after the login)",
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:06:41Z (valid, 31535562 s (365.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 72:67:D6:25:61:10:C2:CB:DA:23:32:7B:D4:A5:FF:37:6E:6C:0E:BC:36:35:A8:A1:E7:69:D0:DB:27:23:B4:28",
      "severity": "normal"
     },
     {
@@ -437,7 +437,7 @@
      "severity": "normal"
     },
     {
-     "text": "OIDC JWKS entry: RS256, sig, RSA, id 2uoP1_4kZL7w924E1L2ClWGJx0_xPXSbhRmJXapsdrs",
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id BOA2zBLQ3eDGjqN1DnG7dUJlSOQNJ53ty0kgtKs0CSg",
      "severity": "normal"
     },
     {
@@ -449,11 +449,11 @@
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notBefore=2026-05-11T01:53:49Z",
+     "text": "Partner system's client certificate notBefore=2026-05-10T06:13:13Z",
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notAfter=2027-06-12T02:53:49Z (valid, 31365590 s (363.0 d) after the login)",
+     "text": "Partner system's client certificate notAfter=2027-06-11T07:13:13Z (valid, 31294754 s (362.2 d) after the login)",
      "severity": "normal"
     },
     {
@@ -497,11 +497,11 @@
      "severity": "normal"
     },
     {
-     "text": "createTimestamp: 20260523060241Z",
+     "text": "createTimestamp: 20260522102205Z",
      "severity": "normal"
     },
     {
-     "text": "modifyTimestamp: 20260523060241Z",
+     "text": "modifyTimestamp: 20260522102205Z",
      "severity": "normal"
     },
     {
@@ -522,10 +522,10 @@
   {
    "tool": "recent-changes",
    "title": "Recent changes",
-   "command": "the configuration change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:01Z",
+   "command": "the configuration change record, 2026-06-14T02:13:56Z to 2026-06-14T02:14:02Z",
    "lines": [
     {
-     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:01Z: 1 configuration change(s), 0 admin event(s)",
+     "text": "Change record, 2026-06-14T02:13:56Z to 2026-06-14T02:14:02Z: 1 configuration change(s), 0 admin event(s)",
      "severity": "normal"
     },
     {

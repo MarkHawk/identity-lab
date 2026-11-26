@@ -41,63 +41,63 @@
      "severity": "normal"
     },
     {
-     "text": "api               running   Up 25 hours (healthy)",
+     "text": "api               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "authenticator     running   Up 25 hours (healthy)",
+     "text": "authenticator     running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "keycloak          running   Up 24 hours (healthy)",
+     "text": "keycloak          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "ldap              running   Up 25 hours (healthy)",
+     "text": "ldap              running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "nas               running   Up 25 hours (healthy)",
+     "text": "nas               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "text": "oidc-rp           running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "text": "oidc-rp-edge      running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-egress    running   Up 18 minutes (healthy)",
+     "text": "oidc-rp-egress    running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "text": "oidc-rp-proxied   running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "postgres          running   Up 25 hours (healthy)",
+     "text": "postgres          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "proxy             running   Up 23 hours (healthy)",
+     "text": "proxy             running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "radius            running   Up 23 hours (healthy)",
+     "text": "radius            running   Up 43 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "text": "saml-sp           running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "text": "saml-sp-proxied   running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "squid             running   Up 23 hours (healthy)",
+     "text": "squid             running   Up 19 hours (healthy)",
      "severity": "normal"
     }
    ],
@@ -157,15 +157,15 @@
    "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z proxy",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.080Z 2026/06/14 02:14:01 [info] 97958#97958: *16693 client closed connection while waiting for request, client: 198.51.100.250, server: 0.0.0.0:8189",
+     "text": "2026-06-14T02:14:00.833Z 2026/06/14 02:14:00 [info] 1447#1447: *13990 client closed connection while waiting for request, client: 198.51.100.250, server: 0.0.0.0:8189",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.093Z 198.51.100.250 \"GET / HTTP/1.1\" 400 610 host=lab.example:8189 client_dn=\"CN=partner-client\" client_not_after=\"Jun 13 02:13:55 2026 GMT\" ssl_client_verify=FAILED:certificate has expired",
+     "text": "2026-06-14T02:14:00.846Z 198.51.100.250 \"GET / HTTP/1.1\" 400 610 host=lab.example:8189 client_dn=\"CN=partner-client\" client_not_after=\"Jun 13 02:13:55 2026 GMT\" ssl_client_verify=FAILED:certificate has expired",
      "severity": "warning"
     },
     {
-     "text": "2026-06-14T02:14:01.093Z 2026/06/14 02:14:01 [info] 97958#97958: *16694 client SSL certificate verify error: (10:certificate has expired) while reading client request headers, client: 198.51.100.250, server: , request: \"GET / HTTP/1.1\", host: \"lab.example:8189\"",
+     "text": "2026-06-14T02:14:00.846Z 2026/06/14 02:14:00 [info] 1447#1447: *13991 client SSL certificate verify error: (10:certificate has expired) while reading client request headers, client: 198.51.100.250, server: , request: \"GET / HTTP/1.1\", host: \"lab.example:8189\"",
      "severity": "error"
     }
    ],
@@ -317,11 +317,11 @@
      "severity": "normal"
     },
     {
-     "text": "keycloak 2026-06-14T02:14:05Z host 2026-06-14T02:14:04Z offset +1 s",
+     "text": "keycloak 2026-06-14T02:14:04Z host 2026-06-14T02:14:04Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "saml-sp 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
+     "text": "saml-sp 2026-06-14T02:14:05Z host 2026-06-14T02:14:04Z offset +1 s",
      "severity": "normal"
     },
     {
@@ -333,15 +333,15 @@
      "severity": "normal"
     },
     {
-     "text": "radius 2026-06-14T02:14:06Z host 2026-06-14T02:14:05Z offset +1 s",
+     "text": "radius 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "ldap 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "text": "ldap 2026-06-14T02:14:05Z host 2026-06-14T02:14:05Z offset +0 s",
      "severity": "normal"
     },
     {
-     "text": "authenticator 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "text": "authenticator 2026-06-14T02:14:06Z host 2026-06-14T02:14:05Z offset +1 s",
      "severity": "normal"
     }
    ],
@@ -373,15 +373,15 @@
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:08:41Z",
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-13T05:52:54Z",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:08:41Z (valid, 31535682 s (365.0 d) after the login)",
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-13T06:52:54Z (valid, 31466335 s (364.2 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 9C:92:D8:52:4E:56:63:25:5D:3D:B2:3A:12:19:35:D4:44:67:A0:4D:2F:E5:5A:A9:E6:BB:DE:56:24:73:0E:4B",
      "severity": "normal"
     },
     {
@@ -393,15 +393,15 @@
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:08:41Z",
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-13T05:52:54Z",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:08:41Z (valid, 31535682 s (365.0 d) after the login)",
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-13T06:52:54Z (valid, 31466335 s (364.2 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 6E:18:6F:06:5E:44:B6:DB:EE:E2:DE:09:58:05:19:F7:11:95:4A:D3:85:DD:48:8A:4E:36:57:44:20:C9:7D:01",
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 9C:92:D8:52:4E:56:63:25:5D:3D:B2:3A:12:19:35:D4:44:67:A0:4D:2F:E5:5A:A9:E6:BB:DE:56:24:73:0E:4B",
      "severity": "normal"
     },
     {
@@ -409,7 +409,7 @@
      "severity": "normal"
     },
     {
-     "text": "OIDC JWKS entry: RS256, sig, RSA, id 4nSleABJgekzk1YhzxiwyfJ15E-Z2J5T7aNM-GsYoJQ",
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id duC6yrWQSnRMA9rta0IRSOjikq96KjTM4GX7BuXagg4",
      "severity": "normal"
     },
     {
@@ -429,7 +429,7 @@
      "severity": "error"
     },
     {
-     "text": "Partner system's client certificate SHA-256 fingerprint 83:8E:6C:89:C2:B8:5E:DB:83:7E:A9:91:B0:70:DB:8F:4A:44:C2:7E:4C:5E:D4:66:83:ED:31:70:C4:95:1E:95",
+     "text": "Partner system's client certificate SHA-256 fingerprint 32:0D:67:63:A1:CC:47:B4:79:69:D1:10:EC:DC:00:C9:42:47:B1:57:A4:75:61:C4:F4:C5:44:83:11:3F:64:CA",
      "severity": "normal"
     },
     {
@@ -469,11 +469,11 @@
      "severity": "normal"
     },
     {
-     "text": "createTimestamp: 20260523061230Z",
+     "text": "createTimestamp: 20260522103145Z",
      "severity": "normal"
     },
     {
-     "text": "modifyTimestamp: 20260523061230Z",
+     "text": "modifyTimestamp: 20260522103145Z",
      "severity": "normal"
     },
     {
@@ -493,28 +493,12 @@
    "command": "the configuration change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z",
    "lines": [
     {
-     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z: 1 configuration change(s), 0 admin event(s)",
+     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z: 0 configuration change(s), 0 admin event(s)",
      "severity": "normal"
     },
     {
-     "text": "Changed: .state/mtls-client/client.crt",
+     "text": "No configuration changes recorded in this window.",
      "severity": "normal"
-    },
-    {
-     "text": "- notBefore=May 11 02:03:38 2026 GMT",
-     "severity": "warning"
-    },
-    {
-     "text": "- notAfter=Jun 12 03:03:38 2027 GMT",
-     "severity": "warning"
-    },
-    {
-     "text": "+ notBefore=May 13 02:13:55 2025 GMT",
-     "severity": "warning"
-    },
-    {
-     "text": "+ notAfter=Jun 13 02:13:55 2026 GMT",
-     "severity": "warning"
     }
    ],
    "omitted": 0
@@ -525,7 +509,7 @@
    "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.040Z GET https://lab.example:8189/ -> 400",
+     "text": "2026-06-14T02:14:00.793Z GET https://lab.example:8189/ -> 400",
      "severity": "warning"
     }
    ],

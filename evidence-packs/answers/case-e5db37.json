@@ -5,6 +5,6 @@
   "summary": "oidc-rp's access tokens expire after 10 seconds; the app never refreshes them",
   "fix": {
     "command": "scripts/fix.sh api-bearer-expired",
-    "first_step": "Make the client's tokens name the API again. In the lab:"
+    "first_step": "In the lab, put the lifespan back:"
   }
 }

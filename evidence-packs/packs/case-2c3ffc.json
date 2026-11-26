@@ -37,63 +37,63 @@
      "severity": "normal"
     },
     {
-     "text": "api               running   Up 25 hours (healthy)",
+     "text": "api               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "authenticator     running   Up 25 hours (healthy)",
+     "text": "authenticator     running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "keycloak          running   Up 24 hours (healthy)",
+     "text": "keycloak          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "ldap              running   Up 25 hours (healthy)",
+     "text": "ldap              running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "nas               running   Up 25 hours (healthy)",
+     "text": "nas               running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp           running   Up 23 hours (healthy)",
+     "text": "oidc-rp           running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-edge      running   Up 23 hours (healthy)",
+     "text": "oidc-rp-edge      running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-egress    running   Up 23 minutes (healthy)",
+     "text": "oidc-rp-egress    running   Up 19 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "oidc-rp-proxied   running   Up 23 hours (healthy)",
+     "text": "oidc-rp-proxied   running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "postgres          running   Up 25 hours (healthy)",
+     "text": "postgres          running   Up 44 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "proxy             running   Up 23 hours (healthy)",
+     "text": "proxy             running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "radius            running   Up 23 hours (healthy)",
+     "text": "radius            running   Up 43 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp           running   Up 23 hours (healthy)",
+     "text": "saml-sp           running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "saml-sp-proxied   running   Up 23 hours (healthy)",
+     "text": "saml-sp-proxied   running   Up 20 hours (healthy)",
      "severity": "normal"
     },
     {
-     "text": "squid             running   Up 23 hours (healthy)",
+     "text": "squid             running   Up 19 hours (healthy)",
      "severity": "normal"
     }
    ],
@@ -102,7 +102,7 @@
   {
    "tool": "logs-keycloak",
    "title": "Keycloak log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z keycloak",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z keycloak",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -114,7 +114,7 @@
   {
    "tool": "keycloak-events",
    "title": "Keycloak events",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z keycloak | grep org.keycloak.events",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z keycloak | grep org.keycloak.events",
    "lines": [
     {
      "text": "(no events in this window)",
@@ -126,10 +126,10 @@
   {
    "tool": "logs-ldap",
    "title": "OpenLDAP log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z ldap",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z ldap",
    "lines": [
     {
-     "text": "(nothing logged in this window)",
+     "text": "2026-06-14T02:13:55.009Z 6a2e0e63.008d6737 0x76d6ccdfa6c0 connection_read(13): no connection!",
      "severity": "normal"
     }
    ],
@@ -138,7 +138,7 @@
   {
    "tool": "logs-radius",
    "title": "FreeRADIUS log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z radius",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z radius",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -150,59 +150,59 @@
   {
    "tool": "logs-proxy",
    "title": "Reverse proxy (nginx) log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z proxy",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z proxy",
    "lines": [
     {
-     "text": "2026-06-14T02:13:55.001Z 2026/06/14 02:13:54 [notice] 1#1: signal 1 (SIGHUP) received from 99582, reconfiguring",
+     "text": "2026-06-14T02:13:55.364Z 2026/06/14 02:13:55 [notice] 1#1: signal 1 (SIGHUP) received from 82646, reconfiguring",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.001Z 2026/06/14 02:13:54 [notice] 1#1: reconfiguring",
+     "text": "2026-06-14T02:13:55.365Z 2026/06/14 02:13:55 [notice] 1#1: reconfiguring",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.005Z 2026/06/14 02:13:54 [notice] 1#1: using the \"epoll\" event method",
+     "text": "2026-06-14T02:13:55.369Z 2026/06/14 02:13:55 [notice] 1#1: using the \"epoll\" event method",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.006Z 2026/06/14 02:13:54 [notice] 1#1: start worker processes",
+     "text": "2026-06-14T02:13:55.370Z 2026/06/14 02:13:55 [notice] 1#1: start worker processes",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.007Z 2026/06/14 02:13:54 [notice] 1#1: start worker process 99583",
+     "text": "2026-06-14T02:13:55.370Z 2026/06/14 02:13:55 [notice] 1#1: start worker process 82647",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.108Z 2026/06/14 02:13:55 [notice] 97958#97958: gracefully shutting down",
+     "text": "2026-06-14T02:13:55.471Z 2026/06/14 02:13:55 [notice] 1447#1447: gracefully shutting down",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.111Z 2026/06/14 02:13:55 [notice] 97958#97958: exiting",
+     "text": "2026-06-14T02:13:55.474Z 2026/06/14 02:13:55 [notice] 1447#1447: exiting",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.113Z 2026/06/14 02:13:55 [notice] 97958#97958: exit",
+     "text": "2026-06-14T02:13:55.476Z 2026/06/14 02:13:55 [notice] 1447#1447: exit",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.127Z 2026/06/14 02:13:55 [notice] 1#1: signal 17 (SIGCHLD) received from 97958",
+     "text": "2026-06-14T02:13:55.494Z 2026/06/14 02:13:55 [notice] 1#1: signal 17 (SIGCHLD) received from 1447",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.130Z 2026/06/14 02:13:55 [notice] 1#1: worker process 97958 exited with code 0",
+     "text": "2026-06-14T02:13:55.497Z 2026/06/14 02:13:55 [notice] 1#1: worker process 1447 exited with code 0",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:13:55.132Z 2026/06/14 02:13:55 [notice] 1#1: signal 29 (SIGIO) received",
+     "text": "2026-06-14T02:13:55.499Z 2026/06/14 02:13:55 [notice] 1#1: signal 29 (SIGIO) received",
      "severity": "normal"
     },
     {
-     "text": "2026-06-14T02:14:01.225Z 198.51.100.4 \"GET / HTTP/1.1\" 502 552 host=lab.example:8185 upstream=192.0.2.19:8182 upstream_status=502 request_time=0.002 upstream_time=0.002",
+     "text": "2026-06-14T02:14:01.222Z 198.51.100.4 \"GET / HTTP/1.1\" 502 552 host=lab.example:8185 upstream=192.0.2.19:8182 upstream_status=502 request_time=0.002 upstream_time=0.002",
      "severity": "error"
     },
     {
-     "text": "2026-06-14T02:14:01.225Z 2026/06/14 02:14:01 [error] 99583#99583: *16761 upstream prematurely closed connection while reading response header from upstream, client: 198.51.100.4, server: , request: \"GET / HTTP/1.1\", upstream: \"http://192.0.2.19:8182/\", host: \"lab.example:8185\"",
-     "severity": "normal"
+     "text": "2026-06-14T02:14:01.224Z 2026/06/14 02:14:01 [error] 82647#82647: *14059 upstream prematurely closed connection while reading response header from upstream, client: 198.51.100.4, server: , request: \"GET / HTTP/1.1\", upstream: \"http://192.0.2.19:8182/\", host: \"lab.example:8185\"",
+     "severity": "error"
     }
    ],
    "omitted": 0
@@ -210,7 +210,7 @@
   {
    "tool": "logs-squid",
    "title": "Egress proxy (Squid) log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z squid",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z squid",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -222,7 +222,7 @@
   {
    "tool": "logs-saml-sp",
    "title": "SAML app log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z saml-sp",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z saml-sp",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -234,7 +234,7 @@
   {
    "tool": "logs-saml-sp-proxied",
    "title": "SAML app log (behind the proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z saml-sp-proxied",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z saml-sp-proxied",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -246,7 +246,7 @@
   {
    "tool": "logs-oidc-rp",
    "title": "OIDC app log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z oidc-rp",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -258,10 +258,10 @@
   {
    "tool": "logs-oidc-rp-proxied",
    "title": "OIDC app log (behind the proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z oidc-rp-proxied",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp-proxied",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.223Z [2026-06-14 02:14:01 +0000] [7] [WARNING] Invalid request from ip=192.0.2.21: [SSL: HTTP_REQUEST] http request (_ssl.c:1035)",
+     "text": "2026-06-14T02:14:01.221Z [2026-06-14 02:14:01 +0000] [8] [WARNING] Invalid request from ip=192.0.2.21: [SSL: HTTP_REQUEST] http request (_ssl.c:1035)",
      "severity": "error"
     }
    ],
@@ -270,7 +270,7 @@
   {
    "tool": "logs-oidc-rp-egress",
    "title": "OIDC app log (egress proxy)",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z oidc-rp-egress",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp-egress",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -282,7 +282,7 @@
   {
    "tool": "logs-oidc-rp-edge",
    "title": "OIDC app log (edge)",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z oidc-rp-edge",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z oidc-rp-edge",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -294,7 +294,7 @@
   {
    "tool": "logs-api",
    "title": "API log",
-   "command": "docker compose logs --since 2026-06-14T02:13:54Z --until 2026-06-14T02:14:03Z api",
+   "command": "docker compose logs --since 2026-06-14T02:13:55Z --until 2026-06-14T02:14:03Z api",
    "lines": [
     {
      "text": "(nothing logged in this window)",
@@ -365,7 +365,7 @@
      "severity": "normal"
     },
     {
-     "text": "api 2026-06-14T02:14:06Z host 2026-06-14T02:14:06Z offset +0 s",
+     "text": "api 2026-06-14T02:14:06Z host 2026-06-14T02:14:05Z offset +1 s",
      "severity": "normal"
     },
     {
@@ -409,15 +409,15 @@
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:10:55Z",
+     "text": "SAML app's pinned IdP signing certificate 1 notBefore=2026-06-14T01:10:57Z",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:10:55Z (valid, 31535816 s (365.0 d) after the login)",
+     "text": "SAML app's pinned IdP signing certificate 1 notAfter=2027-06-14T02:10:57Z (valid, 31535818 s (365.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "text": "SAML app's pinned IdP signing certificate 1 SHA-256 fingerprint 72:67:D6:25:61:10:C2:CB:DA:23:32:7B:D4:A5:FF:37:6E:6C:0E:BC:36:35:A8:A1:E7:69:D0:DB:27:23:B4:28",
      "severity": "normal"
     },
     {
@@ -429,15 +429,15 @@
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:10:55Z",
+     "text": "IdP metadata signing certificate 1 notBefore=2026-06-14T01:10:57Z",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:10:55Z (valid, 31535816 s (365.0 d) after the login)",
+     "text": "IdP metadata signing certificate 1 notAfter=2027-06-14T02:10:57Z (valid, 31535818 s (365.0 d) after the login)",
      "severity": "normal"
     },
     {
-     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 56:4C:55:F7:99:F1:CF:83:1E:83:88:72:BD:94:20:08:4B:D7:80:D0:56:32:7F:4B:96:74:A5:FA:AD:E2:24:94",
+     "text": "IdP metadata signing certificate 1 SHA-256 fingerprint 72:67:D6:25:61:10:C2:CB:DA:23:32:7B:D4:A5:FF:37:6E:6C:0E:BC:36:35:A8:A1:E7:69:D0:DB:27:23:B4:28",
      "severity": "normal"
     },
     {
@@ -445,7 +445,7 @@
      "severity": "normal"
     },
     {
-     "text": "OIDC JWKS entry: RS256, sig, RSA, id 2uoP1_4kZL7w924E1L2ClWGJx0_xPXSbhRmJXapsdrs",
+     "text": "OIDC JWKS entry: RS256, sig, RSA, id BOA2zBLQ3eDGjqN1DnG7dUJlSOQNJ53ty0kgtKs0CSg",
      "severity": "normal"
     },
     {
@@ -457,11 +457,11 @@
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notBefore=2026-05-11T01:58:10Z",
+     "text": "Partner system's client certificate notBefore=2026-05-10T06:17:29Z",
      "severity": "normal"
     },
     {
-     "text": "Partner system's client certificate notAfter=2027-06-12T02:58:10Z (valid, 31365851 s (363.0 d) after the login)",
+     "text": "Partner system's client certificate notAfter=2027-06-11T07:17:29Z (valid, 31295010 s (362.2 d) after the login)",
      "severity": "normal"
     },
     {
@@ -505,11 +505,11 @@
      "severity": "normal"
     },
     {
-     "text": "createTimestamp: 20260523060702Z",
+     "text": "createTimestamp: 20260522102621Z",
      "severity": "normal"
     },
     {
-     "text": "modifyTimestamp: 20260523060702Z",
+     "text": "modifyTimestamp: 20260522102621Z",
      "severity": "normal"
     },
     {
@@ -526,10 +526,10 @@
   {
    "tool": "recent-changes",
    "title": "Recent changes",
-   "command": "the configuration change record, 2026-06-14T02:13:54Z to 2026-06-14T02:14:03Z",
+   "command": "the configuration change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z",
    "lines": [
     {
-     "text": "Change record, 2026-06-14T02:13:54Z to 2026-06-14T02:14:03Z: 1 configuration change(s), 0 admin event(s)",
+     "text": "Change record, 2026-06-14T02:13:55Z to 2026-06-14T02:14:03Z: 1 configuration change(s), 0 admin event(s)",
      "severity": "normal"
     },
     {
@@ -553,7 +553,7 @@
    "command": "the browser's HAR export, summarised (cookie values and one-time values removed)",
    "lines": [
     {
-     "text": "2026-06-14T02:14:01.205Z GET https://lab.example:8185/ -> 502",
+     "text": "2026-06-14T02:14:01.204Z GET https://lab.example:8185/ -> 502",
      "severity": "error"
     }
    ],

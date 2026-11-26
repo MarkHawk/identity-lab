@@ -2,7 +2,7 @@
   "id": "case-26e28f",
   "scenario": "client-cert-expired",
   "runbook": "runbooks/18-client-cert.md",
-  "summary": "the mTLS client's certificate has expired (nginx 495)",
+  "summary": "the mTLS client's certificate has expired (nginx logs 495 inside; the client gets 400)",
   "fix": {
     "command": "scripts/fix.sh client-cert-expired",
     "first_step": "Give the client a valid certificate from the CA the server trusts. In the lab, for either scenario:"
