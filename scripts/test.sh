@@ -776,6 +776,18 @@ evidence_packs_no_probes() {
   echo "checked $n pack(s): $hits with state-detection probe traffic"
   (( n > 0 && hits == 0 ))
 }
+# evidence_packs_no_headless -- no pack shows the Playwright browser's user
+# agent (HeadlessChrome); the builder replaces it with an ordinary Chrome's.
+# shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_no_headless
+evidence_packs_no_headless() {
+  local f n=0 hits=0
+  for f in "$PACKS_DIR"/packs/*.json; do
+    n=$((n + 1))
+    if grep -qi -- 'HeadlessChrome' "$f"; then hits=$((hits + 1)); echo "  ${f##*/}: $(grep -ci -- 'HeadlessChrome' "$f") line(s)"; fi
+  done
+  echo "checked $n pack(s): $hits mention HeadlessChrome"
+  (( n > 0 && hits == 0 ))
+}
 # shellcheck disable=SC2329  # invoked indirectly: check "<name>" evidence_packs_hide_answers
 evidence_packs_hide_answers() {
   local f name hits=0 found
@@ -991,6 +1003,7 @@ check "packs: scanner passes a made-up clean pack (bookmark, placeholders, maske
 check "packs: no secret, token, one-time value, SAML message, key, real address or name in any pack or answer key" evidence_packs_clean
 check "packs: no pack names its scenario, runbook, fix or summary" evidence_packs_hide_answers
 check "packs: no pack holds the lab's state-detection probe traffic (idlab-status or curl user agents)" evidence_packs_no_probes
+check "packs: no pack shows the browser's HeadlessChrome user agent" evidence_packs_no_headless
 check "packs: every pack has the format, every tool and valid severities, and an answer key" \
   python3 -I "$LAB_ROOT/tests/packs.py" validate "$PACKS_DIR/packs" "$PACKS_DIR/answers"
 check "packs: the time normaliser shifts every format the lab prints by the same delta (self-test)" \

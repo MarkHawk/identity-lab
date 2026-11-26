@@ -31,9 +31,9 @@ Meanwhile **the API logs a success**. It answered the preflight, then validated 
 
 ```
 2026-10-22 18:44:43,561 INFO api event=api_cors_preflight origin=https://idlab.home:8182 method=GET headers=authorization
-172.19.0.1 - - [22/Oct/2026:18:44:43 +0000] "OPTIONS /v1/whoami HTTP/1.1" 204 0 "https://idlab.home:8182/" "Mozilla/5.0 ... HeadlessChrome/153.0.8010.12 ..."
+172.19.0.1 - - [22/Oct/2026:18:44:43 +0000] "OPTIONS /v1/whoami HTTP/1.1" 204 0 "https://idlab.home:8182/" "Mozilla/5.0 ... Chrome/153.0.0.0 ..."
 2026-10-22 18:44:43,568 INFO api event=api_request_ok sub=cfeca6fc-f25c-4695-8574-7c2d5b19863b azp=oidc-rp iat=2026-10-22T18:44:43Z exp=2026-10-22T18:49:43Z origin=https://idlab.home:8182 cors_allow_origin=https://idlab.home:8182/
-172.19.0.1 - - [22/Oct/2026:18:44:43 +0000] "GET /v1/whoami HTTP/1.1" 200 156 "https://idlab.home:8182/" "Mozilla/5.0 ... HeadlessChrome/153.0.8010.12 ..."
+172.19.0.1 - - [22/Oct/2026:18:44:43 +0000] "GET /v1/whoami HTTP/1.1" 200 156 "https://idlab.home:8182/" "Mozilla/5.0 ... Chrome/153.0.0.0 ..."
 ```
 
 **This is the point of this runbook: the server's evidence says success, the user's says failure, and both are true.** The API did its job. The browser then refused to hand the answer to the page, and only the browser knows that. Server-side monitoring, error rates and the API's own logs all show nothing wrong.

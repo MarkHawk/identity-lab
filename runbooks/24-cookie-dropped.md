@@ -33,7 +33,7 @@ Nothing on the page and nothing in the browser **console** says why. Chromium re
 The SP accepts the response, sets its cookie, and then sees the very next request arrive without it:
 
 ```
-2026-11-24 17:38:48,493 INFO saml-sp event=saml_authn_request request_id=ONELOGIN_... user_agent='Mozilla/5.0 (X11; Linux x86_64) ... HeadlessChrome/153.0.8010.12 Safari/537.36'
+2026-11-24 17:38:48,493 INFO saml-sp event=saml_authn_request request_id=ONELOGIN_... user_agent='Mozilla/5.0 (X11; Linux x86_64) ... Chrome/153.0.0.0 Safari/537.36'
 2026-11-24 17:38:49,103 INFO saml-sp event=saml_login_ok name_id=alice@idlab.example assertion_id=ID_...
 2026-11-24 17:38:49,108 INFO saml-sp event=saml_session_missing path=/debug session_cookie=absent
 ```

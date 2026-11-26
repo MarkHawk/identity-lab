@@ -141,7 +141,10 @@ ONELOGIN_RE = re.compile(r"ONELOGIN_[0-9a-f]{40}")
 # Keycloak's own session-ish IDs, by field: sessionId="...", code_id="...", "sid": "..."
 KC_ID_RE = re.compile(r'((?:sessionId|code_id|authSessionParentId|authSessionTabId|token_id|refresh_token_id|'
                       r'userSessionId|sid|session_state|jti)["\']?\s*[=:]\s*["\']?)([A-Za-z0-9:._-]{8,})')
-IPV4_RE = re.compile(r"(?<![\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\d.])")
+IPV4_RE = re.compile(r"(?<![\d.])(?<!Chrome/)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\d.])")
+# The Playwright browser's user agent says HeadlessChrome/153.0.8010.12; an ordinary
+# desktop Chrome says Chrome/153.0.0.0 (UA reduction keeps only the major version).
+HEADLESS_RE = re.compile(r"HeadlessChrome/(\d+)\.\d+\.\d+\.\d+")
 KEEP_IPS = {"0.0.0.0"}  # and all of 127.0.0.0/8: loopback, inside a container or the host
 
 
@@ -157,6 +160,7 @@ class Placeholders:
 
     def apply(self, text):
         c = self.c
+        text = HEADLESS_RE.sub(r"Chrome/\1.0.0.0", text).replace("HeadlessChrome", "Chrome")
         for raw, name in c["fixed"].items():  # Keycloak's users, clients, components, realm; container IDs
             text = text.replace(raw, name)
         text = KC_ID_RE.sub(lambda m: m.group(1) + (m.group(2) if m.group(2).startswith("<") else self.other_id(m.group(2))), text)
@@ -725,7 +729,17 @@ def selftest():
     for i, got, want in bad:
         print(f"  {i!r}: got {got!r}, want {want!r}")
     print(f"shifter self-test: {len(cases)} cases, {len(bad)} wrong")
-    return 1 if bad else 0
+    ph = Placeholders({"fixed": {}, "containers": {}, "ips": {}, "unknown_ips": {}, "lab_host": "", "lab_root": "/nowhere"}, {})
+    ua = {
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36":
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+        '"HeadlessChrome";v="153"': '"Chrome";v="153"',
+    }
+    bad_ua = [(i, ph.apply(i), o) for i, o in ua.items() if ph.apply(i) != o]
+    for i, got, want in bad_ua:
+        print(f"  {i!r}: got {got!r}, want {want!r}")
+    print(f"user agent self-test: {len(ua)} cases, {len(bad_ua)} wrong")
+    return 1 if bad or bad_ua else 0
 
 
 def main():
