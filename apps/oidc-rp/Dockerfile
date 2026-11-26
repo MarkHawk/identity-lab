@@ -14,6 +14,11 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 WORKDIR /app
 COPY app.py accesslog.py gunicorn.conf.py ./
 COPY templates ./templates
+# Fixed non-root user. compose.yaml's user: (LAB_UID) overrides it at run time,
+# which the 0600 key files need; nothing here writes outside /tmp.
+RUN groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
+USER 10001:10001
 EXPOSE 8182
 # Bind address, TLS and the masking access log: see gunicorn.conf.py.
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "app:app"]
